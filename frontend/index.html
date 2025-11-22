@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Markdown Notepad</title>
-    <link rel="stylesheet" href="src/app.css">
+    <link rel="stylesheet" href="src/style.css">
+    <script type="module" src="/src/main.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -151,22 +152,5 @@
         </div>
     </div>
 
-    <script src="wailsjs/runtime/runtime.js"></script>
-    <script src="wailsjs/go/main/App.js"></script>
-    <script src="src/markdown-parser.js"></script>
-    
-    <!-- Core modules (load first) -->
-    <script src="src/state.js"></script>
-    <script src="src/dom-refs.js"></script>
-    
-    <!-- Feature modules -->
-    <script src="src/modules/voice-recording.js"></script>
-    <script src="src/modules/folder-manager.js"></script>
-    <script src="src/modules/note-manager.js"></script>
-    <script src="src/modules/preview.js"></script>
-    <script src="src/modules/event-handlers.js"></script>
-    
-    <!-- Main entry point (load last) -->
-    <script src="src/main.js"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // App state management
-const State = {
+export default {
     // Note and folder state
     currentNote: null,
     currentFolder: null,

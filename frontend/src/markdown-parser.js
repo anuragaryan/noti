@@ -1,5 +1,5 @@
 // Simple Markdown Parser
-const MarkdownParser = {
+export default {
     parse(markdown) {
         if (!markdown) return '';
         

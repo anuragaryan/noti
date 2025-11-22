@@ -1,5 +1,5 @@
 // Note management and operations
-const NoteManager = {
+export default {
     async loadNotes() {
         try {
             State.allNotes = await window.go.main.App.GetAllNotes();
@@ -33,15 +33,23 @@ const NoteManager = {
     },
 
     async createNote() {
+        console.log('[FRONTEND] createNote called');
         try {
             const folderId = State.currentFolder ? State.currentFolder.id : '';
+            console.log('[FRONTEND] Calling CreateNote with folderId:', folderId);
+            console.log('[FRONTEND] window.go.main.App.CreateNote exists:', !!window.go?.main?.App?.CreateNote);
+            
             const note = await window.go.main.App.CreateNote('Untitled', '', folderId);
+            console.log('[FRONTEND] CreateNote returned:', note);
+            
             State.allNotes.push(note);
             await this.loadNote(note.id);
             FolderManager.renderFolderTree();
+            console.log('[FRONTEND] Note created successfully');
         } catch (error) {
-            console.error('Error creating note:', error);
-            alert('Failed to create note');
+            console.error('[FRONTEND] Error creating note:', error);
+            console.error('[FRONTEND] Error stack:', error.stack);
+            alert('Failed to create note: ' + error);
         }
     },
 

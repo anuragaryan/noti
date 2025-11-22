@@ -64,5 +64,10 @@
           {{end}}
         </array>
         {{end}}
+
+        <!-- Sandbox Entitlements -->
+        <key>com.apple.security.app-sandbox</key>
+        <false/>
+
     </dict>
 </plist>

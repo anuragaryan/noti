@@ -1,5 +1,5 @@
 // Voice recording and STT functionality
-const VoiceRecording = {
+export default {
     async checkSTTStatus() {
         try {
             const status = await window.go.main.App.GetSTTStatus();

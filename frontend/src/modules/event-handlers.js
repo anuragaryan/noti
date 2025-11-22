@@ -1,5 +1,5 @@
 // Event listener setup and management
-const EventHandlers = {
+export default {
     setupEventListeners() {
         // Main action buttons
         DOMRefs.newNoteBtn.addEventListener('click', () => NoteManager.createNote());

@@ -46,11 +46,13 @@ type FolderStructure struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	homeDir, _ := os.UserHomeDir()
-	notesPath := filepath.Join(homeDir, "MarkdownNotes")
+	// Use Documents folder instead of Application Support for better compatibility
+	// Documents folder is always accessible without special entitlements in production builds
+	appSupport := filepath.Join(homeDir, "Documents", "Noti")
 
 	return &App{
-		configPath: filepath.Join(notesPath, "structure.json"),
-		notesPath:  notesPath,
+		configPath: filepath.Join(appSupport, "structure.json"),
+		notesPath:  appSupport,
 	}
 }
 
@@ -60,8 +62,22 @@ func (a *App) startup(ctx context.Context) {
 
 	// Create notes directory if it doesn't exist
 	if err := os.MkdirAll(a.notesPath, 0755); err != nil {
-		fmt.Printf("Error creating notes directory: %v\n", err)
+		fmt.Printf("ERROR: Cannot create notes directory: %v\n", err)
+		fmt.Printf("Path: %s\n", a.notesPath)
+		fmt.Println("Please check that the application has permission to write to the Documents folder.")
+		return
 	}
+
+	// Test write permissions by creating a test file
+	testFile := filepath.Join(a.notesPath, ".permission_test")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		fmt.Printf("ERROR: Cannot write to notes directory: %v\n", err)
+		fmt.Printf("Path: %s\n", a.notesPath)
+		fmt.Println("The application does not have write permissions.")
+		return
+	}
+	os.Remove(testFile)
+	fmt.Printf("Successfully initialized notes directory at: %s\n", a.notesPath)
 
 	// Create models directory
 	modelsPath := filepath.Join(a.notesPath, "models")
@@ -71,10 +87,13 @@ func (a *App) startup(ctx context.Context) {
 
 	// Create structure.json if it doesn't exist
 	if _, err := os.Stat(a.configPath); os.IsNotExist(err) {
-		a.saveStructure(&FolderStructure{
+		if err := a.saveStructure(&FolderStructure{
 			Folders: []Folder{},
 			Notes:   []Note{},
-		})
+		}); err != nil {
+			fmt.Printf("ERROR: Cannot create structure.json: %v\n", err)
+			return
+		}
 	}
 
 	// Initialize STT Service
@@ -169,9 +188,12 @@ func (a *App) GetFolder(id string) (*Folder, error) {
 }
 
 func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
+	fmt.Printf("CreateFolder called: name=%s, parentID=%s\n", name, parentID)
+
 	structure, err := a.loadStructure()
 	if err != nil {
-		return nil, err
+		fmt.Printf("ERROR in CreateFolder - loadStructure failed: %v\n", err)
+		return nil, fmt.Errorf("failed to load structure: %v", err)
 	}
 
 	if parentID != "" {
@@ -183,6 +205,7 @@ func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 			}
 		}
 		if !found {
+			fmt.Printf("ERROR in CreateFolder - parent folder not found: %s\n", parentID)
 			return nil, fmt.Errorf("parent folder not found")
 		}
 	}
@@ -196,15 +219,19 @@ func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 		Order:     len(structure.Folders),
 	}
 
+	fmt.Printf("Creating folder with ID: %s at path: %s\n", folder.ID, a.getFolderPath(folder.ID))
 	if err := a.ensureFolderExists(folder.ID); err != nil {
-		return nil, err
+		fmt.Printf("ERROR in CreateFolder - ensureFolderExists failed: %v\n", err)
+		return nil, fmt.Errorf("failed to create folder directory: %v", err)
 	}
 
 	structure.Folders = append(structure.Folders, folder)
 	if err := a.saveStructure(structure); err != nil {
-		return nil, err
+		fmt.Printf("ERROR in CreateFolder - saveStructure failed: %v\n", err)
+		return nil, fmt.Errorf("failed to save structure: %v", err)
 	}
 
+	fmt.Printf("Successfully created folder: %s\n", folder.ID)
 	return &folder, nil
 }
 
@@ -386,9 +413,12 @@ func (a *App) GetNotesByFolder(folderID string) ([]Note, error) {
 }
 
 func (a *App) CreateNote(title string, content string, folderID string) (*Note, error) {
+	fmt.Printf("CreateNote called: title=%s, folderID=%s\n", title, folderID)
+
 	structure, err := a.loadStructure()
 	if err != nil {
-		return nil, err
+		fmt.Printf("ERROR in CreateNote - loadStructure failed: %v\n", err)
+		return nil, fmt.Errorf("failed to load structure: %v", err)
 	}
 
 	if folderID != "" {
@@ -400,6 +430,7 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 			}
 		}
 		if !found {
+			fmt.Printf("ERROR in CreateNote - folder not found: %s\n", folderID)
 			return nil, fmt.Errorf("folder not found")
 		}
 	}
@@ -416,20 +447,33 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 	}
 
 	if folderID != "" {
+		fmt.Printf("Ensuring folder exists: %s\n", folderID)
 		if err := a.ensureFolderExists(folderID); err != nil {
-			return nil, err
+			fmt.Printf("ERROR in CreateNote - ensureFolderExists failed: %v\n", err)
+			return nil, fmt.Errorf("failed to create folder directory: %v", err)
 		}
 	}
 
+	notePath := a.getFolderPath(folderID)
+	if folderID == "" {
+		notePath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", note.ID))
+	} else {
+		notePath = filepath.Join(notePath, fmt.Sprintf("%s.md", note.ID))
+	}
+	fmt.Printf("Saving note content to: %s\n", notePath)
+
 	if err := a.saveNoteContent(note.ID, folderID, content); err != nil {
-		return nil, err
+		fmt.Printf("ERROR in CreateNote - saveNoteContent failed: %v\n", err)
+		return nil, fmt.Errorf("failed to save note content: %v", err)
 	}
 
 	structure.Notes = append(structure.Notes, note)
 	if err := a.saveStructure(structure); err != nil {
-		return nil, err
+		fmt.Printf("ERROR in CreateNote - saveStructure failed: %v\n", err)
+		return nil, fmt.Errorf("failed to save structure: %v", err)
 	}
 
+	fmt.Printf("Successfully created note: %s\n", note.ID)
 	return &note, nil
 }
 

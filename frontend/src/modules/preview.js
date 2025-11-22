@@ -1,5 +1,5 @@
 // Markdown preview mode functionality
-const Preview = {
+export default {
     togglePreview() {
         State.isPreviewMode = !State.isPreviewMode;
         

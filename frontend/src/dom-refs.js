@@ -1,5 +1,5 @@
 // DOM element references
-const DOMRefs = {
+export default {
     // Main containers
     folderTree: document.getElementById('folderTree'),
     emptyState: document.getElementById('emptyState'),
