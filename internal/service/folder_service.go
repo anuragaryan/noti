@@ -9,6 +9,7 @@ import (
 
 	"noti/internal/domain"
 	"noti/internal/repository"
+	"noti/internal/util"
 )
 
 // FolderService handles folder business logic
@@ -64,7 +65,7 @@ func (s *FolderService) Create(name string, parentID string) (*domain.Folder, er
 	folder := domain.Folder{
 		ID:         fmt.Sprintf("f_%d", now.UnixNano()),
 		Name:       name,
-		NameOnDisk: generateNameOnDisk(name),
+		NameOnDisk: util.GenerateNameOnDisk(name),
 		ParentID:   parentID,
 		CreatedAt:  now,
 		Order:      len(structure.Folders),
@@ -117,7 +118,7 @@ func (s *FolderService) Update(id string, name string, parentID string) error {
 				// Keep the original timestamp, just update the name part
 				parts := strings.SplitN(structure.Folders[i].NameOnDisk, "-", 2)
 				timestamp := parts[0]
-				newDiskName := fmt.Sprintf("%s-%s", timestamp, SanitizeName(name))
+				newDiskName := fmt.Sprintf("%s-%s", timestamp, util.SanitizeName(name))
 
 				parentPath := s.notesPath
 				if structure.Folders[i].ParentID != "" {
@@ -287,28 +288,4 @@ func (s *FolderService) validateMove(folderID string, newParentID string, struct
 	}
 
 	return nil
-}
-
-// SanitizeName removes characters that are problematic for file systems
-func SanitizeName(name string) string {
-	// Replace spaces with hyphens
-	name = strings.ReplaceAll(name, " ", "-")
-	name = strings.ToLower(name)
-	// Basic sanitization
-	name = strings.ReplaceAll(name, "/", "-")
-	name = strings.ReplaceAll(name, "\\", "-")
-	// Limit length
-	if len(name) > 50 {
-		name = name[:50]
-	}
-	if name == "" {
-		return "untitled"
-	}
-	return name
-}
-
-// generateNameOnDisk creates a filesystem-friendly name with a timestamp
-func generateNameOnDisk(name string) string {
-	now := time.Now().Unix()
-	return fmt.Sprintf("%d-%s", now, SanitizeName(name))
 }

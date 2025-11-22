@@ -9,6 +9,7 @@ import (
 
 	"noti/internal/domain"
 	"noti/internal/repository"
+	"noti/internal/util"
 )
 
 // NoteService handles note business logic
@@ -92,7 +93,7 @@ func (s *NoteService) Create(title string, content string, folderID string) (*do
 	note := domain.Note{
 		ID:         fmt.Sprintf("%d", now.UnixNano()),
 		Title:      title,
-		NameOnDisk: generateNameOnDisk(title) + ".md",
+		NameOnDisk: util.GenerateNameOnDisk(title) + ".md",
 		FolderID:   folderID,
 		Content:    content,
 		CreatedAt:  now,
@@ -140,7 +141,7 @@ func (s *NoteService) Update(id string, title string, content string) error {
 
 				parts := strings.SplitN(structure.Notes[i].NameOnDisk, "-", 2)
 				timestamp := parts[0]
-				newDiskName := fmt.Sprintf("%s-%s.md", timestamp, SanitizeName(title))
+				newDiskName := fmt.Sprintf("%s-%s.md", timestamp, util.SanitizeName(title))
 
 				parentPath := s.notesPath
 				if structure.Notes[i].FolderID != "" {
