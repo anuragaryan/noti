@@ -471,22 +471,9 @@ func (s *STTService) transcribe(audioData []float32) (string, error) {
 	return text, nil
 }
 
-// TranscribeFile transcribes an audio file
-func (s *STTService) TranscribeFile(filePath string) (*TranscriptionResult, error) {
-	return nil, fmt.Errorf("file transcription not yet implemented")
-}
-
 // IsRecording returns current recording status
 func (s *STTService) IsRecording() bool {
 	s.recordingMutex.Lock()
 	defer s.recordingMutex.Unlock()
 	return s.isRecording
-}
-
-// GetSupportedLanguages returns list of supported languages
-func (s *STTService) GetSupportedLanguages() []string {
-	return []string{
-		"en", "es", "fr", "de", "it", "pt", "nl", "pl", "ru",
-		"ja", "ko", "zh", "ar", "tr", "hi", "th", "vi",
-	}
 }

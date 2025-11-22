@@ -216,21 +216,6 @@ func (a *App) GetAllFolders() ([]Folder, error) {
 	return structure.Folders, nil
 }
 
-func (a *App) GetFolder(id string) (*Folder, error) {
-	structure, err := a.loadStructure()
-	if err != nil {
-		return nil, err
-	}
-
-	for i, folder := range structure.Folders {
-		if folder.ID == id {
-			return &structure.Folders[i], nil
-		}
-	}
-
-	return nil, fmt.Errorf("folder not found")
-}
-
 func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 	structure, err := a.loadStructure()
 	if err != nil {
@@ -435,22 +420,6 @@ func (a *App) GetFolderPath(folderID string) ([]Folder, error) {
 	return path, nil
 }
 
-func (a *App) GetSubfolders(parentID string) ([]Folder, error) {
-	structure, err := a.loadStructure()
-	if err != nil {
-		return nil, err
-	}
-
-	subfolders := []Folder{}
-	for _, folder := range structure.Folders {
-		if folder.ParentID == parentID {
-			subfolders = append(subfolders, folder)
-		}
-	}
-
-	return subfolders, nil
-}
-
 // ============================================================================
 // NOTE OPERATIONS
 // ============================================================================
@@ -485,22 +454,6 @@ func (a *App) GetNote(id string) (*Note, error) {
 	}
 
 	return nil, fmt.Errorf("note not found")
-}
-
-func (a *App) GetNotesByFolder(folderID string) ([]Note, error) {
-	structure, err := a.loadStructure()
-	if err != nil {
-		return nil, err
-	}
-
-	notes := []Note{}
-	for _, note := range structure.Notes {
-		if note.FolderID == folderID {
-			notes = append(notes, note)
-		}
-	}
-
-	return notes, nil
 }
 
 func (a *App) CreateNote(title string, content string, folderID string) (*Note, error) {
