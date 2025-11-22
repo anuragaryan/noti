@@ -1,12 +1,172 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>noti</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Notepad</title>
+    <link rel="stylesheet" href="src/app.css">
 </head>
 <body>
-<div id="app"></div>
-<script src="./src/main.js" type="module"></script>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>Notes</h2>
+                <div class="header-actions">
+                    <button id="newFolderBtn" class="btn-icon" title="New Folder">📁+</button>
+                    <button id="newNoteBtn" class="btn btn-primary">+ New Note</button>
+                </div>
+            </div>
+            
+            <!-- Folder Tree -->
+            <div class="folder-tree" id="folderTree">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div id="emptyState" class="empty-state">
+                <h2>Welcome to Markdown Notepad</h2>
+                <p>Select a note or create a new one to get started</p>
+            </div>
+
+            <div id="editorView" class="editor-view" style="display: none;">
+                <!-- Breadcrumb Navigation -->
+                <div class="breadcrumb-container">
+                    <div class="breadcrumb" id="breadcrumb">
+                        <span class="breadcrumb-item" data-folder-id="">All Notes</span>
+                    </div>
+                </div>
+
+                <div class="editor-header">
+                    <input type="text" id="noteTitle" class="note-title-input" placeholder="Note Title">
+                    <div class="editor-actions">
+                        <!-- Voice Recording Button -->
+                        <button id="voiceBtn" class="btn btn-voice" title="Voice Recording">
+                            <span class="voice-icon">🎤</span>
+                            <span class="voice-text">Voice</span>
+                        </button>
+                        <button id="moveNoteBtn" class="btn btn-secondary">Move</button>
+                        <button id="previewBtn" class="btn btn-secondary">Preview</button>
+                        <button id="saveBtn" class="btn btn-primary">Save</button>
+                        <button id="deleteBtn" class="btn btn-danger">Delete</button>
+                    </div>
+                </div>
+
+                <!-- Voice Recording Status Bar -->
+                <div id="voiceStatusBar" class="voice-status-bar" style="display: none;">
+                    <div class="voice-status-content">
+                        <span class="recording-indicator"></span>
+                        <span class="voice-status-text">🔴 Recording (Real-time transcription active)</span>
+                        <span class="voice-timer" id="voiceTimer">0:00</span>
+                    </div>
+                    <button id="stopVoiceBtn" class="btn btn-danger btn-sm">Stop Recording</button>
+                </div>
+
+                <div class="editor-container">
+                    <div id="editorMode" class="editor-mode">
+                        <textarea id="noteContent" class="note-textarea" placeholder="Write your note in Markdown or click 🎤 for real-time voice transcription..."></textarea>
+                    </div>
+                    <div id="previewMode" class="preview-mode" style="display: none;">
+                        <div id="markdownPreview" class="markdown-preview"></div>
+                    </div>
+                </div>
+
+                <!-- Transcription Status (for final chunk) -->
+                <div id="transcriptionStatus" class="transcription-status" style="display: none;">
+                    <div class="transcription-content">
+                        <span class="transcription-spinner"></span>
+                        <span>Processing final audio chunk...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folder Modal -->
+    <div id="folderModal" class="modal">
+        <div class="modal-content">
+            <h3 id="folderModalTitle">New Folder</h3>
+            <input type="text" id="folderNameInput" class="modal-input" placeholder="Folder name">
+            <div class="modal-actions">
+                <button id="cancelFolderBtn" class="btn btn-secondary">Cancel</button>
+                <button id="createFolderBtn" class="btn btn-primary">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Move Note Modal -->
+    <div id="moveNoteModal" class="modal">
+        <div class="modal-content">
+            <h3>Move Note To</h3>
+            <div id="folderSelector" class="folder-selector">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="modal-actions">
+                <button id="cancelMoveBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmMoveBtn" class="btn btn-primary">Move</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Folder Modal -->
+    <div id="deleteFolderModal" class="modal">
+        <div class="modal-content">
+            <h3>Delete Folder</h3>
+            <p>What would you like to do with the notes in this folder?</p>
+            <div class="delete-options">
+                <label class="radio-option">
+                    <input type="radio" name="deleteOption" value="move" checked>
+                    <span>Move notes to parent folder</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="deleteOption" value="delete">
+                    <span>Delete notes permanently</span>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button id="cancelDeleteFolderBtn" class="btn btn-secondary">Cancel</button>
+                <button id="confirmDeleteFolderBtn" class="btn btn-danger">Delete Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STT Setup Modal -->
+    <div id="sttSetupModal" class="modal">
+        <div class="modal-content">
+            <h3>Voice Recording Setup Required</h3>
+            <p>To use voice recording, you need to download the Whisper model.</p>
+            <div class="setup-instructions">
+                <ol>
+                    <li>Download the model from: <a href="https://huggingface.co/ggerganov/whisper.cpp" target="_blank">Whisper Models</a></li>
+                    <li>Get the <strong>ggml-base.en.bin</strong> file (~140MB)</li>
+                    <li>Place it in: <code id="modelPath"></code></li>
+                    <li>Restart the application</li>
+                </ol>
+            </div>
+            <div class="modal-actions">
+                <button id="closeSttSetupBtn" class="btn btn-primary">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="wailsjs/runtime/runtime.js"></script>
+    <script src="wailsjs/go/main/App.js"></script>
+    <script src="src/markdown-parser.js"></script>
+    
+    <!-- Core modules (load first) -->
+    <script src="src/state.js"></script>
+    <script src="src/dom-refs.js"></script>
+    
+    <!-- Feature modules -->
+    <script src="src/modules/voice-recording.js"></script>
+    <script src="src/modules/folder-manager.js"></script>
+    <script src="src/modules/note-manager.js"></script>
+    <script src="src/modules/preview.js"></script>
+    <script src="src/modules/event-handlers.js"></script>
+    
+    <!-- Main entry point (load last) -->
+    <script src="src/main.js"></script>
 </body>
 </html>
