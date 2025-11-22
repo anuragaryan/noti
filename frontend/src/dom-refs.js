@@ -47,5 +47,10 @@ export default {
     // Delete folder modal elements
     deleteFolderModal: document.getElementById('deleteFolderModal'),
     confirmDeleteFolderBtn: document.getElementById('confirmDeleteFolderBtn'),
-    cancelDeleteFolderBtn: document.getElementById('cancelDeleteFolderBtn')
+    cancelDeleteFolderBtn: document.getElementById('cancelDeleteFolderBtn'),
+    
+    // Delete note modal elements
+    deleteNoteModal: document.getElementById('deleteNoteModal'),
+    confirmDeleteNoteBtn: document.getElementById('confirmDeleteNoteBtn'),
+    cancelDeleteNoteBtn: document.getElementById('cancelDeleteNoteBtn')
 };

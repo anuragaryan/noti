@@ -649,11 +649,9 @@ func (a *App) DeleteNote(id string) error {
 	}
 
 	var noteToDelete *Note
-	var noteIndex int = -1
 	for i := range structure.Notes {
 		if structure.Notes[i].ID == id {
 			noteToDelete = &structure.Notes[i]
-			noteIndex = i
 			break
 		}
 	}
@@ -667,7 +665,13 @@ func (a *App) DeleteNote(id string) error {
 		return fmt.Errorf("failed to delete note file from disk: %w", err)
 	}
 
-	structure.Notes = append(structure.Notes[:noteIndex], structure.Notes[noteIndex+1:]...)
+	newNotes := []Note{}
+	for _, note := range structure.Notes {
+		if note.ID != id {
+			newNotes = append(newNotes, note)
+		}
+	}
+	structure.Notes = newNotes
 
 	return a.saveStructure(structure)
 }

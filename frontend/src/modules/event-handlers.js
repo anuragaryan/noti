@@ -11,7 +11,7 @@ export default {
         DOMRefs.newNoteBtn.addEventListener('click', () => NoteManager.createNote());
         DOMRefs.newFolderBtn.addEventListener('click', () => FolderManager.createFolder());
         DOMRefs.saveBtn.addEventListener('click', () => NoteManager.saveNote());
-        DOMRefs.deleteBtn.addEventListener('click', () => NoteManager.deleteNote());
+        DOMRefs.deleteBtn.addEventListener('click', () => NoteManager.showDeleteNoteModal());
         DOMRefs.previewBtn.addEventListener('click', () => Preview.togglePreview());
         DOMRefs.moveNoteBtn.addEventListener('click', () => NoteManager.showMoveNoteModal());
         
@@ -57,8 +57,14 @@ export default {
             State.folderToDelete = null;
         });
         
+        // Delete note modal
+        DOMRefs.confirmDeleteNoteBtn.addEventListener('click', () => NoteManager.deleteNote());
+        DOMRefs.cancelDeleteNoteBtn.addEventListener('click', () => {
+            DOMRefs.deleteNoteModal.classList.remove('active');
+        });
+        
         // Close modals on background click
-        [DOMRefs.folderModal, DOMRefs.moveNoteModal, DOMRefs.deleteFolderModal, DOMRefs.sttSetupModal].forEach(modal => {
+        [DOMRefs.folderModal, DOMRefs.moveNoteModal, DOMRefs.deleteFolderModal, DOMRefs.deleteNoteModal, DOMRefs.sttSetupModal].forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
                     modal.classList.remove('active');

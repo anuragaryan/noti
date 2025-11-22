@@ -83,12 +83,17 @@ export default {
         }
     },
 
-    async deleteNote() {
-        if (!State.currentNote) return;
-        
-        if (!confirm('Are you sure you want to delete this note?')) {
+    showDeleteNoteModal() {
+        if (!State.currentNote) {
+            console.error('[ERROR] Cannot delete: No note is currently selected');
+            alert('Please select a note first');
             return;
         }
+        DOMRefs.deleteNoteModal.classList.add('active');
+    },
+
+    async deleteNote() {
+        if (!State.currentNote) return;
         
         try {
             await window.go.main.App.DeleteNote(State.currentNote.id);
@@ -102,10 +107,12 @@ export default {
             DOMRefs.emptyState.style.display = 'flex';
             DOMRefs.editorView.style.display = 'none';
             
+            DOMRefs.deleteNoteModal.classList.remove('active');
             FolderManager.renderFolderTree();
         } catch (error) {
             console.error('Error deleting note:', error);
-            alert('Failed to delete note');
+            alert('Failed to delete note: ' + error);
+            DOMRefs.deleteNoteModal.classList.remove('active');
         }
     },
 
