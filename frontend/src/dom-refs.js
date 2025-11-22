@@ -49,6 +49,10 @@ export default {
     confirmDeleteFolderBtn: document.getElementById('confirmDeleteFolderBtn'),
     cancelDeleteFolderBtn: document.getElementById('cancelDeleteFolderBtn'),
     
+    // Folder has subfolders warning modal
+    folderHasSubfoldersModal: document.getElementById('folderHasSubfoldersModal'),
+    closeFolderWarningBtn: document.getElementById('closeFolderWarningBtn'),
+    
     // Delete note modal elements
     deleteNoteModal: document.getElementById('deleteNoteModal'),
     confirmDeleteNoteBtn: document.getElementById('confirmDeleteNoteBtn'),

@@ -57,6 +57,11 @@ export default {
             State.folderToDelete = null;
         });
         
+        // Folder has subfolders warning modal
+        DOMRefs.closeFolderWarningBtn.addEventListener('click', () => {
+            DOMRefs.folderHasSubfoldersModal.classList.remove('active');
+        });
+        
         // Delete note modal
         DOMRefs.confirmDeleteNoteBtn.addEventListener('click', () => NoteManager.deleteNote());
         DOMRefs.cancelDeleteNoteBtn.addEventListener('click', () => {
@@ -64,7 +69,7 @@ export default {
         });
         
         // Close modals on background click
-        [DOMRefs.folderModal, DOMRefs.moveNoteModal, DOMRefs.deleteFolderModal, DOMRefs.deleteNoteModal, DOMRefs.sttSetupModal].forEach(modal => {
+        [DOMRefs.folderModal, DOMRefs.moveNoteModal, DOMRefs.deleteFolderModal, DOMRefs.deleteNoteModal, DOMRefs.sttSetupModal, DOMRefs.folderHasSubfoldersModal].forEach(modal => {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
                     modal.classList.remove('active');

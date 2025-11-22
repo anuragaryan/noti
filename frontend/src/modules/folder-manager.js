@@ -106,7 +106,16 @@ export default {
             this.renderFolderTree();
         } catch (error) {
             console.error('Error deleting folder:', error);
-            alert('Failed to delete folder: ' + error);
+            
+            // Check if error is about subfolders
+            if (error.toString().includes('cannot delete folder with subfolders')) {
+                // Close the delete modal
+                DOMRefs.deleteFolderModal.classList.remove('active');
+                // Show the warning modal
+                DOMRefs.folderHasSubfoldersModal.classList.add('active');
+            } else {
+                alert('Failed to delete folder: ' + error);
+            }
         }
     },
 
