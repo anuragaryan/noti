@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"noti/internal/domain"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -20,41 +22,7 @@ type App struct {
 	configPath string
 	notesPath  string
 	sttService *STTService
-	config     *Config
-}
-
-// Folder represents a folder/category
-type Folder struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	NameOnDisk string    `json:"nameOnDisk"`
-	ParentID   string    `json:"parentId"`
-	CreatedAt  time.Time `json:"createdAt"`
-	Order      int       `json:"order"`
-}
-
-// Note represents a note entry
-type Note struct {
-	ID         string    `json:"id"`
-	Title      string    `json:"title"`
-	NameOnDisk string    `json:"nameOnDisk"`
-	FolderID   string    `json:"folderId"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-	Order      int       `json:"order"`
-}
-
-// FolderStructure represents the folder/note organization
-type FolderStructure struct {
-	Folders []Folder `json:"folders"`
-	Notes   []Note   `json:"notes"`
-}
-
-// Config represents the application configuration
-type Config struct {
-	RealtimeTranscriptionChunkSeconds int    `json:"realtimeTranscriptionChunkSeconds"`
-	ModelName                         string `json:"modelName"`
+	config     *domain.Config
 }
 
 // NewApp creates a new App application struct
@@ -97,7 +65,7 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.loadConfig(); err != nil {
 		fmt.Printf("ERROR: Cannot load config: %v\n", err)
 		// Use a default config if loading fails
-		a.config = &Config{RealtimeTranscriptionChunkSeconds: 3}
+		a.config = &domain.Config{RealtimeTranscriptionChunkSeconds: 3}
 		fmt.Println("Using default STT config.")
 	}
 
@@ -144,9 +112,9 @@ func (a *App) startup(ctx context.Context) {
 
 	// Create structure.json if it doesn't exist
 	if _, err := os.Stat(a.configPath); os.IsNotExist(err) {
-		if err := a.saveStructure(&FolderStructure{
-			Folders: []Folder{},
-			Notes:   []Note{},
+		if err := a.saveStructure(&domain.FolderStructure{
+			Folders: []domain.Folder{},
+			Notes:   []domain.Note{},
 		}); err != nil {
 			fmt.Printf("ERROR: Cannot create structure.json: %v\n", err)
 			return
@@ -208,7 +176,7 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 // FOLDER OPERATIONS
 // ============================================================================
 
-func (a *App) GetAllFolders() ([]Folder, error) {
+func (a *App) GetAllFolders() ([]domain.Folder, error) {
 	structure, err := a.loadStructure()
 	if err != nil {
 		return nil, err
@@ -216,7 +184,7 @@ func (a *App) GetAllFolders() ([]Folder, error) {
 	return structure.Folders, nil
 }
 
-func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
+func (a *App) CreateFolder(name string, parentID string) (*domain.Folder, error) {
 	structure, err := a.loadStructure()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load structure: %v", err)
@@ -236,7 +204,7 @@ func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 	}
 
 	now := time.Now()
-	folder := Folder{
+	folder := domain.Folder{
 		ID:         fmt.Sprintf("f_%d", now.UnixNano()),
 		Name:       name,
 		NameOnDisk: generateNameOnDisk(name),
@@ -340,8 +308,8 @@ func (a *App) DeleteFolder(id string, deleteNotes bool) error {
 	}
 
 	if deleteNotes {
-		var notesInFolder []*Note
-		var remainingNotes []Note
+		var notesInFolder []*domain.Note
+		var remainingNotes []domain.Note
 		for i := range structure.Notes {
 			if structure.Notes[i].FolderID == id {
 				notesInFolder = append(notesInFolder, &structure.Notes[i])
@@ -371,7 +339,7 @@ func (a *App) DeleteFolder(id string, deleteNotes bool) error {
 	}
 
 	// Now remove the folder from the structure
-	newFolders := []Folder{}
+	newFolders := []domain.Folder{}
 	for _, folder := range structure.Folders {
 		if folder.ID != id {
 			newFolders = append(newFolders, folder)
@@ -389,9 +357,9 @@ func (a *App) DeleteFolder(id string, deleteNotes bool) error {
 	return a.saveStructure(structure)
 }
 
-func (a *App) GetFolderPath(folderID string) ([]Folder, error) {
+func (a *App) GetFolderPath(folderID string) ([]domain.Folder, error) {
 	if folderID == "" {
-		return []Folder{}, nil
+		return []domain.Folder{}, nil
 	}
 
 	structure, err := a.loadStructure()
@@ -399,14 +367,14 @@ func (a *App) GetFolderPath(folderID string) ([]Folder, error) {
 		return nil, err
 	}
 
-	path := []Folder{}
+	path := []domain.Folder{}
 	currentID := folderID
 
 	for currentID != "" {
 		found := false
 		for _, folder := range structure.Folders {
 			if folder.ID == currentID {
-				path = append([]Folder{folder}, path...)
+				path = append([]domain.Folder{folder}, path...)
 				currentID = folder.ParentID
 				found = true
 				break
@@ -424,7 +392,7 @@ func (a *App) GetFolderPath(folderID string) ([]Folder, error) {
 // NOTE OPERATIONS
 // ============================================================================
 
-func (a *App) GetAllNotes() ([]Note, error) {
+func (a *App) GetAllNotes() ([]domain.Note, error) {
 	structure, err := a.loadStructure()
 	if err != nil {
 		return nil, err
@@ -432,7 +400,7 @@ func (a *App) GetAllNotes() ([]Note, error) {
 	return structure.Notes, nil
 }
 
-func (a *App) GetNote(id string) (*Note, error) {
+func (a *App) GetNote(id string) (*domain.Note, error) {
 	structure, err := a.loadStructure()
 	if err != nil {
 		return nil, err
@@ -456,7 +424,7 @@ func (a *App) GetNote(id string) (*Note, error) {
 	return nil, fmt.Errorf("note not found")
 }
 
-func (a *App) CreateNote(title string, content string, folderID string) (*Note, error) {
+func (a *App) CreateNote(title string, content string, folderID string) (*domain.Note, error) {
 	structure, err := a.loadStructure()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load structure: %v", err)
@@ -476,7 +444,7 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 	}
 
 	now := time.Now()
-	note := Note{
+	note := domain.Note{
 		ID:         fmt.Sprintf("%d", now.UnixNano()),
 		Title:      title,
 		NameOnDisk: generateNameOnDisk(title) + ".md",
@@ -601,7 +569,7 @@ func (a *App) DeleteNote(id string) error {
 		return err
 	}
 
-	var noteToDelete *Note
+	var noteToDelete *domain.Note
 	for i := range structure.Notes {
 		if structure.Notes[i].ID == id {
 			noteToDelete = &structure.Notes[i]
@@ -618,7 +586,7 @@ func (a *App) DeleteNote(id string) error {
 		return fmt.Errorf("failed to delete note file from disk: %w", err)
 	}
 
-	newNotes := []Note{}
+	newNotes := []domain.Note{}
 	for _, note := range structure.Notes {
 		if note.ID != id {
 			newNotes = append(newNotes, note)
@@ -657,13 +625,13 @@ func generateNameOnDisk(name string) string {
 	return fmt.Sprintf("%d-%s", now, SanitizeName(name))
 }
 
-func (a *App) loadStructure() (*FolderStructure, error) {
+func (a *App) loadStructure() (*domain.FolderStructure, error) {
 	data, err := os.ReadFile(a.configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var structure FolderStructure
+	var structure domain.FolderStructure
 	if err := json.Unmarshal(data, &structure); err != nil {
 		return nil, err
 	}
@@ -671,7 +639,7 @@ func (a *App) loadStructure() (*FolderStructure, error) {
 	return &structure, nil
 }
 
-func (a *App) saveStructure(structure *FolderStructure) error {
+func (a *App) saveStructure(structure *domain.FolderStructure) error {
 	// Ensure the directory for structure.json exists.
 	dir := filepath.Dir(a.configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -687,7 +655,7 @@ func (a *App) saveStructure(structure *FolderStructure) error {
 }
 
 // getPathFor resolves the full disk path for a given folder or note ID.
-func (a *App) getPathFor(id string, structure *FolderStructure) (string, error) {
+func (a *App) getPathFor(id string, structure *domain.FolderStructure) (string, error) {
 	// Check if it's a note
 	for _, note := range structure.Notes {
 		if note.ID == id {
@@ -719,7 +687,7 @@ func (a *App) getPathFor(id string, structure *FolderStructure) (string, error) 
 	return "", fmt.Errorf("ID %s not found in structure", id)
 }
 
-func (a *App) loadNoteContent(note *Note, structure *FolderStructure) (string, error) {
+func (a *App) loadNoteContent(note *domain.Note, structure *domain.FolderStructure) (string, error) {
 	filePath, err := a.getPathFor(note.ID, structure)
 	if err != nil {
 		return "", fmt.Errorf("could not get path for note %s: %w", note.ID, err)
@@ -732,7 +700,7 @@ func (a *App) loadNoteContent(note *Note, structure *FolderStructure) (string, e
 	return string(data), nil
 }
 
-func (a *App) saveNoteContent(note *Note, content string, structure *FolderStructure) error {
+func (a *App) saveNoteContent(note *domain.Note, content string, structure *domain.FolderStructure) error {
 	filePath, err := a.getPathFor(note.ID, structure)
 	if err != nil {
 		return fmt.Errorf("could not get path for note %s: %w", note.ID, err)
@@ -746,7 +714,7 @@ func (a *App) saveNoteContent(note *Note, content string, structure *FolderStruc
 	return os.WriteFile(filePath, []byte(content), 0644)
 }
 
-func (a *App) moveNoteFile(note *Note, oldFolderID string, newFolderID string, structure *FolderStructure) error {
+func (a *App) moveNoteFile(note *domain.Note, oldFolderID string, newFolderID string, structure *domain.FolderStructure) error {
 	oldParentPath := a.notesPath
 	if oldFolderID != "" {
 		var err error
@@ -774,7 +742,7 @@ func (a *App) moveNoteFile(note *Note, oldFolderID string, newFolderID string, s
 	return os.Rename(oldPath, newPath)
 }
 
-func (a *App) deleteNoteFile(note *Note, structure *FolderStructure) error {
+func (a *App) deleteNoteFile(note *domain.Note, structure *domain.FolderStructure) error {
 	filePath, err := a.getPathFor(note.ID, structure)
 	if err != nil {
 		return fmt.Errorf("could not get path for note %s: %w", note.ID, err)
@@ -782,7 +750,7 @@ func (a *App) deleteNoteFile(note *Note, structure *FolderStructure) error {
 	return os.Remove(filePath)
 }
 
-func (a *App) validateFolderMove(folderID string, newParentID string, structure *FolderStructure) error {
+func (a *App) validateFolderMove(folderID string, newParentID string, structure *domain.FolderStructure) error {
 	if folderID == newParentID {
 		return fmt.Errorf("cannot move folder into itself")
 	}
@@ -847,7 +815,7 @@ func (a *App) loadConfig() error {
 	}
 
 	// Unmarshal the config data (either from file or the embedded default)
-	var config Config
+	var config domain.Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		// If unmarshalling fails, it could be a corrupt file. Try to restore it.
 		fmt.Printf("WARNING: Failed to unmarshal config.json: %v. Restoring from template.\n", err)

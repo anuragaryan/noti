@@ -26,10 +26,6 @@ export function GetAllNotes() {
   return window['go']['main']['App']['GetAllNotes']();
 }
 
-export function GetFolder(arg1) {
-  return window['go']['main']['App']['GetFolder'](arg1);
-}
-
 export function GetFolderPath(arg1) {
   return window['go']['main']['App']['GetFolderPath'](arg1);
 }
@@ -38,16 +34,8 @@ export function GetNote(arg1) {
   return window['go']['main']['App']['GetNote'](arg1);
 }
 
-export function GetNotesByFolder(arg1) {
-  return window['go']['main']['App']['GetNotesByFolder'](arg1);
-}
-
 export function GetSTTStatus() {
   return window['go']['main']['App']['GetSTTStatus']();
-}
-
-export function GetSubfolders(arg1) {
-  return window['go']['main']['App']['GetSubfolders'](arg1);
 }
 
 export function IsRecording() {

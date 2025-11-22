@@ -1,4 +1,4 @@
-export namespace main {
+export namespace domain {
 	
 	export class Folder {
 	    id: string;
@@ -87,6 +87,11 @@ export namespace main {
 		    return a;
 		}
 	}
+
+}
+
+export namespace main {
+	
 	export class TranscriptionResult {
 	    text: string;
 	    language: string;

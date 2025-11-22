@@ -105,8 +105,6 @@ export default {
             State.folderToDelete = null;
             this.renderFolderTree();
         } catch (error) {
-            console.error('Error deleting folder:', error);
-            
             // Check if error is about subfolders
             if (error.toString().includes('cannot delete folder with subfolders')) {
                 // Close the delete modal
