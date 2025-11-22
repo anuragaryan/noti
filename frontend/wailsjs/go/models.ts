@@ -3,6 +3,7 @@ export namespace main {
 	export class Folder {
 	    id: string;
 	    name: string;
+	    nameOnDisk: string;
 	    parentId: string;
 	    // Go type: time
 	    createdAt: any;
@@ -16,6 +17,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
+	        this.nameOnDisk = source["nameOnDisk"];
 	        this.parentId = source["parentId"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.order = source["order"];
@@ -42,6 +44,7 @@ export namespace main {
 	export class Note {
 	    id: string;
 	    title: string;
+	    nameOnDisk: string;
 	    folderId: string;
 	    content: string;
 	    // Go type: time
@@ -58,6 +61,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.title = source["title"];
+	        this.nameOnDisk = source["nameOnDisk"];
 	        this.folderId = source["folderId"];
 	        this.content = source["content"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);

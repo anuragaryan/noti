@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -15,6 +16,7 @@ import (
 // App struct
 type App struct {
 	ctx        context.Context
+	basePath   string
 	configPath string
 	notesPath  string
 	sttService *STTService
@@ -23,22 +25,24 @@ type App struct {
 
 // Folder represents a folder/category
 type Folder struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	ParentID  string    `json:"parentId"`
-	CreatedAt time.Time `json:"createdAt"`
-	Order     int       `json:"order"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	NameOnDisk string    `json:"nameOnDisk"`
+	ParentID   string    `json:"parentId"`
+	CreatedAt  time.Time `json:"createdAt"`
+	Order      int       `json:"order"`
 }
 
 // Note represents a note entry
 type Note struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	FolderID  string    `json:"folderId"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	Order     int       `json:"order"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	NameOnDisk string    `json:"nameOnDisk"`
+	FolderID   string    `json:"folderId"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+	Order      int       `json:"order"`
 }
 
 // FolderStructure represents the folder/note organization
@@ -56,13 +60,13 @@ type Config struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 	homeDir, _ := os.UserHomeDir()
-	// Use Documents folder instead of Application Support for better compatibility
-	// Documents folder is always accessible without special entitlements in production builds
-	appSupport := filepath.Join(homeDir, "Documents", "Noti")
+	basePath := filepath.Join(homeDir, "Documents", "Noti")
+	notesPath := filepath.Join(basePath, "notes")
 
 	return &App{
-		configPath: filepath.Join(appSupport, "structure.json"),
-		notesPath:  appSupport,
+		basePath:   basePath,
+		configPath: filepath.Join(notesPath, "structure.json"),
+		notesPath:  notesPath,
 	}
 }
 
@@ -101,7 +105,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// Helper function to attempt STT initialization
 	tryInitializeSTT := func() bool {
-		sttService, err := NewSTTService(a.notesPath, a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName)
+		sttService, err := NewSTTService(a.basePath, a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName)
 		if err != nil {
 			// This handles file-not-found from NewSTTService
 			return false
@@ -125,7 +129,7 @@ func (a *App) startup(ctx context.Context) {
 
 		// Delete the potentially corrupt model file before downloading.
 		modelFileName := fmt.Sprintf("ggml-%s.bin", a.config.ModelName)
-		modelPath := filepath.Join(a.notesPath, "models", modelFileName)
+		modelPath := filepath.Join(a.basePath, "models", modelFileName)
 		if _, err := os.Stat(modelPath); err == nil {
 			fmt.Printf("Deleting existing model file at %s to ensure a clean download.\n", modelPath)
 			os.Remove(modelPath)
@@ -192,7 +196,7 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 	if a.config != nil {
 		modelFileName = fmt.Sprintf("ggml-%s.bin", a.config.ModelName)
 	}
-	modelPath := filepath.Join(a.notesPath, "models", modelFileName)
+	modelPath := filepath.Join(a.basePath, "models", modelFileName)
 
 	return map[string]interface{}{
 		"available": available,
@@ -201,7 +205,7 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 }
 
 // ============================================================================
-// FOLDER OPERATIONS (unchanged from previous implementation)
+// FOLDER OPERATIONS
 // ============================================================================
 
 func (a *App) GetAllFolders() ([]Folder, error) {
@@ -218,9 +222,9 @@ func (a *App) GetFolder(id string) (*Folder, error) {
 		return nil, err
 	}
 
-	for _, folder := range structure.Folders {
+	for i, folder := range structure.Folders {
 		if folder.ID == id {
-			return &folder, nil
+			return &structure.Folders[i], nil
 		}
 	}
 
@@ -248,14 +252,25 @@ func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 
 	now := time.Now()
 	folder := Folder{
-		ID:        fmt.Sprintf("f_%d", now.UnixNano()),
-		Name:      name,
-		ParentID:  parentID,
-		CreatedAt: now,
-		Order:     len(structure.Folders),
+		ID:         fmt.Sprintf("f_%d", now.UnixNano()),
+		Name:       name,
+		NameOnDisk: generateNameOnDisk(name),
+		ParentID:   parentID,
+		CreatedAt:  now,
+		Order:      len(structure.Folders),
 	}
 
-	if err := a.ensureFolderExists(folder.ID); err != nil {
+	parentPath := a.notesPath
+	if parentID != "" {
+		var err error
+		parentPath, err = a.getPathFor(parentID, structure)
+		if err != nil {
+			return nil, fmt.Errorf("could not resolve parent path: %v", err)
+		}
+	}
+
+	newFolderPath := filepath.Join(parentPath, folder.NameOnDisk)
+	if err := os.MkdirAll(newFolderPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create folder directory: %v", err)
 	}
 
@@ -279,10 +294,38 @@ func (a *App) UpdateFolder(id string, name string, parentID string) error {
 		}
 	}
 
-	for i, folder := range structure.Folders {
-		if folder.ID == id {
+	for i := range structure.Folders {
+		if structure.Folders[i].ID == id {
+			// If the name is different, we need to rename the folder on disk
+			if structure.Folders[i].Name != name {
+				oldPath, err := a.getPathFor(id, structure)
+				if err != nil {
+					return fmt.Errorf("could not resolve old path for folder rename: %w", err)
+				}
+
+				// Keep the original timestamp, just update the name part
+				parts := strings.SplitN(structure.Folders[i].NameOnDisk, "-", 2)
+				timestamp := parts[0]
+				newDiskName := fmt.Sprintf("%s-%s", timestamp, SanitizeName(name))
+
+				parentPath := a.notesPath
+				if structure.Folders[i].ParentID != "" {
+					parentPath, err = a.getPathFor(structure.Folders[i].ParentID, structure)
+					if err != nil {
+						return fmt.Errorf("could not resolve parent path for rename: %w", err)
+					}
+				}
+				newPath := filepath.Join(parentPath, newDiskName)
+
+				if err := os.Rename(oldPath, newPath); err != nil {
+					return fmt.Errorf("failed to rename folder on disk: %w", err)
+				}
+				structure.Folders[i].NameOnDisk = newDiskName
+			}
+
 			structure.Folders[i].Name = name
-			if parentID != folder.ParentID {
+			if parentID != structure.Folders[i].ParentID {
+				// Moving folders is not implemented in this refactor, but we keep the check
 				structure.Folders[i].ParentID = parentID
 			}
 			return a.saveStructure(structure)
@@ -298,6 +341,13 @@ func (a *App) DeleteFolder(id string, deleteNotes bool) error {
 		return err
 	}
 
+	// Find the folder to get its path BEFORE removing it from the structure
+	folderPath, err := a.getPathFor(id, structure)
+	if err != nil {
+		// If we can't get the path, we can't delete it. Log it and continue.
+		fmt.Printf("Warning: could not resolve path for folder %s to delete it from disk: %v\n", id, err)
+	}
+
 	for _, folder := range structure.Folders {
 		if folder.ParentID == id {
 			return fmt.Errorf("cannot delete folder with subfolders")
@@ -305,36 +355,37 @@ func (a *App) DeleteFolder(id string, deleteNotes bool) error {
 	}
 
 	if deleteNotes {
-		notesToDelete := []string{}
-		for _, note := range structure.Notes {
-			if note.FolderID == id {
-				notesToDelete = append(notesToDelete, note.ID)
-			}
-		}
-		for _, noteID := range notesToDelete {
-			if err := a.deleteNoteFile(noteID, id); err != nil {
-				fmt.Printf("Warning: failed to delete note file %s: %v\n", noteID, err)
+		var notesInFolder []*Note
+		var remainingNotes []Note
+		for i := range structure.Notes {
+			if structure.Notes[i].FolderID == id {
+				notesInFolder = append(notesInFolder, &structure.Notes[i])
+			} else {
+				remainingNotes = append(remainingNotes, structure.Notes[i])
 			}
 		}
 
-		newNotes := []Note{}
-		for _, note := range structure.Notes {
-			if note.FolderID != id {
-				newNotes = append(newNotes, note)
+		for _, note := range notesInFolder {
+			if err := a.deleteNoteFile(note, structure); err != nil {
+				// Log error but continue trying to delete other notes
+				fmt.Printf("Warning: failed to delete note file %s: %v\n", note.ID, err)
 			}
 		}
-		structure.Notes = newNotes
+		structure.Notes = remainingNotes
+
 	} else {
-		for i, note := range structure.Notes {
-			if note.FolderID == id {
-				if err := a.moveNoteFile(note.ID, id, ""); err != nil {
-					return err
+		// Move notes to root
+		for i := range structure.Notes {
+			if structure.Notes[i].FolderID == id {
+				if err := a.moveNoteFile(&structure.Notes[i], id, "", structure); err != nil {
+					return fmt.Errorf("failed to move note out of deleted folder: %w", err)
 				}
 				structure.Notes[i].FolderID = ""
 			}
 		}
 	}
 
+	// Now remove the folder from the structure
 	newFolders := []Folder{}
 	for _, folder := range structure.Folders {
 		if folder.ID != id {
@@ -343,8 +394,12 @@ func (a *App) DeleteFolder(id string, deleteNotes bool) error {
 	}
 	structure.Folders = newFolders
 
-	folderPath := a.getFolderPath(id)
-	os.RemoveAll(folderPath)
+	// And finally, remove the folder from disk if the path was found
+	if err == nil { // Only try to remove if getPathFor succeeded
+		if err := os.RemoveAll(folderPath); err != nil {
+			return fmt.Errorf("failed to delete folder directory '%s': %w", folderPath, err)
+		}
+	}
 
 	return a.saveStructure(structure)
 }
@@ -397,7 +452,7 @@ func (a *App) GetSubfolders(parentID string) ([]Folder, error) {
 }
 
 // ============================================================================
-// NOTE OPERATIONS (unchanged from previous implementation)
+// NOTE OPERATIONS
 // ============================================================================
 
 func (a *App) GetAllNotes() ([]Note, error) {
@@ -414,14 +469,18 @@ func (a *App) GetNote(id string) (*Note, error) {
 		return nil, err
 	}
 
-	for _, note := range structure.Notes {
-		if note.ID == id {
-			content, err := a.loadNoteContent(id, note.FolderID)
+	for i := range structure.Notes {
+		if structure.Notes[i].ID == id {
+			content, err := a.loadNoteContent(&structure.Notes[i], structure)
 			if err != nil {
-				return nil, err
+				// If content fails to load, maybe the file is missing.
+				// Return the note without content, but log the error.
+				fmt.Printf("Warning: could not load content for note %s: %v\n", id, err)
+				structure.Notes[i].Content = "" // Ensure content is empty
+			} else {
+				structure.Notes[i].Content = content
 			}
-			note.Content = content
-			return &note, nil
+			return &structure.Notes[i], nil
 		}
 	}
 
@@ -465,29 +524,28 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 
 	now := time.Now()
 	note := Note{
-		ID:        fmt.Sprintf("%d", now.UnixNano()),
-		Title:     title,
-		FolderID:  folderID,
-		Content:   content,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Order:     len(structure.Notes),
+		ID:         fmt.Sprintf("%d", now.UnixNano()),
+		Title:      title,
+		NameOnDisk: generateNameOnDisk(title) + ".md",
+		FolderID:   folderID,
+		Content:    content,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		Order:      len(structure.Notes),
 	}
 
+	// Manually construct path for the new note and save it.
+	parentPath := a.notesPath
 	if folderID != "" {
-		if err := a.ensureFolderExists(folderID); err != nil {
-			return nil, fmt.Errorf("failed to create folder directory: %v", err)
+		var err error
+		parentPath, err = a.getPathFor(folderID, structure)
+		if err != nil {
+			return nil, fmt.Errorf("could not resolve parent path for note: %v", err)
 		}
 	}
-
-	notePath := a.getFolderPath(folderID)
-	if folderID == "" {
-		notePath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", note.ID))
-	} else {
-		notePath = filepath.Join(notePath, fmt.Sprintf("%s.md", note.ID))
-	}
-	if err := a.saveNoteContent(note.ID, folderID, content); err != nil {
-		return nil, fmt.Errorf("failed to save note content: %v", err)
+	notePath := filepath.Join(parentPath, note.NameOnDisk)
+	if err := os.WriteFile(notePath, []byte(content), 0644); err != nil {
+		return nil, fmt.Errorf("failed to save new note content: %v", err)
 	}
 
 	structure.Notes = append(structure.Notes, note)
@@ -504,12 +562,39 @@ func (a *App) UpdateNote(id string, title string, content string) error {
 		return err
 	}
 
-	for i, note := range structure.Notes {
-		if note.ID == id {
+	for i := range structure.Notes {
+		if structure.Notes[i].ID == id {
+			// If title is different, rename the file on disk
+			if structure.Notes[i].Title != title {
+				oldPath, err := a.getPathFor(id, structure)
+				if err != nil {
+					return fmt.Errorf("could not resolve old path for note update: %w", err)
+				}
+
+				parts := strings.SplitN(structure.Notes[i].NameOnDisk, "-", 2)
+				timestamp := parts[0]
+				newDiskName := fmt.Sprintf("%s-%s.md", timestamp, SanitizeName(title))
+
+				parentPath := a.notesPath
+				if structure.Notes[i].FolderID != "" {
+					parentPath, err = a.getPathFor(structure.Notes[i].FolderID, structure)
+					if err != nil {
+						return fmt.Errorf("could not resolve parent path for note update: %w", err)
+					}
+				}
+				newPath := filepath.Join(parentPath, newDiskName)
+
+				if err := os.Rename(oldPath, newPath); err != nil {
+					return fmt.Errorf("failed to rename note on disk: %w", err)
+				}
+				structure.Notes[i].NameOnDisk = newDiskName
+			}
+
 			structure.Notes[i].Title = title
 			structure.Notes[i].UpdatedAt = time.Now()
 
-			if err := a.saveNoteContent(id, note.FolderID, content); err != nil {
+			// Save the content to the (potentially new) path
+			if err := a.saveNoteContent(&structure.Notes[i], content, structure); err != nil {
 				return err
 			}
 
@@ -539,11 +624,11 @@ func (a *App) MoveNote(noteID string, targetFolderID string) error {
 		}
 	}
 
-	for i, note := range structure.Notes {
-		if note.ID == noteID {
-			oldFolderID := note.FolderID
+	for i := range structure.Notes {
+		if structure.Notes[i].ID == noteID {
+			oldFolderID := structure.Notes[i].FolderID
 
-			if err := a.moveNoteFile(noteID, oldFolderID, targetFolderID); err != nil {
+			if err := a.moveNoteFile(&structure.Notes[i], oldFolderID, targetFolderID, structure); err != nil {
 				return err
 			}
 
@@ -563,24 +648,57 @@ func (a *App) DeleteNote(id string) error {
 		return err
 	}
 
-	for i, note := range structure.Notes {
-		if note.ID == id {
-			structure.Notes = append(structure.Notes[:i], structure.Notes[i+1:]...)
-
-			if err := a.deleteNoteFile(id, note.FolderID); err != nil {
-				return err
-			}
-
-			return a.saveStructure(structure)
+	var noteToDelete *Note
+	var noteIndex int = -1
+	for i := range structure.Notes {
+		if structure.Notes[i].ID == id {
+			noteToDelete = &structure.Notes[i]
+			noteIndex = i
+			break
 		}
 	}
 
-	return fmt.Errorf("note not found")
+	if noteToDelete == nil {
+		return fmt.Errorf("note not found")
+	}
+
+	// If deleting the file fails, abort the entire operation.
+	if err := a.deleteNoteFile(noteToDelete, structure); err != nil {
+		return fmt.Errorf("failed to delete note file from disk: %w", err)
+	}
+
+	structure.Notes = append(structure.Notes[:noteIndex], structure.Notes[noteIndex+1:]...)
+
+	return a.saveStructure(structure)
 }
 
 // ============================================================================
-// HELPER FUNCTIONS (unchanged)
+// HELPER FUNCTIONS
 // ============================================================================
+
+// SanitizeName removes characters that are problematic for file systems.
+func SanitizeName(name string) string {
+	// Replace spaces with hyphens
+	name = strings.ReplaceAll(name, " ", "-")
+	name = strings.ToLower(name)
+	// Basic sanitization
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	// Limit length
+	if len(name) > 50 {
+		name = name[:50]
+	}
+	if name == "" {
+		return "untitled"
+	}
+	return name
+}
+
+// generateNameOnDisk creates a filesystem-friendly name with a timestamp.
+func generateNameOnDisk(name string) string {
+	now := time.Now().Unix()
+	return fmt.Sprintf("%d-%s", now, SanitizeName(name))
+}
 
 func (a *App) loadStructure() (*FolderStructure, error) {
 	data, err := os.ReadFile(a.configPath)
@@ -597,6 +715,12 @@ func (a *App) loadStructure() (*FolderStructure, error) {
 }
 
 func (a *App) saveStructure(structure *FolderStructure) error {
+	// Ensure the directory for structure.json exists.
+	dir := filepath.Dir(a.configPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory for structure.json: %w", err)
+	}
+
 	data, err := json.MarshalIndent(structure, "", "  ")
 	if err != nil {
 		return err
@@ -605,24 +729,43 @@ func (a *App) saveStructure(structure *FolderStructure) error {
 	return os.WriteFile(a.configPath, data, 0644)
 }
 
-func (a *App) getFolderPath(folderID string) string {
-	if folderID == "" {
-		return a.notesPath
+// getPathFor resolves the full disk path for a given folder or note ID.
+func (a *App) getPathFor(id string, structure *FolderStructure) (string, error) {
+	// Check if it's a note
+	for _, note := range structure.Notes {
+		if note.ID == id {
+			if note.FolderID == "" {
+				return filepath.Join(a.notesPath, note.NameOnDisk), nil
+			}
+			parentPath, err := a.getPathFor(note.FolderID, structure)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(parentPath, note.NameOnDisk), nil
+		}
 	}
-	return filepath.Join(a.notesPath, "folders", folderID)
+
+	// Check if it's a folder
+	for _, folder := range structure.Folders {
+		if folder.ID == id {
+			if folder.ParentID == "" {
+				return filepath.Join(a.notesPath, folder.NameOnDisk), nil
+			}
+			parentPath, err := a.getPathFor(folder.ParentID, structure)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(parentPath, folder.NameOnDisk), nil
+		}
+	}
+
+	return "", fmt.Errorf("ID %s not found in structure", id)
 }
 
-func (a *App) ensureFolderExists(folderID string) error {
-	folderPath := a.getFolderPath(folderID)
-	return os.MkdirAll(folderPath, 0755)
-}
-
-func (a *App) loadNoteContent(id string, folderID string) (string, error) {
-	var filePath string
-	if folderID == "" {
-		filePath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", id))
-	} else {
-		filePath = filepath.Join(a.getFolderPath(folderID), fmt.Sprintf("%s.md", id))
+func (a *App) loadNoteContent(note *Note, structure *FolderStructure) (string, error) {
+	filePath, err := a.getPathFor(note.ID, structure)
+	if err != nil {
+		return "", fmt.Errorf("could not get path for note %s: %w", note.ID, err)
 	}
 
 	data, err := os.ReadFile(filePath)
@@ -632,44 +775,52 @@ func (a *App) loadNoteContent(id string, folderID string) (string, error) {
 	return string(data), nil
 }
 
-func (a *App) saveNoteContent(id string, folderID string, content string) error {
-	var filePath string
-	if folderID == "" {
-		filePath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", id))
-	} else {
-		filePath = filepath.Join(a.getFolderPath(folderID), fmt.Sprintf("%s.md", id))
+func (a *App) saveNoteContent(note *Note, content string, structure *FolderStructure) error {
+	filePath, err := a.getPathFor(note.ID, structure)
+	if err != nil {
+		return fmt.Errorf("could not get path for note %s: %w", note.ID, err)
+	}
+
+	dirPath := filepath.Dir(filePath)
+	if err := os.MkdirAll(dirPath, 0755); err != nil {
+		return fmt.Errorf("could not create directory for note: %w", err)
 	}
 
 	return os.WriteFile(filePath, []byte(content), 0644)
 }
 
-func (a *App) moveNoteFile(noteID string, oldFolderID string, newFolderID string) error {
-	var oldPath, newPath string
-
-	if oldFolderID == "" {
-		oldPath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", noteID))
-	} else {
-		oldPath = filepath.Join(a.getFolderPath(oldFolderID), fmt.Sprintf("%s.md", noteID))
-	}
-
-	if newFolderID == "" {
-		newPath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", noteID))
-	} else {
-		if err := a.ensureFolderExists(newFolderID); err != nil {
-			return err
+func (a *App) moveNoteFile(note *Note, oldFolderID string, newFolderID string, structure *FolderStructure) error {
+	oldParentPath := a.notesPath
+	if oldFolderID != "" {
+		var err error
+		oldParentPath, err = a.getPathFor(oldFolderID, structure)
+		if err != nil {
+			return fmt.Errorf("could not resolve old parent path: %w", err)
 		}
-		newPath = filepath.Join(a.getFolderPath(newFolderID), fmt.Sprintf("%s.md", noteID))
+	}
+	oldPath := filepath.Join(oldParentPath, note.NameOnDisk)
+
+	newParentPath := a.notesPath
+	if newFolderID != "" {
+		var err error
+		newParentPath, err = a.getPathFor(newFolderID, structure)
+		if err != nil {
+			return fmt.Errorf("could not resolve new parent path: %w", err)
+		}
+	}
+	newPath := filepath.Join(newParentPath, note.NameOnDisk)
+
+	if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
+		return fmt.Errorf("could not create new parent directory: %w", err)
 	}
 
 	return os.Rename(oldPath, newPath)
 }
 
-func (a *App) deleteNoteFile(id string, folderID string) error {
-	var filePath string
-	if folderID == "" {
-		filePath = filepath.Join(a.notesPath, fmt.Sprintf("%s.md", id))
-	} else {
-		filePath = filepath.Join(a.getFolderPath(folderID), fmt.Sprintf("%s.md", id))
+func (a *App) deleteNoteFile(note *Note, structure *FolderStructure) error {
+	filePath, err := a.getPathFor(note.ID, structure)
+	if err != nil {
+		return fmt.Errorf("could not get path for note %s: %w", note.ID, err)
 	}
 	return os.Remove(filePath)
 }
@@ -716,7 +867,7 @@ func (a *App) validateFolderMove(folderID string, newParentID string, structure 
 
 // loadConfig loads the application configuration from config.json
 func (a *App) loadConfig() error {
-	configFilePath := filepath.Join(a.notesPath, "config.json")
+	configFilePath := filepath.Join(a.basePath, "config.json")
 
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
@@ -726,6 +877,11 @@ func (a *App) loadConfig() error {
 
 		// Config file does not exist, so create it from the embedded template
 		fmt.Printf("config.json not found. Creating from embedded template at %s\n", configFilePath)
+		// Ensure the directory for config.json exists.
+		dir := filepath.Dir(configFilePath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory for config.json: %w", err)
+		}
 		if err := os.WriteFile(configFilePath, defaultConfig, 0644); err != nil {
 			return fmt.Errorf("failed to write default config file: %w", err)
 		}
@@ -766,7 +922,7 @@ func (a *App) downloadModel(modelName string) error {
 	runtime.EventsEmit(a.ctx, "download:start", modelName)
 
 	// Get the models directory
-	modelsPath := filepath.Join(a.notesPath, "models")
+	modelsPath := filepath.Join(a.basePath, "models")
 	if err := os.MkdirAll(modelsPath, 0755); err != nil {
 		runtime.EventsEmit(a.ctx, "download:error", "Failed to create models directory")
 		return fmt.Errorf("failed to create models directory: %w", err)
@@ -798,7 +954,7 @@ func (a *App) downloadModel(modelName string) error {
 
 	// After a successful download, re-initialize the STT service
 	fmt.Println("Re-initializing STT service after model download...")
-	sttService, err := NewSTTService(a.notesPath, a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName)
+	sttService, err := NewSTTService(a.basePath, a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName)
 	if err != nil {
 		fmt.Printf("Warning: STT service initialization failed after download: %v\n", err)
 	} else {
