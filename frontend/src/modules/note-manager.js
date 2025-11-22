@@ -1,3 +1,7 @@
+import State from '../state.js';
+import DOMRefs from '../dom-refs.js';
+import FolderManager from './folder-manager.js';
+import Preview from './preview.js';
 // Note management and operations
 export default {
     async loadNotes() {
@@ -33,19 +37,14 @@ export default {
     },
 
     async createNote() {
-        console.log('[FRONTEND] createNote called');
         try {
             const folderId = State.currentFolder ? State.currentFolder.id : '';
-            console.log('[FRONTEND] Calling CreateNote with folderId:', folderId);
-            console.log('[FRONTEND] window.go.main.App.CreateNote exists:', !!window.go?.main?.App?.CreateNote);
             
             const note = await window.go.main.App.CreateNote('Untitled', '', folderId);
-            console.log('[FRONTEND] CreateNote returned:', note);
             
             State.allNotes.push(note);
             await this.loadNote(note.id);
             FolderManager.renderFolderTree();
-            console.log('[FRONTEND] Note created successfully');
         } catch (error) {
             console.error('[FRONTEND] Error creating note:', error);
             console.error('[FRONTEND] Error stack:', error.stack);

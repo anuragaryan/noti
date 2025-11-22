@@ -1,3 +1,6 @@
+import State from '../state.js';
+import DOMRefs from '../dom-refs.js';
+import NoteManager from './note-manager.js';
 // Voice recording and STT functionality
 export default {
     async checkSTTStatus() {
@@ -147,11 +150,6 @@ export default {
                 return;
             }
             
-            // Ignore [BLANK_AUDIO] markers (sent when no audio detected in sample)
-            if (result.text.trim() === '[BLANK_AUDIO]') {
-                return;
-            }
-            
             // Only insert if we're currently recording and have a note open
             if (!State.isRecording || !State.currentNote) {
                 return;
@@ -176,8 +174,6 @@ export default {
             // Move cursor to end of inserted text
             DOMRefs.noteContent.setSelectionRange(State.lastInsertPosition, State.lastInsertPosition);
             DOMRefs.noteContent.focus();
-            
-            console.log('[Real-time] Inserted chunk:', text);
         });
     }
 };

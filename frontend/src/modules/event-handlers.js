@@ -1,3 +1,9 @@
+import DOMRefs from '../dom-refs.js';
+import State from '../state.js';
+import NoteManager from './note-manager.js';
+import FolderManager from './folder-manager.js';
+import Preview from './preview.js';
+import VoiceRecording from './voice-recording.js';
 // Event listener setup and management
 export default {
     setupEventListeners() {

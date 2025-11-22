@@ -1,3 +1,6 @@
+import State from '../state.js';
+import DOMRefs from '../dom-refs.js';
+import MarkdownParser from '../markdown-parser.js';
 // Markdown preview mode functionality
 export default {
     togglePreview() {

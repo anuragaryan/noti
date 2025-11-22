@@ -1,3 +1,6 @@
+import State from '../state.js';
+import DOMRefs from '../dom-refs.js';
+import NoteManager from './note-manager.js';
 // Folder management and tree rendering
 export default {
     async loadFolders() {
@@ -18,28 +21,19 @@ export default {
 
     async handleCreateFolder() {
         const name = DOMRefs.folderNameInput.value.trim();
-        console.log('[FRONTEND] handleCreateFolder called with name:', name);
         if (!name) {
-            console.log('[FRONTEND] No name provided, returning');
             return;
         }
         
         try {
             const parentId = State.currentFolder ? State.currentFolder.id : '';
-            console.log('[FRONTEND] Calling CreateFolder with name:', name, 'parentId:', parentId);
-            console.log('[FRONTEND] window.go exists:', !!window.go);
-            console.log('[FRONTEND] window.go.main exists:', !!window.go?.main);
-            console.log('[FRONTEND] window.go.main.App exists:', !!window.go?.main?.App);
-            console.log('[FRONTEND] window.go.main.App.CreateFolder exists:', !!window.go?.main?.App?.CreateFolder);
             
             const folder = await window.go.main.App.CreateFolder(name, parentId);
-            console.log('[FRONTEND] CreateFolder returned:', folder);
             
             State.allFolders.push(folder);
             State.expandedFolders.add(parentId);
             DOMRefs.folderModal.classList.remove('active');
             this.renderFolderTree();
-            console.log('[FRONTEND] Folder created successfully');
         } catch (error) {
             console.error('[FRONTEND] Error creating folder:', error);
             console.error('[FRONTEND] Error stack:', error.stack);

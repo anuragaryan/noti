@@ -15,6 +15,7 @@ type App struct {
 	configPath string
 	notesPath  string
 	sttService *STTService
+	config     *Config
 }
 
 // Folder represents a folder/category
@@ -41,6 +42,11 @@ type Note struct {
 type FolderStructure struct {
 	Folders []Folder `json:"folders"`
 	Notes   []Note   `json:"notes"`
+}
+
+// Config represents the application configuration
+type Config struct {
+	RealtimeTranscriptionChunkSeconds int `json:"realtimeTranscriptionChunkSeconds"`
 }
 
 // NewApp creates a new App application struct
@@ -79,6 +85,14 @@ func (a *App) startup(ctx context.Context) {
 	os.Remove(testFile)
 	fmt.Printf("Successfully initialized notes directory at: %s\n", a.notesPath)
 
+	// Load config
+	if err := a.loadConfig(); err != nil {
+		fmt.Printf("ERROR: Cannot load config: %v\n", err)
+		// Use a default config if loading fails
+		a.config = &Config{RealtimeTranscriptionChunkSeconds: 3}
+		fmt.Println("Using default STT config.")
+	}
+
 	// Create models directory
 	modelsPath := filepath.Join(a.notesPath, "models")
 	if err := os.MkdirAll(modelsPath, 0755); err != nil {
@@ -97,7 +111,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Initialize STT Service
-	sttService, err := NewSTTService(a.notesPath)
+	sttService, err := NewSTTService(a.notesPath, a.config.RealtimeTranscriptionChunkSeconds)
 	if err != nil {
 		fmt.Printf("Warning: STT service initialization failed: %v\n", err)
 		fmt.Println("Speech-to-text features will be disabled")
@@ -188,11 +202,8 @@ func (a *App) GetFolder(id string) (*Folder, error) {
 }
 
 func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
-	fmt.Printf("CreateFolder called: name=%s, parentID=%s\n", name, parentID)
-
 	structure, err := a.loadStructure()
 	if err != nil {
-		fmt.Printf("ERROR in CreateFolder - loadStructure failed: %v\n", err)
 		return nil, fmt.Errorf("failed to load structure: %v", err)
 	}
 
@@ -205,7 +216,6 @@ func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 			}
 		}
 		if !found {
-			fmt.Printf("ERROR in CreateFolder - parent folder not found: %s\n", parentID)
 			return nil, fmt.Errorf("parent folder not found")
 		}
 	}
@@ -219,19 +229,15 @@ func (a *App) CreateFolder(name string, parentID string) (*Folder, error) {
 		Order:     len(structure.Folders),
 	}
 
-	fmt.Printf("Creating folder with ID: %s at path: %s\n", folder.ID, a.getFolderPath(folder.ID))
 	if err := a.ensureFolderExists(folder.ID); err != nil {
-		fmt.Printf("ERROR in CreateFolder - ensureFolderExists failed: %v\n", err)
 		return nil, fmt.Errorf("failed to create folder directory: %v", err)
 	}
 
 	structure.Folders = append(structure.Folders, folder)
 	if err := a.saveStructure(structure); err != nil {
-		fmt.Printf("ERROR in CreateFolder - saveStructure failed: %v\n", err)
 		return nil, fmt.Errorf("failed to save structure: %v", err)
 	}
 
-	fmt.Printf("Successfully created folder: %s\n", folder.ID)
 	return &folder, nil
 }
 
@@ -413,11 +419,8 @@ func (a *App) GetNotesByFolder(folderID string) ([]Note, error) {
 }
 
 func (a *App) CreateNote(title string, content string, folderID string) (*Note, error) {
-	fmt.Printf("CreateNote called: title=%s, folderID=%s\n", title, folderID)
-
 	structure, err := a.loadStructure()
 	if err != nil {
-		fmt.Printf("ERROR in CreateNote - loadStructure failed: %v\n", err)
 		return nil, fmt.Errorf("failed to load structure: %v", err)
 	}
 
@@ -430,7 +433,6 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 			}
 		}
 		if !found {
-			fmt.Printf("ERROR in CreateNote - folder not found: %s\n", folderID)
 			return nil, fmt.Errorf("folder not found")
 		}
 	}
@@ -447,9 +449,7 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 	}
 
 	if folderID != "" {
-		fmt.Printf("Ensuring folder exists: %s\n", folderID)
 		if err := a.ensureFolderExists(folderID); err != nil {
-			fmt.Printf("ERROR in CreateNote - ensureFolderExists failed: %v\n", err)
 			return nil, fmt.Errorf("failed to create folder directory: %v", err)
 		}
 	}
@@ -460,20 +460,15 @@ func (a *App) CreateNote(title string, content string, folderID string) (*Note, 
 	} else {
 		notePath = filepath.Join(notePath, fmt.Sprintf("%s.md", note.ID))
 	}
-	fmt.Printf("Saving note content to: %s\n", notePath)
-
 	if err := a.saveNoteContent(note.ID, folderID, content); err != nil {
-		fmt.Printf("ERROR in CreateNote - saveNoteContent failed: %v\n", err)
 		return nil, fmt.Errorf("failed to save note content: %v", err)
 	}
 
 	structure.Notes = append(structure.Notes, note)
 	if err := a.saveStructure(structure); err != nil {
-		fmt.Printf("ERROR in CreateNote - saveStructure failed: %v\n", err)
 		return nil, fmt.Errorf("failed to save structure: %v", err)
 	}
 
-	fmt.Printf("Successfully created note: %s\n", note.ID)
 	return &note, nil
 }
 
@@ -690,5 +685,42 @@ func (a *App) validateFolderMove(folderID string, newParentID string, structure 
 		}
 	}
 
+	return nil
+}
+
+// loadConfig loads the application configuration from config.json
+func (a *App) loadConfig() error {
+	configFilePath := filepath.Join(a.notesPath, "config.json")
+
+	data, err := os.ReadFile(configFilePath)
+	if err != nil {
+		// If file doesn't exist, create it with default values
+		if os.IsNotExist(err) {
+			fmt.Printf("config.json not found. Creating with default values at %s\n", configFilePath)
+			defaultConfig := &Config{RealtimeTranscriptionChunkSeconds: 3}
+			data, err := json.MarshalIndent(defaultConfig, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal default config: %w", err)
+			}
+			if err := os.WriteFile(configFilePath, data, 0644); err != nil {
+				return fmt.Errorf("failed to write default config file: %w", err)
+			}
+			a.config = defaultConfig
+			return nil
+		}
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	if config.RealtimeTranscriptionChunkSeconds <= 0 {
+		config.RealtimeTranscriptionChunkSeconds = 3 // default value
+	}
+
+	a.config = &config
+	fmt.Printf("Loaded config from: %s\n", configFilePath)
 	return nil
 }

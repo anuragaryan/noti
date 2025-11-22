@@ -15,26 +15,25 @@ import (
 )
 
 const (
-	// Process audio chunks every 3 seconds for real-time transcription
-	chunkDurationSeconds = 3
-	sampleRate           = 16000
-	samplesPerChunk      = sampleRate * chunkDurationSeconds
+	sampleRate = 16000
 )
 
 // STTService handles speech-to-text operations
 type STTService struct {
-	model            whisper.Model
-	modelMutex       sync.Mutex // CRITICAL: Protect model access
-	isRecording      bool
-	recordingMutex   sync.Mutex
-	audioBuffer      []float32
-	processedSamples int
-	stream           *portaudio.Stream
-	stopRecording    chan bool
-	processingWg     sync.WaitGroup // Wait for all processing to complete
-	modelPath        string
-	recordingsPath   string
-	ctx              context.Context // Wails runtime context for events
+	model                whisper.Model
+	modelMutex           sync.Mutex // CRITICAL: Protect model access
+	isRecording          bool
+	recordingMutex       sync.Mutex
+	audioBuffer          []float32
+	processedSamples     int
+	stream               *portaudio.Stream
+	stopRecording        chan bool
+	processingWg         sync.WaitGroup // Wait for all processing to complete
+	modelPath            string
+	recordingsPath       string
+	ctx                  context.Context // Wails runtime context for events
+	chunkDurationSeconds int
+	samplesPerChunk      int
 }
 
 // TranscriptionResult represents a transcription with metadata
@@ -47,7 +46,7 @@ type TranscriptionResult struct {
 }
 
 // NewSTTService creates a new STT service
-func NewSTTService(notesPath string) (*STTService, error) {
+func NewSTTService(notesPath string, chunkDuration int) (*STTService, error) {
 	modelPath := filepath.Join(notesPath, "models", "ggml-base.en.bin")
 	recordingsPath := filepath.Join(notesPath, "recordings")
 
@@ -62,10 +61,12 @@ func NewSTTService(notesPath string) (*STTService, error) {
 	}
 
 	return &STTService{
-		modelPath:      modelPath,
-		recordingsPath: recordingsPath,
-		stopRecording:  make(chan bool),
-		audioBuffer:    []float32{},
+		modelPath:            modelPath,
+		recordingsPath:       recordingsPath,
+		stopRecording:        make(chan bool),
+		audioBuffer:          []float32{},
+		chunkDurationSeconds: chunkDuration,
+		samplesPerChunk:      sampleRate * chunkDuration,
 	}, nil
 }
 
@@ -123,7 +124,7 @@ func (s *STTService) Initialize() error {
 	s.model = model
 	fmt.Println("✓ Whisper model loaded successfully!")
 	fmt.Println("✓ Real-time transcription enabled")
-	fmt.Printf("✓ Processing chunks every %d seconds\n\n", chunkDurationSeconds)
+	fmt.Printf("✓ Processing chunks every %d seconds\n\n", s.chunkDurationSeconds)
 
 	return nil
 }
@@ -168,7 +169,7 @@ func (s *STTService) StartRecording() error {
 
 	fmt.Printf("Using microphone: %s\n", defaultInput.Name)
 	fmt.Printf("Sample rate: %d Hz, Channels: %d\n", sampleRate, inputChannels)
-	fmt.Printf("Real-time mode: Processing every %d seconds\n", chunkDurationSeconds)
+	fmt.Printf("Real-time mode: Processing every %d seconds\n", s.chunkDurationSeconds)
 
 	// Create stream parameters with explicit device
 	streamParams := portaudio.StreamParameters{
@@ -235,7 +236,7 @@ func (s *STTService) captureAudio(framesPerBuffer []float32) {
 
 // processAudioRealtime processes audio chunks in real-time
 func (s *STTService) processAudioRealtime() {
-	ticker := time.NewTicker(time.Duration(chunkDurationSeconds) * time.Second)
+	ticker := time.NewTicker(time.Duration(s.chunkDurationSeconds) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -254,7 +255,7 @@ func (s *STTService) processNextChunk() {
 
 	// Check if we have enough samples for a chunk
 	totalSamples := len(s.audioBuffer)
-	if totalSamples < s.processedSamples+samplesPerChunk {
+	if totalSamples < s.processedSamples+s.samplesPerChunk {
 		s.recordingMutex.Unlock()
 		fmt.Println("[Real-time] Not enough samples yet for next chunk")
 		return
@@ -262,7 +263,7 @@ func (s *STTService) processNextChunk() {
 
 	// Extract chunk to process
 	chunkStart := s.processedSamples
-	chunkEnd := chunkStart + samplesPerChunk
+	chunkEnd := chunkStart + s.samplesPerChunk
 	if chunkEnd > totalSamples {
 		chunkEnd = totalSamples
 	}
@@ -293,8 +294,8 @@ func (s *STTService) processNextChunk() {
 			return
 		}
 
-		// Trim and check if we have meaningful text
-		text = strings.TrimSpace(text)
+		// Clean and check if we have meaningful text
+		text = cleanTranscription(text)
 
 		if text != "" {
 			fmt.Printf("[Real-time] Transcribed: '%s'\n", text)
@@ -376,7 +377,7 @@ func (s *STTService) StopRecording() (*TranscriptionResult, error) {
 		if err != nil {
 			fmt.Printf("Final transcription error: %v\n", err)
 		} else {
-			text = strings.TrimSpace(text)
+			text = cleanTranscription(text)
 			if text != "" {
 				finalText = text
 				fmt.Printf("Final chunk transcribed: '%s'\n", text)
@@ -397,7 +398,7 @@ func (s *STTService) StopRecording() (*TranscriptionResult, error) {
 		if err != nil {
 			fmt.Printf("Full transcription error: %v\n", err)
 		} else {
-			text = strings.TrimSpace(text)
+			text = cleanTranscription(text)
 			if text != "" {
 				finalText = text
 				fmt.Printf("Full recording transcribed: '%s'\n", text)
@@ -413,6 +414,16 @@ func (s *STTService) StopRecording() (*TranscriptionResult, error) {
 		IsPartial: false,
 		Timestamp: time.Now().Format(time.RFC3339),
 	}, nil
+}
+
+// cleanTranscription removes common artifacts from the transcribed text.
+func cleanTranscription(text string) string {
+	// The whisper model can output artifacts for silence or unknown audio.
+	// We remove them for a cleaner transcription.
+	text = strings.ReplaceAll(text, "[BLANK_AUDIO]", "")
+
+	// After replacements, there might be extra whitespace.
+	return strings.TrimSpace(text)
 }
 
 // transcribeThreadSafe is a thread-safe wrapper for transcription
@@ -453,7 +464,7 @@ func (s *STTService) transcribe(audioData []float32) (string, error) {
 		if err != nil {
 			break
 		}
-		text += segment.Text + " "
+		text += segment.Text
 	}
 
 	return text, nil
