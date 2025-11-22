@@ -745,3 +745,24 @@ body {
     color: #666;
     font-size: 13px;
 }
+.download-notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #3498db;
+    color: white;
+    padding: 15px 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s, bottom 0.3s;
+}
+
+.download-notification.show {
+    opacity: 1;
+    visibility: visible;
+    bottom: 40px;
+}

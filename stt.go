@@ -46,8 +46,9 @@ type TranscriptionResult struct {
 }
 
 // NewSTTService creates a new STT service
-func NewSTTService(notesPath string, chunkDuration int) (*STTService, error) {
-	modelPath := filepath.Join(notesPath, "models", "ggml-base.en.bin")
+func NewSTTService(notesPath string, chunkDuration int, modelName string) (*STTService, error) {
+	modelFileName := fmt.Sprintf("ggml-%s.bin", modelName)
+	modelPath := filepath.Join(notesPath, "models", modelFileName)
 	recordingsPath := filepath.Join(notesPath, "recordings")
 
 	// Create recordings directory
@@ -57,7 +58,7 @@ func NewSTTService(notesPath string, chunkDuration int) (*STTService, error) {
 
 	// Check if model exists
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("whisper model not found at %s. Please download it first", modelPath)
+		return nil, fmt.Errorf("whisper model not found at %s", modelPath)
 	}
 
 	return &STTService{

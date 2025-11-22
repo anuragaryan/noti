@@ -1,3 +1,4 @@
+import { EventsOn } from '../../wailsjs/runtime/runtime';
 import State from '../state.js';
 import DOMRefs from '../dom-refs.js';
 import NoteManager from './note-manager.js';
@@ -18,6 +19,9 @@ export default {
                 if (!State.sttAvailable) {
                     DOMRefs.voiceBtn.title = 'Voice recording unavailable - model not installed';
                     DOMRefs.voiceBtn.style.opacity = '0.5';
+                } else {
+                    DOMRefs.voiceBtn.title = 'Start voice recording';
+                    DOMRefs.voiceBtn.style.opacity = '1';
                 }
             }
         } catch (error) {
@@ -145,7 +149,7 @@ export default {
 
     setupRealtimeTranscription() {
         // Listen for real-time transcription chunks from the backend
-        window.runtime.EventsOn("transcription:partial", (result) => {
+        EventsOn("transcription:partial", (result) => {
             if (!result || !result.text || !result.text.trim()) {
                 return;
             }

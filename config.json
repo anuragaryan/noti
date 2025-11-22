@@ -1,3 +1,4 @@
 {
-  "realtimeTranscriptionChunkSeconds": 6
+  "realtimeTranscriptionChunkSeconds": 3,
+  "modelName": "medium.en"
 }
