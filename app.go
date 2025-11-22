@@ -2,17 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"noti/internal/domain"
 	"noti/internal/repository"
 	"noti/internal/service"
-
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -21,13 +17,14 @@ type App struct {
 	basePath      string
 	configPath    string
 	notesPath     string
-	sttService    *STTService
 	config        *domain.Config
 	structureRepo *repository.StructureRepository
 	pathResolver  *repository.PathResolver
 	fileSystem    *repository.FileSystem
 	folderService *service.FolderService
 	noteService   *service.NoteService
+	configService *service.ConfigService
+	sttManager    *service.STTManager
 }
 
 // NewApp creates a new App application struct
@@ -45,6 +42,8 @@ func NewApp() *App {
 	// Initialize services
 	folderService := service.NewFolderService(structureRepo, pathResolver, notesPath)
 	noteService := service.NewNoteService(structureRepo, pathResolver, fileSystem, notesPath)
+	configService := service.NewConfigService(basePath, defaultConfig)
+	sttManager := service.NewSTTManager(basePath, downloadScript)
 
 	return &App{
 		basePath:      basePath,
@@ -55,6 +54,8 @@ func NewApp() *App {
 		fileSystem:    fileSystem,
 		folderService: folderService,
 		noteService:   noteService,
+		configService: configService,
+		sttManager:    sttManager,
 	}
 }
 
@@ -82,52 +83,20 @@ func (a *App) startup(ctx context.Context) {
 	fmt.Printf("Successfully initialized notes directory at: %s\n", a.notesPath)
 
 	// Load config
-	if err := a.loadConfig(); err != nil {
+	config, err := a.configService.Load()
+	if err != nil {
 		fmt.Printf("ERROR: Cannot load config: %v\n", err)
 		// Use a default config if loading fails
-		a.config = &domain.Config{RealtimeTranscriptionChunkSeconds: 3}
+		a.config = &domain.Config{RealtimeTranscriptionChunkSeconds: 3, ModelName: "base.en"}
 		fmt.Println("Using default STT config.")
+	} else {
+		a.config = config
 	}
 
-	// --- STT Service Initialization with Self-Healing ---
-
-	// Helper function to attempt STT initialization
-	tryInitializeSTT := func() bool {
-		sttService, err := NewSTTService(a.basePath, a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName)
-		if err != nil {
-			// This handles file-not-found from NewSTTService
-			return false
-		}
-		if err := sttService.Initialize(); err != nil {
-			// This handles model loading/corruption errors (like the tensor error)
-			fmt.Printf("Failed to initialize STT model: %v\n", err)
-			return false
-		}
-		// Success
-		sttService.SetContext(ctx)
-		a.sttService = sttService
-		fmt.Println("STT service initialized successfully.")
-		runtime.EventsEmit(a.ctx, "stt:ready")
-		return true
-	}
-
-	if !tryInitializeSTT() {
-		// Initialization failed, likely because the model is missing or corrupt.
-		fmt.Println("STT initialization failed. Attempting to download or re-download model...")
-
-		// Delete the potentially corrupt model file before downloading.
-		modelFileName := fmt.Sprintf("ggml-%s.bin", a.config.ModelName)
-		modelPath := filepath.Join(a.basePath, "models", modelFileName)
-		if _, err := os.Stat(modelPath); err == nil {
-			fmt.Printf("Deleting existing model file at %s to ensure a clean download.\n", modelPath)
-			os.Remove(modelPath)
-		}
-
-		// downloadModel will download and then try to initialize again internally.
-		if err := a.downloadModel(a.config.ModelName); err != nil {
-			fmt.Printf("ERROR: Model download and initialization failed: %v\n", err)
-			fmt.Println("Speech-to-text features will be disabled.")
-		}
+	// Initialize STT service with self-healing
+	a.sttManager.SetContext(ctx)
+	if err := a.sttManager.Initialize(a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName, NewSTTServiceAdapter); err != nil {
+		fmt.Printf("STT initialization failed: %v\n", err)
 	}
 
 	// Create structure.json if it doesn't exist
@@ -144,9 +113,7 @@ func (a *App) startup(ctx context.Context) {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
-	if a.sttService != nil {
-		a.sttService.Cleanup()
-	}
+	a.sttManager.Cleanup()
 }
 
 // ============================================================================
@@ -155,31 +122,35 @@ func (a *App) shutdown(ctx context.Context) {
 
 // StartVoiceRecording starts recording audio from microphone
 func (a *App) StartVoiceRecording() error {
-	if a.sttService == nil {
+	if !a.sttManager.IsAvailable() {
 		return fmt.Errorf("STT service not available. Please download the Whisper model")
 	}
-	return a.sttService.StartRecording()
+	return a.sttManager.GetService().StartRecording()
 }
 
 // StopVoiceRecording stops recording and returns transcribed text
 func (a *App) StopVoiceRecording() (*TranscriptionResult, error) {
-	if a.sttService == nil {
+	if !a.sttManager.IsAvailable() {
 		return nil, fmt.Errorf("STT service not available")
 	}
-	return a.sttService.StopRecording()
+	result, err := a.sttManager.GetService().StopRecording()
+	if err != nil {
+		return nil, err
+	}
+	return result.(*TranscriptionResult), nil
 }
 
 // IsRecording returns current recording status
 func (a *App) IsRecording() bool {
-	if a.sttService == nil {
+	if !a.sttManager.IsAvailable() {
 		return false
 	}
-	return a.sttService.IsRecording()
+	return a.sttManager.GetService().IsRecording()
 }
 
 // GetSTTStatus returns whether STT is available
 func (a *App) GetSTTStatus() map[string]interface{} {
-	available := a.sttService != nil
+	available := a.sttManager.IsAvailable()
 	modelFileName := "N/A"
 	if a.config != nil {
 		modelFileName = fmt.Sprintf("ggml-%s.bin", a.config.ModelName)
@@ -254,111 +225,4 @@ func (a *App) loadStructure() (*domain.FolderStructure, error) {
 
 func (a *App) saveStructure(structure *domain.FolderStructure) error {
 	return a.structureRepo.Save(structure)
-}
-
-// loadConfig loads the application configuration from config.json
-func (a *App) loadConfig() error {
-	configFilePath := filepath.Join(a.basePath, "config.json")
-
-	data, err := os.ReadFile(configFilePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read config file: %w", err)
-		}
-
-		// Config file does not exist, so create it from the embedded template
-		fmt.Printf("config.json not found. Creating from embedded template at %s\n", configFilePath)
-		// Ensure the directory for config.json exists.
-		dir := filepath.Dir(configFilePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory for config.json: %w", err)
-		}
-		if err := os.WriteFile(configFilePath, defaultConfig, 0644); err != nil {
-			return fmt.Errorf("failed to write default config file: %w", err)
-		}
-		// Use the embedded config data for this session
-		data = defaultConfig
-	}
-
-	// Unmarshal the config data (either from file or the embedded default)
-	var config domain.Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		// If unmarshalling fails, it could be a corrupt file. Try to restore it.
-		fmt.Printf("WARNING: Failed to unmarshal config.json: %v. Restoring from template.\n", err)
-		if err := os.WriteFile(configFilePath, defaultConfig, 0644); err != nil {
-			return fmt.Errorf("failed to restore default config file: %w", err)
-		}
-		data = defaultConfig // Use the default config for this session
-		// Retry unmarshalling with the default data
-		if err := json.Unmarshal(data, &config); err != nil {
-			return fmt.Errorf("failed to unmarshal embedded default config: %w", err)
-		}
-	}
-
-	// Set defaults for any fields that might be missing (for backward compatibility)
-	if config.RealtimeTranscriptionChunkSeconds <= 0 {
-		config.RealtimeTranscriptionChunkSeconds = 3
-	}
-	if config.ModelName == "" {
-		config.ModelName = "base.en"
-	}
-
-	a.config = &config
-	fmt.Printf("Loaded config from: %s\n", configFilePath)
-	return nil
-}
-
-// downloadModel runs the embedded script to download a model
-func (a *App) downloadModel(modelName string) error {
-	runtime.EventsEmit(a.ctx, "download:start", modelName)
-
-	// Get the models directory
-	modelsPath := filepath.Join(a.basePath, "models")
-	if err := os.MkdirAll(modelsPath, 0755); err != nil {
-		runtime.EventsEmit(a.ctx, "download:error", "Failed to create models directory")
-		return fmt.Errorf("failed to create models directory: %w", err)
-	}
-
-	// Define the script path inside the models directory
-	scriptPath := filepath.Join(modelsPath, ".download-ggml-model.sh")
-
-	// Write the embedded script to the destination and make it executable
-	if err := os.WriteFile(scriptPath, downloadScript, 0755); err != nil {
-		runtime.EventsEmit(a.ctx, "download:error", "Failed to write download script")
-		return fmt.Errorf("failed to write download script: %w", err)
-	}
-	// Ensure the script is cleaned up
-	defer os.Remove(scriptPath)
-
-	// Run the script from within the models directory
-	cmd := exec.Command(scriptPath, modelName)
-	cmd.Dir = modelsPath // Set the working directory
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("Model download script failed:\n%s\n", string(output))
-		runtime.EventsEmit(a.ctx, "download:error", "Model download failed. Check logs.")
-		return fmt.Errorf("model download script failed: %w", err)
-	}
-
-	fmt.Printf("Model download script output:\n%s\n", string(output))
-	runtime.EventsEmit(a.ctx, "download:finish", modelName)
-
-	// After a successful download, re-initialize the STT service
-	fmt.Println("Re-initializing STT service after model download...")
-	sttService, err := NewSTTService(a.basePath, a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName)
-	if err != nil {
-		fmt.Printf("Warning: STT service initialization failed after download: %v\n", err)
-	} else {
-		if err := sttService.Initialize(); err != nil {
-			fmt.Printf("Warning: Failed to load STT model after download: %v\n", err)
-		} else {
-			sttService.SetContext(a.ctx)
-			a.sttService = sttService
-			fmt.Println("STT service initialized successfully after download.")
-			// Notify the frontend that the service is now ready
-			runtime.EventsEmit(a.ctx, "stt:ready")
-		}
-	}
-
-	return nil
 }
