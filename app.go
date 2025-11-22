@@ -11,18 +11,22 @@ import (
 	"time"
 
 	"noti/internal/domain"
+	"noti/internal/repository"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
 type App struct {
-	ctx        context.Context
-	basePath   string
-	configPath string
-	notesPath  string
-	sttService *STTService
-	config     *domain.Config
+	ctx           context.Context
+	basePath      string
+	configPath    string
+	notesPath     string
+	sttService    *STTService
+	config        *domain.Config
+	structureRepo *repository.StructureRepository
+	pathResolver  *repository.PathResolver
+	fileSystem    *repository.FileSystem
 }
 
 // NewApp creates a new App application struct
@@ -30,11 +34,20 @@ func NewApp() *App {
 	homeDir, _ := os.UserHomeDir()
 	basePath := filepath.Join(homeDir, "Documents", "Noti")
 	notesPath := filepath.Join(basePath, "notes")
+	configPath := filepath.Join(notesPath, "structure.json")
+
+	// Initialize repositories
+	structureRepo := repository.NewStructureRepository(configPath)
+	pathResolver := repository.NewPathResolver(notesPath)
+	fileSystem := repository.NewFileSystem(pathResolver)
 
 	return &App{
-		basePath:   basePath,
-		configPath: filepath.Join(notesPath, "structure.json"),
-		notesPath:  notesPath,
+		basePath:      basePath,
+		configPath:    configPath,
+		notesPath:     notesPath,
+		structureRepo: structureRepo,
+		pathResolver:  pathResolver,
+		fileSystem:    fileSystem,
 	}
 }
 
@@ -626,128 +639,32 @@ func generateNameOnDisk(name string) string {
 }
 
 func (a *App) loadStructure() (*domain.FolderStructure, error) {
-	data, err := os.ReadFile(a.configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var structure domain.FolderStructure
-	if err := json.Unmarshal(data, &structure); err != nil {
-		return nil, err
-	}
-
-	return &structure, nil
+	return a.structureRepo.Load()
 }
 
 func (a *App) saveStructure(structure *domain.FolderStructure) error {
-	// Ensure the directory for structure.json exists.
-	dir := filepath.Dir(a.configPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory for structure.json: %w", err)
-	}
-
-	data, err := json.MarshalIndent(structure, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(a.configPath, data, 0644)
+	return a.structureRepo.Save(structure)
 }
 
 // getPathFor resolves the full disk path for a given folder or note ID.
 func (a *App) getPathFor(id string, structure *domain.FolderStructure) (string, error) {
-	// Check if it's a note
-	for _, note := range structure.Notes {
-		if note.ID == id {
-			if note.FolderID == "" {
-				return filepath.Join(a.notesPath, note.NameOnDisk), nil
-			}
-			parentPath, err := a.getPathFor(note.FolderID, structure)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(parentPath, note.NameOnDisk), nil
-		}
-	}
-
-	// Check if it's a folder
-	for _, folder := range structure.Folders {
-		if folder.ID == id {
-			if folder.ParentID == "" {
-				return filepath.Join(a.notesPath, folder.NameOnDisk), nil
-			}
-			parentPath, err := a.getPathFor(folder.ParentID, structure)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(parentPath, folder.NameOnDisk), nil
-		}
-	}
-
-	return "", fmt.Errorf("ID %s not found in structure", id)
+	return a.pathResolver.GetPathFor(id, structure)
 }
 
 func (a *App) loadNoteContent(note *domain.Note, structure *domain.FolderStructure) (string, error) {
-	filePath, err := a.getPathFor(note.ID, structure)
-	if err != nil {
-		return "", fmt.Errorf("could not get path for note %s: %w", note.ID, err)
-	}
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+	return a.fileSystem.LoadNoteContent(note, structure)
 }
 
 func (a *App) saveNoteContent(note *domain.Note, content string, structure *domain.FolderStructure) error {
-	filePath, err := a.getPathFor(note.ID, structure)
-	if err != nil {
-		return fmt.Errorf("could not get path for note %s: %w", note.ID, err)
-	}
-
-	dirPath := filepath.Dir(filePath)
-	if err := os.MkdirAll(dirPath, 0755); err != nil {
-		return fmt.Errorf("could not create directory for note: %w", err)
-	}
-
-	return os.WriteFile(filePath, []byte(content), 0644)
+	return a.fileSystem.SaveNoteContent(note, content, structure)
 }
 
 func (a *App) moveNoteFile(note *domain.Note, oldFolderID string, newFolderID string, structure *domain.FolderStructure) error {
-	oldParentPath := a.notesPath
-	if oldFolderID != "" {
-		var err error
-		oldParentPath, err = a.getPathFor(oldFolderID, structure)
-		if err != nil {
-			return fmt.Errorf("could not resolve old parent path: %w", err)
-		}
-	}
-	oldPath := filepath.Join(oldParentPath, note.NameOnDisk)
-
-	newParentPath := a.notesPath
-	if newFolderID != "" {
-		var err error
-		newParentPath, err = a.getPathFor(newFolderID, structure)
-		if err != nil {
-			return fmt.Errorf("could not resolve new parent path: %w", err)
-		}
-	}
-	newPath := filepath.Join(newParentPath, note.NameOnDisk)
-
-	if err := os.MkdirAll(filepath.Dir(newPath), 0755); err != nil {
-		return fmt.Errorf("could not create new parent directory: %w", err)
-	}
-
-	return os.Rename(oldPath, newPath)
+	return a.fileSystem.MoveNoteFile(note, oldFolderID, newFolderID, structure, a.notesPath)
 }
 
 func (a *App) deleteNoteFile(note *domain.Note, structure *domain.FolderStructure) error {
-	filePath, err := a.getPathFor(note.ID, structure)
-	if err != nil {
-		return fmt.Errorf("could not get path for note %s: %w", note.ID, err)
-	}
-	return os.Remove(filePath)
+	return a.fileSystem.DeleteNoteFile(note, structure)
 }
 
 func (a *App) validateFolderMove(folderID string, newParentID string, structure *domain.FolderStructure) error {
