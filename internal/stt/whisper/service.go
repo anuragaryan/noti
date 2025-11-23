@@ -1,4 +1,5 @@
-package main
+// Package whisper provides speech-to-text functionality using Whisper
+package whisper
 
 import (
 	"context"
@@ -9,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"noti/internal/domain"
+
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/gordonklaus/portaudio"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -18,38 +21,29 @@ const (
 	sampleRate = 16000
 )
 
-// STTService handles speech-to-text operations
-type STTService struct {
-	model                whisper.Model
-	modelMutex           sync.Mutex // CRITICAL: Protect model access
-	isRecording          bool
-	recordingMutex       sync.Mutex
-	audioBuffer          []float32
-	processedSamples     int
-	stream               *portaudio.Stream
-	stopRecording        chan bool
-	processingWg         sync.WaitGroup // Wait for all processing to complete
-	modelPath            string
-	recordingsPath       string
-	ctx                  context.Context // Wails runtime context for events
-	chunkDurationSeconds int
-	samplesPerChunk      int
+// Service handles speech-to-text operations using Whisper
+type Service struct {
+	model            whisper.Model
+	modelMutex       sync.Mutex
+	recordingMutex   sync.Mutex
+	isRecording      bool
+	audioBuffer      []float32
+	processedSamples int
+	stream           *portaudio.Stream
+	stopRecording    chan bool
+	processingWg     sync.WaitGroup
+	config           *domain.STTConfig
+	modelPath        string
+	recordingsPath   string
+	ctx              context.Context
+	samplesPerChunk  int
 }
 
-// TranscriptionResult represents a transcription with metadata
-type TranscriptionResult struct {
-	Text      string  `json:"text"`
-	Language  string  `json:"language"`
-	Duration  float64 `json:"duration"`
-	Timestamp string  `json:"timestamp"`
-	IsPartial bool    `json:"isPartial"` // True for real-time chunks
-}
-
-// NewSTTService creates a new STT service
-func NewSTTService(notesPath string, chunkDuration int, modelName string) (*STTService, error) {
-	modelFileName := fmt.Sprintf("ggml-%s.bin", modelName)
-	modelPath := filepath.Join(notesPath, "models", modelFileName)
-	recordingsPath := filepath.Join(notesPath, "recordings")
+// NewService creates a new Whisper STT service
+func NewService(basePath string, config *domain.STTConfig) (*Service, error) {
+	modelFileName := fmt.Sprintf("ggml-%s.bin", config.ModelName)
+	modelPath := filepath.Join(basePath, "models", modelFileName)
+	recordingsPath := filepath.Join(basePath, "recordings")
 
 	// Create recordings directory
 	if err := os.MkdirAll(recordingsPath, 0755); err != nil {
@@ -61,23 +55,23 @@ func NewSTTService(notesPath string, chunkDuration int, modelName string) (*STTS
 		return nil, fmt.Errorf("whisper model not found at %s", modelPath)
 	}
 
-	return &STTService{
-		modelPath:            modelPath,
-		recordingsPath:       recordingsPath,
-		stopRecording:        make(chan bool),
-		audioBuffer:          []float32{},
-		chunkDurationSeconds: chunkDuration,
-		samplesPerChunk:      sampleRate * chunkDuration,
+	return &Service{
+		config:          config,
+		modelPath:       modelPath,
+		recordingsPath:  recordingsPath,
+		stopRecording:   make(chan bool),
+		audioBuffer:     []float32{},
+		samplesPerChunk: sampleRate * config.ChunkDurationSecs,
 	}, nil
 }
 
 // SetContext sets the Wails runtime context for emitting events
-func (s *STTService) SetContext(ctx context.Context) {
+func (s *Service) SetContext(ctx context.Context) {
 	s.ctx = ctx
 }
 
 // Initialize loads the Whisper model
-func (s *STTService) Initialize() error {
+func (s *Service) Initialize() error {
 	// Initialize PortAudio
 	fmt.Println("=== Initializing Audio System ===")
 	fmt.Println("Initializing PortAudio...")
@@ -125,13 +119,13 @@ func (s *STTService) Initialize() error {
 	s.model = model
 	fmt.Println("✓ Whisper model loaded successfully!")
 	fmt.Println("✓ Real-time transcription enabled")
-	fmt.Printf("✓ Processing chunks every %d seconds\n\n", s.chunkDurationSeconds)
+	fmt.Printf("✓ Processing chunks every %d seconds\n\n", s.config.ChunkDurationSecs)
 
 	return nil
 }
 
 // Cleanup releases resources
-func (s *STTService) Cleanup() {
+func (s *Service) Cleanup() {
 	fmt.Println("Cleaning up STT service...")
 
 	// Wait for all processing to complete
@@ -144,7 +138,7 @@ func (s *STTService) Cleanup() {
 }
 
 // StartRecording begins capturing audio from the microphone with real-time transcription
-func (s *STTService) StartRecording() error {
+func (s *Service) StartRecording() error {
 	s.recordingMutex.Lock()
 	defer s.recordingMutex.Unlock()
 
@@ -170,7 +164,7 @@ func (s *STTService) StartRecording() error {
 
 	fmt.Printf("Using microphone: %s\n", defaultInput.Name)
 	fmt.Printf("Sample rate: %d Hz, Channels: %d\n", sampleRate, inputChannels)
-	fmt.Printf("Real-time mode: Processing every %d seconds\n", s.chunkDurationSeconds)
+	fmt.Printf("Real-time mode: Processing every %d seconds\n", s.config.ChunkDurationSecs)
 
 	// Create stream parameters with explicit device
 	streamParams := portaudio.StreamParameters{
@@ -215,7 +209,7 @@ func (s *STTService) StartRecording() error {
 }
 
 // captureAudio continuously captures audio from the microphone
-func (s *STTService) captureAudio(framesPerBuffer []float32) {
+func (s *Service) captureAudio(framesPerBuffer []float32) {
 	for {
 		select {
 		case <-s.stopRecording:
@@ -236,8 +230,8 @@ func (s *STTService) captureAudio(framesPerBuffer []float32) {
 }
 
 // processAudioRealtime processes audio chunks in real-time
-func (s *STTService) processAudioRealtime() {
-	ticker := time.NewTicker(time.Duration(s.chunkDurationSeconds) * time.Second)
+func (s *Service) processAudioRealtime() {
+	ticker := time.NewTicker(time.Duration(s.config.ChunkDurationSecs) * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -251,7 +245,7 @@ func (s *STTService) processAudioRealtime() {
 }
 
 // processNextChunk transcribes the next audio chunk
-func (s *STTService) processNextChunk() {
+func (s *Service) processNextChunk() {
 	s.recordingMutex.Lock()
 
 	// Check if we have enough samples for a chunk
@@ -303,7 +297,7 @@ func (s *STTService) processNextChunk() {
 
 			// Emit real-time transcription event to frontend
 			if s.ctx != nil {
-				result := TranscriptionResult{
+				result := domain.TranscriptionResult{
 					Text:      text,
 					Language:  "en",
 					IsPartial: true,
@@ -323,7 +317,7 @@ func (s *STTService) processNextChunk() {
 }
 
 // StopRecording stops audio capture and processes remaining audio
-func (s *STTService) StopRecording() (*TranscriptionResult, error) {
+func (s *Service) StopRecording() (*domain.TranscriptionResult, error) {
 	s.recordingMutex.Lock()
 
 	if !s.isRecording {
@@ -409,7 +403,7 @@ func (s *STTService) StopRecording() (*TranscriptionResult, error) {
 
 	fmt.Println("✓ Recording stopped")
 
-	return &TranscriptionResult{
+	return &domain.TranscriptionResult{
 		Text:      finalText,
 		Language:  "en",
 		IsPartial: false,
@@ -417,18 +411,15 @@ func (s *STTService) StopRecording() (*TranscriptionResult, error) {
 	}, nil
 }
 
-// cleanTranscription removes common artifacts from the transcribed text.
+// cleanTranscription removes common artifacts from the transcribed text
 func cleanTranscription(text string) string {
-	// The whisper model can output artifacts for silence or unknown audio.
-	// We remove them for a cleaner transcription.
+	// The whisper model can output artifacts for silence or unknown audio
 	text = strings.ReplaceAll(text, "[BLANK_AUDIO]", "")
-
-	// After replacements, there might be extra whitespace.
 	return strings.TrimSpace(text)
 }
 
 // transcribeThreadSafe is a thread-safe wrapper for transcription
-func (s *STTService) transcribeThreadSafe(audioData []float32) (string, error) {
+func (s *Service) transcribeThreadSafe(audioData []float32) (string, error) {
 	// CRITICAL: Lock the model mutex to prevent concurrent access
 	s.modelMutex.Lock()
 	defer s.modelMutex.Unlock()
@@ -437,7 +428,7 @@ func (s *STTService) transcribeThreadSafe(audioData []float32) (string, error) {
 }
 
 // transcribe processes audio data and returns text (MUST be called with modelMutex locked)
-func (s *STTService) transcribe(audioData []float32) (string, error) {
+func (s *Service) transcribe(audioData []float32) (string, error) {
 	if s.model == nil {
 		return "", fmt.Errorf("model not initialized")
 	}
@@ -472,7 +463,7 @@ func (s *STTService) transcribe(audioData []float32) (string, error) {
 }
 
 // IsRecording returns current recording status
-func (s *STTService) IsRecording() bool {
+func (s *Service) IsRecording() bool {
 	s.recordingMutex.Lock()
 	defer s.recordingMutex.Unlock()
 	return s.isRecording

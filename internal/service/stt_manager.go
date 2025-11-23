@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"noti/internal/domain"
+	"noti/internal/stt/whisper"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -14,18 +17,8 @@ import (
 type STTManager struct {
 	basePath       string
 	ctx            context.Context
-	sttService     STTServiceInterface
+	sttService     STTService
 	downloadScript []byte
-}
-
-// STTServiceInterface defines the interface for STT operations
-type STTServiceInterface interface {
-	Initialize() error
-	SetContext(ctx context.Context)
-	StartRecording() error
-	StopRecording() (interface{}, error)
-	IsRecording() bool
-	Cleanup()
 }
 
 // NewSTTManager creates a new STT manager
@@ -42,10 +35,10 @@ func (m *STTManager) SetContext(ctx context.Context) {
 }
 
 // Initialize attempts to initialize the STT service with self-healing
-func (m *STTManager) Initialize(chunkSeconds int, modelName string, sttFactory func(string, int, string) (STTServiceInterface, error)) error {
+func (m *STTManager) Initialize(config *domain.STTConfig) error {
 	// Helper function to attempt STT initialization
 	tryInitialize := func() bool {
-		sttService, err := sttFactory(m.basePath, chunkSeconds, modelName)
+		sttService, err := whisper.NewService(m.basePath, config)
 		if err != nil {
 			// This handles file-not-found
 			return false
@@ -70,7 +63,7 @@ func (m *STTManager) Initialize(chunkSeconds int, modelName string, sttFactory f
 		fmt.Println("STT initialization failed. Attempting to download or re-download model...")
 
 		// Delete the potentially corrupt model file before downloading
-		modelFileName := fmt.Sprintf("ggml-%s.bin", modelName)
+		modelFileName := fmt.Sprintf("ggml-%s.bin", config.ModelName)
 		modelPath := filepath.Join(m.basePath, "models", modelFileName)
 		if _, err := os.Stat(modelPath); err == nil {
 			fmt.Printf("Deleting existing model file at %s to ensure a clean download.\n", modelPath)
@@ -78,7 +71,7 @@ func (m *STTManager) Initialize(chunkSeconds int, modelName string, sttFactory f
 		}
 
 		// Download model and try to initialize again
-		if err := m.DownloadModel(modelName, chunkSeconds, sttFactory); err != nil {
+		if err := m.DownloadModel(config); err != nil {
 			fmt.Printf("ERROR: Model download and initialization failed: %v\n", err)
 			fmt.Println("Speech-to-text features will be disabled.")
 			return err
@@ -89,9 +82,9 @@ func (m *STTManager) Initialize(chunkSeconds int, modelName string, sttFactory f
 }
 
 // DownloadModel downloads a Whisper model and initializes the STT service
-func (m *STTManager) DownloadModel(modelName string, chunkSeconds int, sttFactory func(string, int, string) (STTServiceInterface, error)) error {
+func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
 	if m.ctx != nil {
-		runtime.EventsEmit(m.ctx, "download:start", modelName)
+		runtime.EventsEmit(m.ctx, "download:start", config.ModelName)
 	}
 
 	// Get the models directory
@@ -117,7 +110,7 @@ func (m *STTManager) DownloadModel(modelName string, chunkSeconds int, sttFactor
 	defer os.Remove(scriptPath)
 
 	// Run the script from within the models directory
-	cmd := exec.Command(scriptPath, modelName)
+	cmd := exec.Command(scriptPath, config.ModelName)
 	cmd.Dir = modelsPath // Set the working directory
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -130,12 +123,12 @@ func (m *STTManager) DownloadModel(modelName string, chunkSeconds int, sttFactor
 
 	fmt.Printf("Model download script output:\n%s\n", string(output))
 	if m.ctx != nil {
-		runtime.EventsEmit(m.ctx, "download:finish", modelName)
+		runtime.EventsEmit(m.ctx, "download:finish", config.ModelName)
 	}
 
 	// After a successful download, re-initialize the STT service
 	fmt.Println("Re-initializing STT service after model download...")
-	sttService, err := sttFactory(m.basePath, chunkSeconds, modelName)
+	sttService, err := whisper.NewService(m.basePath, config)
 	if err != nil {
 		fmt.Printf("Warning: STT service initialization failed after download: %v\n", err)
 		return err
@@ -159,7 +152,7 @@ func (m *STTManager) DownloadModel(modelName string, chunkSeconds int, sttFactor
 }
 
 // GetService returns the underlying STT service
-func (m *STTManager) GetService() STTServiceInterface {
+func (m *STTManager) GetService() STTService {
 	return m.sttService
 }
 

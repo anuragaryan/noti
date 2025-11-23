@@ -1,4 +1,4 @@
-package main
+package local
 
 import (
 	"context"
@@ -6,36 +6,38 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
+
+	"noti/internal/infrastructure/downloader"
+	"noti/internal/infrastructure/process"
 )
 
-// LlamaServerManager manages the llama-server sidecar process
-type LlamaServerManager struct {
+// ServerManager manages the llama-server lifecycle
+type ServerManager struct {
+	processManager *process.Manager
+	downloader     *downloader.Downloader
 	basePath       string
 	binaryPath     string
 	modelPath      string
 	port           int
-	cmd            *exec.Cmd
 	mutex          sync.Mutex
-	running        bool
-	downloadScript []byte
 }
 
-// NewLlamaServerManager creates a new llama-server manager
-func NewLlamaServerManager(basePath string, downloadScript []byte) *LlamaServerManager {
-	return &LlamaServerManager{
+// NewServerManager creates a new server manager
+func NewServerManager(basePath string, downloadScript []byte) *ServerManager {
+	return &ServerManager{
+		processManager: process.NewManager(),
+		downloader:     downloader.NewDownloader(downloadScript),
 		basePath:       basePath,
 		port:           51337, // Hardcoded port for llama-server
-		downloadScript: downloadScript,
 	}
 }
 
 // EnsureBinary ensures the llama-server binary is available
-func (m *LlamaServerManager) EnsureBinary() error {
+func (m *ServerManager) EnsureBinary() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -61,25 +63,9 @@ func (m *LlamaServerManager) EnsureBinary() error {
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
-	// Write download script
-	scriptPath := filepath.Join(binDir, ".download-llama-server.sh")
-	if err := os.WriteFile(scriptPath, m.downloadScript, 0755); err != nil {
-		return fmt.Errorf("failed to write download script: %w", err)
-	}
-	defer os.Remove(scriptPath)
-
-	// Run download script
-	fmt.Println("Running llama-server download script...")
-	cmd := exec.Command("/bin/bash", scriptPath)
-	cmd.Dir = binDir
-	cmd.Env = os.Environ()
-	output, err := cmd.CombinedOutput()
-
-	// Always print output for debugging
-	fmt.Printf("Download script output:\n%s\n", string(output))
-
-	if err != nil {
-		return fmt.Errorf("failed to download llama-server: %w\nOutput: %s", err, string(output))
+	// Download using the downloader
+	if err := m.downloader.Download(binDir); err != nil {
+		return fmt.Errorf("failed to download llama-server: %w", err)
 	}
 
 	// Verify binary exists
@@ -93,11 +79,11 @@ func (m *LlamaServerManager) EnsureBinary() error {
 }
 
 // Start starts the llama-server with the specified model
-func (m *LlamaServerManager) Start(modelPath string) error {
+func (m *ServerManager) Start(modelPath string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	if m.running {
+	if m.processManager.IsRunning() {
 		return fmt.Errorf("llama-server is already running")
 	}
 
@@ -129,24 +115,16 @@ func (m *LlamaServerManager) Start(modelPath string) error {
 	fmt.Printf("Starting llama-server with model: %s\n", modelPath)
 	fmt.Printf("Command: %s %v\n", m.binaryPath, args)
 
-	// Create command
-	m.cmd = exec.Command(m.binaryPath, args...)
-
-	// Capture output for debugging
-	m.cmd.Stdout = os.Stdout
-	m.cmd.Stderr = os.Stderr
-
 	// Start the process
-	if err := m.cmd.Start(); err != nil {
+	if err := m.processManager.StartWithOutput(m.binaryPath, args...); err != nil {
 		return fmt.Errorf("failed to start llama-server: %w", err)
 	}
 
-	m.running = true
-	fmt.Printf("✓ llama-server started (PID: %d)\n", m.cmd.Process.Pid)
+	fmt.Printf("✓ llama-server started (PID: %d)\n", m.processManager.GetPID())
 
 	// Wait for server to be ready
 	if err := m.WaitForReady(30 * time.Second); err != nil {
-		m.Stop()
+		m.processManager.Stop(5 * time.Second)
 		return fmt.Errorf("llama-server failed to become ready: %w", err)
 	}
 
@@ -155,7 +133,7 @@ func (m *LlamaServerManager) Start(modelPath string) error {
 }
 
 // WaitForReady waits for the server to be ready
-func (m *LlamaServerManager) WaitForReady(timeout time.Duration) error {
+func (m *ServerManager) WaitForReady(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -180,60 +158,23 @@ func (m *LlamaServerManager) WaitForReady(timeout time.Duration) error {
 }
 
 // Stop stops the llama-server process
-func (m *LlamaServerManager) Stop() error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if !m.running || m.cmd == nil {
-		return nil
-	}
-
+func (m *ServerManager) Stop() error {
 	fmt.Println("Stopping llama-server...")
-
-	// Try graceful shutdown first
-	if m.cmd.Process != nil {
-		if err := m.cmd.Process.Signal(os.Interrupt); err != nil {
-			// If interrupt fails, force kill
-			m.cmd.Process.Kill()
-		}
-	}
-
-	// Wait for process to exit
-	done := make(chan error, 1)
-	go func() {
-		done <- m.cmd.Wait()
-	}()
-
-	select {
-	case <-time.After(5 * time.Second):
-		// Force kill if not stopped within 5 seconds
-		if m.cmd.Process != nil {
-			m.cmd.Process.Kill()
-		}
-	case <-done:
-		// Process exited
-	}
-
-	m.running = false
-	m.cmd = nil
-	fmt.Println("✓ llama-server stopped")
-	return nil
+	return m.processManager.Stop(5 * time.Second)
 }
 
 // IsRunning returns whether the server is running
-func (m *LlamaServerManager) IsRunning() bool {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	return m.running
+func (m *ServerManager) IsRunning() bool {
+	return m.processManager.IsRunning()
 }
 
 // GetEndpoint returns the server endpoint URL
-func (m *LlamaServerManager) GetEndpoint() string {
+func (m *ServerManager) GetEndpoint() string {
 	return fmt.Sprintf("http://127.0.0.1:%d", m.port)
 }
 
 // HealthCheck performs a health check on the server
-func (m *LlamaServerManager) HealthCheck() error {
+func (m *ServerManager) HealthCheck() error {
 	if !m.IsRunning() {
 		return fmt.Errorf("server is not running")
 	}
@@ -254,7 +195,7 @@ func (m *LlamaServerManager) HealthCheck() error {
 }
 
 // GetModelPath returns the current model path
-func (m *LlamaServerManager) GetModelPath() string {
+func (m *ServerManager) GetModelPath() string {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return m.modelPath

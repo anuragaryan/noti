@@ -216,11 +216,6 @@ export namespace domain {
 		    return a;
 		}
 	}
-
-}
-
-export namespace main {
-	
 	export class TranscriptionResult {
 	    text: string;
 	    language: string;

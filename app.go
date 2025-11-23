@@ -48,7 +48,7 @@ func NewApp() *App {
 	noteService := service.NewNoteService(structureRepo, pathResolver, fileSystem, notesPath)
 	configService := service.NewConfigService(basePath, defaultConfig)
 	sttManager := service.NewSTTManager(basePath, downloadScript)
-	llmManager := service.NewLLMManager(basePath, downloadScriptLLM)
+	llmManager := service.NewLLMManager(basePath, downloadScriptLLM, downloadScriptLlamaServer)
 	promptService := service.NewPromptService(basePath)
 
 	return &App{
@@ -103,14 +103,18 @@ func (a *App) startup(ctx context.Context) {
 
 	// Initialize STT service with self-healing
 	a.sttManager.SetContext(ctx)
-	if err := a.sttManager.Initialize(a.config.RealtimeTranscriptionChunkSeconds, a.config.ModelName, NewSTTServiceAdapter); err != nil {
+	sttConfig := &domain.STTConfig{
+		ModelName:         a.config.ModelName,
+		ChunkDurationSecs: a.config.RealtimeTranscriptionChunkSeconds,
+	}
+	if err := a.sttManager.Initialize(sttConfig); err != nil {
 		fmt.Printf("STT initialization failed: %v\n", err)
 	}
 
 	// Initialize LLM service if configured
 	a.llmManager.SetContext(ctx)
 	if a.config.LLM.Provider != "" {
-		if err := a.llmManager.Initialize(&a.config.LLM, NewLLMProvider); err != nil {
+		if err := a.llmManager.Initialize(&a.config.LLM); err != nil {
 			fmt.Printf("LLM initialization failed: %v\n", err)
 			fmt.Println("LLM features will be disabled. You can configure LLM settings later.")
 		}
@@ -154,15 +158,11 @@ func (a *App) StartVoiceRecording() error {
 }
 
 // StopVoiceRecording stops recording and returns transcribed text
-func (a *App) StopVoiceRecording() (*TranscriptionResult, error) {
+func (a *App) StopVoiceRecording() (*domain.TranscriptionResult, error) {
 	if !a.sttManager.IsAvailable() {
 		return nil, fmt.Errorf("STT service not available")
 	}
-	result, err := a.sttManager.GetService().StopRecording()
-	if err != nil {
-		return nil, err
-	}
-	return result.(*TranscriptionResult), nil
+	return a.sttManager.GetService().StopRecording()
 }
 
 // IsRecording returns current recording status
@@ -257,7 +257,7 @@ func (a *App) UpdateLLMConfig(llmConfig domain.LLMConfig) error {
 	}
 
 	// Switch provider
-	if err := a.llmManager.SwitchProvider(&llmConfig, NewLLMProvider); err != nil {
+	if err := a.llmManager.SwitchProvider(&llmConfig); err != nil {
 		return fmt.Errorf("failed to switch LLM provider: %w", err)
 	}
 
@@ -371,11 +371,6 @@ func (a *App) ExecutePromptOnContent(promptID, content string) (*domain.PromptEx
 	}
 
 	return result, nil
-}
-
-// DownloadLLMModel downloads a local LLM model
-func (a *App) DownloadLLMModel(modelName string) error {
-	return a.llmManager.DownloadModel(modelName, NewLLMProvider)
 }
 
 // ============================================================================

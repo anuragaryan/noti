@@ -23,3 +23,24 @@ type LLMProvider interface {
 	// GetModelInfo returns information about the current model
 	GetModelInfo() map[string]interface{}
 }
+
+// STTService defines the interface for STT operations
+type STTService interface {
+	// Initialize sets up the STT service
+	Initialize() error
+
+	// SetContext sets the Wails runtime context for events
+	SetContext(ctx context.Context)
+
+	// StartRecording begins audio capture
+	StartRecording() error
+
+	// StopRecording stops audio capture and returns the final transcription
+	StopRecording() (*domain.TranscriptionResult, error)
+
+	// IsRecording returns whether recording is in progress
+	IsRecording() bool
+
+	// Cleanup releases resources
+	Cleanup()
+}

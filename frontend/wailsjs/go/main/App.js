@@ -26,10 +26,6 @@ export function DeletePrompt(arg1) {
   return window['go']['main']['App']['DeletePrompt'](arg1);
 }
 
-export function DownloadLLMModel(arg1) {
-  return window['go']['main']['App']['DownloadLLMModel'](arg1);
-}
-
 export function ExecutePromptOnContent(arg1, arg2) {
   return window['go']['main']['App']['ExecutePromptOnContent'](arg1, arg2);
 }

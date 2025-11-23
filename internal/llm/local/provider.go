@@ -1,54 +1,48 @@
-package main
+// Package local provides an LLM provider implementation using local models via llama-server
+package local
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"noti/internal/domain"
+	"noti/internal/infrastructure/downloader"
+	"noti/internal/llm/shared"
 )
 
-// LocalLLMProvider implements LLM using local models via llama-server
-type LocalLLMProvider struct {
-	modelMutex     sync.Mutex
-	modelPath      string
-	config         *domain.LLMConfig
-	available      bool
-	serverManager  *LlamaServerManager
-	client         *http.Client
-	basePath       string
-	downloadScript []byte
+// Provider implements LLM using local models via llama-server
+type Provider struct {
+	client        *shared.Client
+	config        *domain.LLMConfig
+	serverManager *ServerManager
+	modelPath     string
+	basePath      string
+	downloader    *downloader.Downloader
+	available     bool
+	mutex         sync.Mutex
 }
 
-// NewLocalLLMProvider creates a new local LLM provider
-func NewLocalLLMProvider(basePath string, config *domain.LLMConfig, downloadScript []byte) (*LocalLLMProvider, error) {
+// NewProvider creates a new local LLM provider
+func NewProvider(basePath string, config *domain.LLMConfig, downloadScript []byte) (*Provider, error) {
 	if config.ModelName == "" {
 		return nil, fmt.Errorf("model name is required for local provider")
 	}
 
-	return &LocalLLMProvider{
-		modelPath: "",
-		config:    config,
-		available: false,
-		client: &http.Client{
-			Timeout: 120 * time.Second, // Local inference can take longer
-		},
-		basePath:       basePath,
-		downloadScript: downloadScript,
+	return &Provider{
+		config:     config,
+		basePath:   basePath,
+		downloader: downloader.NewDownloader(downloadScript),
+		available:  false,
 	}, nil
 }
 
 // Initialize loads the LLM model and starts llama-server
-func (p *LocalLLMProvider) Initialize() error {
+func (p *Provider) Initialize() error {
 	fmt.Println("=== Initializing Local LLM Provider ===")
 	fmt.Printf("Model: %s\n", p.config.ModelName)
 	fmt.Printf("Base path: %s\n", p.basePath)
@@ -130,7 +124,14 @@ func (p *LocalLLMProvider) Initialize() error {
 		return fmt.Errorf("llama-server health check failed: %w", err)
 	}
 
+	// Create HTTP client for the server
+	endpoint := fmt.Sprintf("%s/v1/chat/completions", p.serverManager.GetEndpoint())
+	p.client = shared.NewClient(endpoint, "", 120*time.Second)
+
+	p.mutex.Lock()
 	p.available = true
+	p.mutex.Unlock()
+
 	fmt.Println("✓ Local LLM provider initialized successfully!")
 	fmt.Printf("✓ Model: %s\n", p.config.ModelName)
 	fmt.Printf("✓ Server endpoint: %s\n", p.serverManager.GetEndpoint())
@@ -142,50 +143,32 @@ func (p *LocalLLMProvider) Initialize() error {
 }
 
 // SetServerManager sets the llama-server manager
-func (p *LocalLLMProvider) SetServerManager(manager *LlamaServerManager) {
+func (p *Provider) SetServerManager(manager *ServerManager) {
 	p.serverManager = manager
 }
 
 // Generate produces text based on the request
-func (p *LocalLLMProvider) Generate(ctx context.Context, request *domain.LLMRequest) (*domain.LLMResponse, error) {
+func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*domain.LLMResponse, error) {
+	p.mutex.Lock()
 	if !p.available {
+		p.mutex.Unlock()
 		return nil, fmt.Errorf("provider not initialized")
 	}
+	p.mutex.Unlock()
 
 	if !p.serverManager.IsRunning() {
 		return nil, fmt.Errorf("llama-server is not running")
 	}
 
 	// Use request-specific parameters or fall back to config defaults
-	temperature := request.Temperature
-	if temperature == 0 {
-		temperature = p.config.Temperature
-	}
-
-	maxTokens := request.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = p.config.MaxTokens
-	}
+	temperature := shared.GetEffectiveTemperature(request.Temperature, p.config.Temperature)
+	maxTokens := shared.GetEffectiveMaxTokens(request.MaxTokens, p.config.MaxTokens)
 
 	// Build messages array
-	messages := []apiMessage{}
-
-	// Add system message if provided
-	if request.SystemPrompt != "" {
-		messages = append(messages, apiMessage{
-			Role:    "system",
-			Content: request.SystemPrompt,
-		})
-	}
-
-	// Add user message
-	messages = append(messages, apiMessage{
-		Role:    "user",
-		Content: request.Prompt,
-	})
+	messages := shared.BuildMessages(request)
 
 	// Create API request (llama-server uses OpenAI-compatible API)
-	apiReq := apiRequest{
+	apiReq := &shared.ChatRequest{
 		Model:       p.config.ModelName,
 		Messages:    messages,
 		Temperature: temperature,
@@ -195,52 +178,10 @@ func (p *LocalLLMProvider) Generate(ctx context.Context, request *domain.LLMRequ
 	fmt.Printf("[Local LLM] Generating response for prompt (length: %d chars)\n", len(request.Prompt))
 	fmt.Printf("[Local LLM] Temperature: %.2f, Max tokens: %d\n", temperature, maxTokens)
 
-	// Thread-safe API call
-	p.modelMutex.Lock()
-	defer p.modelMutex.Unlock()
-
-	// Marshal request
-	reqBody, err := json.Marshal(apiReq)
+	// Send request using shared client
+	apiResp, err := p.client.ChatCompletion(ctx, apiReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Create HTTP request to llama-server
-	endpoint := fmt.Sprintf("%s/v1/chat/completions", p.serverManager.GetEndpoint())
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set headers
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	// Send request
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Check for HTTP errors
-	if resp.StatusCode != http.StatusOK {
-		var apiErr apiError
-		if err := json.Unmarshal(body, &apiErr); err == nil && apiErr.Error.Message != "" {
-			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, apiErr.Error.Message)
-		}
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Parse response
-	var apiResp apiResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, err
 	}
 
 	// Validate response
@@ -262,15 +203,21 @@ func (p *LocalLLMProvider) Generate(ctx context.Context, request *domain.LLMRequ
 }
 
 // IsAvailable returns whether the provider is ready to use
-func (p *LocalLLMProvider) IsAvailable() bool {
+func (p *Provider) IsAvailable() bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
 	return p.available && p.serverManager != nil && p.serverManager.IsRunning()
 }
 
 // Cleanup releases resources
-func (p *LocalLLMProvider) Cleanup() {
+func (p *Provider) Cleanup() {
 	fmt.Println("Cleaning up local LLM provider...")
-	p.modelMutex.Lock()
-	defer p.modelMutex.Unlock()
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	if p.client != nil {
+		p.client.Close()
+	}
 
 	if p.serverManager != nil {
 		p.serverManager.Stop()
@@ -281,7 +228,10 @@ func (p *LocalLLMProvider) Cleanup() {
 }
 
 // GetModelInfo returns information about the current model
-func (p *LocalLLMProvider) GetModelInfo() map[string]interface{} {
+func (p *Provider) GetModelInfo() map[string]interface{} {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	info := map[string]interface{}{
 		"provider":    "local",
 		"model":       p.config.ModelName,
@@ -300,31 +250,16 @@ func (p *LocalLLMProvider) GetModelInfo() map[string]interface{} {
 }
 
 // downloadModel downloads the LLM model using the embedded script
-func (p *LocalLLMProvider) downloadModel() error {
+func (p *Provider) downloadModel() error {
 	modelsDir := filepath.Join(p.basePath, "models", "llm")
 	if err := os.MkdirAll(modelsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create models directory: %w", err)
 	}
 
-	// Write the download script
-	scriptPath := filepath.Join(modelsDir, ".download-llm-model.sh")
-	if err := os.WriteFile(scriptPath, p.downloadScript, 0755); err != nil {
-		return fmt.Errorf("failed to write download script: %w", err)
-	}
-	defer os.Remove(scriptPath)
-
-	// Run the download script
+	// Download using the downloader
 	fmt.Printf("Running model download script for: %s\n", p.config.ModelName)
-	cmd := exec.Command("/bin/bash", scriptPath, p.config.ModelName)
-	cmd.Dir = modelsDir
-	cmd.Env = os.Environ()
-	output, err := cmd.CombinedOutput()
-
-	// Always print output
-	fmt.Printf("Download script output:\n%s\n", string(output))
-
-	if err != nil {
-		return fmt.Errorf("download script failed: %w\nOutput: %s", err, string(output))
+	if err := p.downloader.Download(modelsDir, p.config.ModelName); err != nil {
+		return fmt.Errorf("download failed: %w", err)
 	}
 
 	return nil
