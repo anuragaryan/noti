@@ -9,6 +9,8 @@ import FolderManager from './modules/folder-manager.js';
 import NoteManager from './modules/note-manager.js';
 import Preview from './modules/preview.js';
 import EventHandlers from './modules/event-handlers.js';
+import { promptManager } from './modules/prompt-manager.js';
+import PromptUI from './modules/prompt-ui.js';
 
 
 // Main application entry point
@@ -23,6 +25,10 @@ async function init() {
     FolderManager.renderFolderTree();
     EventHandlers.setupEventListeners();
     VoiceRecording.setupRealtimeTranscription(); // Setup real-time event listener
+    
+    // Initialize prompt system
+    await promptManager.initialize();
+    PromptUI.initialize();
 }
 
 // Start the app

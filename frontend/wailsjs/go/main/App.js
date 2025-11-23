@@ -10,12 +10,40 @@ export function CreateNote(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateNote'](arg1, arg2, arg3);
 }
 
+export function CreatePrompt(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['CreatePrompt'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function DeleteFolder(arg1, arg2) {
   return window['go']['main']['App']['DeleteFolder'](arg1, arg2);
 }
 
 export function DeleteNote(arg1) {
   return window['go']['main']['App']['DeleteNote'](arg1);
+}
+
+export function DeletePrompt(arg1) {
+  return window['go']['main']['App']['DeletePrompt'](arg1);
+}
+
+export function DownloadLLMModel(arg1) {
+  return window['go']['main']['App']['DownloadLLMModel'](arg1);
+}
+
+export function ExecutePromptOnContent(arg1, arg2) {
+  return window['go']['main']['App']['ExecutePromptOnContent'](arg1, arg2);
+}
+
+export function ExecutePromptOnNote(arg1, arg2) {
+  return window['go']['main']['App']['ExecutePromptOnNote'](arg1, arg2);
+}
+
+export function GenerateText(arg1, arg2) {
+  return window['go']['main']['App']['GenerateText'](arg1, arg2);
+}
+
+export function GenerateTextWithOptions(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GenerateTextWithOptions'](arg1, arg2, arg3, arg4);
 }
 
 export function GetAllFolders() {
@@ -26,12 +54,24 @@ export function GetAllNotes() {
   return window['go']['main']['App']['GetAllNotes']();
 }
 
+export function GetAllPrompts() {
+  return window['go']['main']['App']['GetAllPrompts']();
+}
+
 export function GetFolderPath(arg1) {
   return window['go']['main']['App']['GetFolderPath'](arg1);
 }
 
+export function GetLLMStatus() {
+  return window['go']['main']['App']['GetLLMStatus']();
+}
+
 export function GetNote(arg1) {
   return window['go']['main']['App']['GetNote'](arg1);
+}
+
+export function GetPrompt(arg1) {
+  return window['go']['main']['App']['GetPrompt'](arg1);
 }
 
 export function GetSTTStatus() {
@@ -58,6 +98,14 @@ export function UpdateFolder(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateFolder'](arg1, arg2, arg3);
 }
 
+export function UpdateLLMConfig(arg1) {
+  return window['go']['main']['App']['UpdateLLMConfig'](arg1);
+}
+
 export function UpdateNote(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateNote'](arg1, arg2, arg3);
+}
+
+export function UpdatePrompt(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['UpdatePrompt'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }

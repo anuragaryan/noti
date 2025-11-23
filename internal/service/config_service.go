@@ -70,6 +70,34 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 		config.ModelName = "base.en"
 	}
 
+	// Set LLM defaults if not configured
+	if config.LLM.Provider == "" {
+		config.LLM.Provider = "api" // Default to API provider
+	}
+	if config.LLM.Temperature == 0 {
+		config.LLM.Temperature = 0.7
+	}
+	if config.LLM.MaxTokens == 0 {
+		config.LLM.MaxTokens = 512
+	}
+
 	fmt.Printf("Loaded config from: %s\n", configFilePath)
 	return &config, nil
+}
+
+// Save saves the configuration to config.json
+func (s *ConfigService) Save(config *domain.Config) error {
+	configFilePath := filepath.Join(s.basePath, "config.json")
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configFilePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	fmt.Printf("Saved config to: %s\n", configFilePath)
+	return nil
 }

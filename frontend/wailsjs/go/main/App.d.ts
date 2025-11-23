@@ -7,17 +7,37 @@ export function CreateFolder(arg1:string,arg2:string):Promise<domain.Folder>;
 
 export function CreateNote(arg1:string,arg2:string,arg3:string):Promise<domain.Note>;
 
+export function CreatePrompt(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<domain.Prompt>;
+
 export function DeleteFolder(arg1:string,arg2:boolean):Promise<void>;
 
 export function DeleteNote(arg1:string):Promise<void>;
+
+export function DeletePrompt(arg1:string):Promise<void>;
+
+export function DownloadLLMModel(arg1:string):Promise<void>;
+
+export function ExecutePromptOnContent(arg1:string,arg2:string):Promise<domain.PromptExecutionResult>;
+
+export function ExecutePromptOnNote(arg1:string,arg2:string):Promise<domain.PromptExecutionResult>;
+
+export function GenerateText(arg1:string,arg2:string):Promise<domain.LLMResponse>;
+
+export function GenerateTextWithOptions(arg1:string,arg2:string,arg3:number,arg4:number):Promise<domain.LLMResponse>;
 
 export function GetAllFolders():Promise<Array<domain.Folder>>;
 
 export function GetAllNotes():Promise<Array<domain.Note>>;
 
+export function GetAllPrompts():Promise<Array<domain.Prompt>>;
+
 export function GetFolderPath(arg1:string):Promise<Array<domain.Folder>>;
 
+export function GetLLMStatus():Promise<Record<string, any>>;
+
 export function GetNote(arg1:string):Promise<domain.Note>;
+
+export function GetPrompt(arg1:string):Promise<domain.Prompt>;
 
 export function GetSTTStatus():Promise<Record<string, any>>;
 
@@ -31,4 +51,8 @@ export function StopVoiceRecording():Promise<main.TranscriptionResult>;
 
 export function UpdateFolder(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function UpdateLLMConfig(arg1:domain.LLMConfig):Promise<void>;
+
 export function UpdateNote(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function UpdatePrompt(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:number,arg7:number):Promise<void>;

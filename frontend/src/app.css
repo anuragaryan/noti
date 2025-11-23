@@ -764,3 +764,357 @@ body {
     visibility: visible;
     bottom: 40px;
 }
+
+/* Prompt Actions Bar */
+.prompt-actions-bar {
+    background: #252525;
+    border-bottom: 1px solid #3a3a3a;
+    padding: 12px 20px;
+}
+
+.prompt-selector-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.prompt-label {
+    color: #aaa;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.prompt-dropdown {
+    flex: 1;
+    max-width: 300px;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 14px;
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+}
+
+.prompt-dropdown:focus {
+    border-color: #5a7a9a;
+}
+
+.prompt-dropdown option {
+    background: #2a2a2a;
+    color: #fff;
+}
+
+/* Prompt Result Panel */
+.prompt-result-panel {
+    background: #1a2a1a;
+    border: 1px solid #2a4a2a;
+    border-radius: 8px;
+    margin: 15px 20px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.prompt-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.prompt-result-header h3 {
+    color: #4CAF50;
+    font-size: 16px;
+    margin: 0;
+}
+
+.prompt-output {
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 14px;
+}
+
+.prompt-result-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Prompt Management Modal */
+.prompt-modal-large {
+    min-width: 900px;
+    max-width: 1200px;
+    width: 90vw;
+    max-height: 85vh;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.prompt-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.prompt-modal-header h3 {
+    margin: 0;
+}
+
+.prompt-management-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Prompts List Section */
+.prompts-list-section {
+    width: 350px;
+    border-right: 1px solid #3a3a3a;
+    display: flex;
+    flex-direction: column;
+    background: #252525;
+}
+
+.prompts-list-header {
+    padding: 20px;
+    border-bottom: 1px solid #3a3a3a;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.prompts-list-header h4 {
+    margin: 0;
+    color: #fff;
+    font-size: 16px;
+}
+
+.prompts-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.prompt-card {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.prompt-card:hover {
+    background: #323232;
+    border-color: #4a4a4a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.prompt-card.selected {
+    background: #3a4a5a;
+    border-color: #5a7a9a;
+}
+
+.prompt-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 8px;
+}
+
+.prompt-card h5 {
+    margin: 0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.prompt-card-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.prompt-card-btn {
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.prompt-card-btn:hover {
+    background: #4a4a4a;
+    color: #fff;
+}
+
+.prompt-card p {
+    margin: 0;
+    color: #aaa;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.prompt-card-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 11px;
+    color: #666;
+}
+
+.prompt-card-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Prompt Editor */
+.prompt-editor {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.prompt-editor-header {
+    padding: 20px 30px;
+    border-bottom: 1px solid #3a3a3a;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.prompt-editor-header h4 {
+    margin: 0;
+    color: #fff;
+    font-size: 16px;
+}
+
+.prompt-editor-form {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #ccc;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.modal-textarea {
+    width: 100%;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    color: #fff;
+    padding: 10px 15px;
+    font-size: 14px;
+    border-radius: 6px;
+    outline: none;
+    font-family: 'Monaco', 'Menlo', monospace;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.modal-textarea:focus {
+    border-color: #5a7a9a;
+}
+
+.form-hint {
+    display: block;
+    margin-top: 6px;
+    color: #666;
+    font-size: 12px;
+}
+
+.form-hint code {
+    background: #2a2a2a;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #f08d49;
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.prompt-settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.range-input {
+    width: 100%;
+    height: 6px;
+    background: #3a3a3a;
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.range-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #5a7a9a;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.range-input::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #5a7a9a;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+.prompt-editor-actions {
+    display: flex;
+    gap: 10px;
+    padding-top: 20px;
+    border-top: 1px solid #3a3a3a;
+    margin-top: 20px;
+}
+
+/* Empty state for prompts */
+.prompts-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #666;
+}
+
+.prompts-empty h4 {
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.prompts-empty p {
+    font-size: 14px;
+    margin-bottom: 20px;
+}

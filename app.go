@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"noti/internal/domain"
 	"noti/internal/repository"
@@ -25,6 +27,8 @@ type App struct {
 	noteService   *service.NoteService
 	configService *service.ConfigService
 	sttManager    *service.STTManager
+	llmManager    *service.LLMManager
+	promptService *service.PromptService
 }
 
 // NewApp creates a new App application struct
@@ -44,6 +48,8 @@ func NewApp() *App {
 	noteService := service.NewNoteService(structureRepo, pathResolver, fileSystem, notesPath)
 	configService := service.NewConfigService(basePath, defaultConfig)
 	sttManager := service.NewSTTManager(basePath, downloadScript)
+	llmManager := service.NewLLMManager(basePath, downloadScriptLLM)
+	promptService := service.NewPromptService(basePath)
 
 	return &App{
 		basePath:      basePath,
@@ -56,6 +62,8 @@ func NewApp() *App {
 		noteService:   noteService,
 		configService: configService,
 		sttManager:    sttManager,
+		llmManager:    llmManager,
+		promptService: promptService,
 	}
 }
 
@@ -99,6 +107,22 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Printf("STT initialization failed: %v\n", err)
 	}
 
+	// Initialize LLM service if configured
+	a.llmManager.SetContext(ctx)
+	if a.config.LLM.Provider != "" {
+		if err := a.llmManager.Initialize(&a.config.LLM, NewLLMProvider); err != nil {
+			fmt.Printf("LLM initialization failed: %v\n", err)
+			fmt.Println("LLM features will be disabled. You can configure LLM settings later.")
+		}
+	} else {
+		fmt.Println("LLM not configured. You can enable it in settings.")
+	}
+
+	// Initialize prompt service
+	if err := a.promptService.Initialize(); err != nil {
+		fmt.Printf("Prompt service initialization failed: %v\n", err)
+	}
+
 	// Create structure.json if it doesn't exist
 	if _, err := os.Stat(a.configPath); os.IsNotExist(err) {
 		if err := a.saveStructure(&domain.FolderStructure{
@@ -114,6 +138,7 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
 	a.sttManager.Cleanup()
+	a.llmManager.Cleanup()
 }
 
 // ============================================================================
@@ -161,6 +186,177 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 		"available": available,
 		"modelPath": modelPath,
 	}
+}
+
+// ============================================================================
+// LLM OPERATIONS
+// ============================================================================
+
+// GenerateText generates text using the configured LLM
+func (a *App) GenerateText(prompt string, systemPrompt string) (*domain.LLMResponse, error) {
+	if !a.llmManager.IsAvailable() {
+		return nil, fmt.Errorf("LLM service not available. Please configure LLM settings")
+	}
+
+	request := &domain.LLMRequest{
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+	}
+
+	return a.llmManager.Generate(a.ctx, request)
+}
+
+// GenerateTextWithOptions generates text with custom parameters
+func (a *App) GenerateTextWithOptions(prompt string, systemPrompt string, temperature float32, maxTokens int) (*domain.LLMResponse, error) {
+	if !a.llmManager.IsAvailable() {
+		return nil, fmt.Errorf("LLM service not available. Please configure LLM settings")
+	}
+
+	request := &domain.LLMRequest{
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+		Temperature:  temperature,
+		MaxTokens:    maxTokens,
+	}
+
+	return a.llmManager.Generate(a.ctx, request)
+}
+
+// GetLLMStatus returns LLM availability and configuration
+func (a *App) GetLLMStatus() map[string]interface{} {
+	return a.llmManager.GetStatus()
+}
+
+// UpdateLLMConfig updates LLM configuration and switches provider
+func (a *App) UpdateLLMConfig(llmConfig domain.LLMConfig) error {
+	// Update config
+	a.config.LLM = llmConfig
+
+	// Save config
+	if err := a.configService.Save(a.config); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	// Switch provider
+	if err := a.llmManager.SwitchProvider(&llmConfig, NewLLMProvider); err != nil {
+		return fmt.Errorf("failed to switch LLM provider: %w", err)
+	}
+
+	return nil
+}
+
+// ============================================================================
+// PROMPT OPERATIONS
+// ============================================================================
+
+// GetAllPrompts returns all available prompts
+func (a *App) GetAllPrompts() ([]domain.Prompt, error) {
+	return a.promptService.GetAll()
+}
+
+// GetPrompt returns a prompt by ID
+func (a *App) GetPrompt(id string) (*domain.Prompt, error) {
+	return a.promptService.Get(id)
+}
+
+// CreatePrompt creates a new prompt
+func (a *App) CreatePrompt(name, description, systemPrompt, userPrompt string, temperature float32, maxTokens int) (*domain.Prompt, error) {
+	return a.promptService.Create(name, description, systemPrompt, userPrompt, temperature, maxTokens)
+}
+
+// UpdatePrompt updates an existing prompt
+func (a *App) UpdatePrompt(id, name, description, systemPrompt, userPrompt string, temperature float32, maxTokens int) error {
+	return a.promptService.Update(id, name, description, systemPrompt, userPrompt, temperature, maxTokens)
+}
+
+// DeletePrompt deletes a prompt
+func (a *App) DeletePrompt(id string) error {
+	return a.promptService.Delete(id)
+}
+
+// ExecutePromptOnNote executes a prompt on a note's content
+func (a *App) ExecutePromptOnNote(promptID, noteID string) (*domain.PromptExecutionResult, error) {
+	// Get the prompt
+	prompt, err := a.promptService.Get(promptID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get prompt: %w", err)
+	}
+
+	// Get the note
+	note, err := a.noteService.Get(noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note: %w", err)
+	}
+
+	// Replace {{content}} placeholder in user prompt
+	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", note.Content)
+
+	// Execute the prompt
+	request := &domain.LLMRequest{
+		Prompt:       userPrompt,
+		SystemPrompt: prompt.SystemPrompt,
+		Temperature:  prompt.Temperature,
+		MaxTokens:    prompt.MaxTokens,
+	}
+
+	response, err := a.llmManager.Generate(a.ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate response: %w", err)
+	}
+
+	// Create execution result
+	result := &domain.PromptExecutionResult{
+		PromptName:  prompt.Name,
+		Input:       note.Content,
+		Output:      response.Text,
+		TokensUsed:  response.TokensUsed,
+		ExecutedAt:  time.Now(),
+		LLMResponse: response,
+	}
+
+	return result, nil
+}
+
+// ExecutePromptOnContent executes a prompt on arbitrary content
+func (a *App) ExecutePromptOnContent(promptID, content string) (*domain.PromptExecutionResult, error) {
+	// Get the prompt
+	prompt, err := a.promptService.Get(promptID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get prompt: %w", err)
+	}
+
+	// Replace {{content}} placeholder in user prompt
+	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", content)
+
+	// Execute the prompt
+	request := &domain.LLMRequest{
+		Prompt:       userPrompt,
+		SystemPrompt: prompt.SystemPrompt,
+		Temperature:  prompt.Temperature,
+		MaxTokens:    prompt.MaxTokens,
+	}
+
+	response, err := a.llmManager.Generate(a.ctx, request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate response: %w", err)
+	}
+
+	// Create execution result
+	result := &domain.PromptExecutionResult{
+		PromptName:  prompt.Name,
+		Input:       content,
+		Output:      response.Text,
+		TokensUsed:  response.TokensUsed,
+		ExecutedAt:  time.Now(),
+		LLMResponse: response,
+	}
+
+	return result, nil
+}
+
+// DownloadLLMModel downloads a local LLM model
+func (a *App) DownloadLLMModel(modelName string) error {
+	return a.llmManager.DownloadModel(modelName, NewLLMProvider)
 }
 
 // ============================================================================

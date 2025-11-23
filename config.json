@@ -1,4 +1,12 @@
 {
   "realtimeTranscriptionChunkSeconds": 3,
-  "modelName": "medium.en"
+  "modelName": "medium.en",
+  "llm": {
+    "provider": "api",
+    "modelName": "gemini-2-5-flash",
+    "apiEndpoint": "",
+    "apiKey": "",
+    "temperature": 0.7,
+    "maxTokens": 512
+  }
 }
