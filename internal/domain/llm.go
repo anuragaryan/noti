@@ -3,7 +3,7 @@ package domain
 // LLMConfig represents the LLM configuration
 type LLMConfig struct {
 	Provider    string  `json:"provider"`    // "local" or "api"
-	ModelName   string  `json:"modelName"`   // e.g., "gemma-2b-it" or "gpt-4"
+	ModelName   string  `json:"modelName"`   // e.g., "gemma-2b-it-q4_k_m" or "gpt-4"
 	APIEndpoint string  `json:"apiEndpoint"` // For API provider
 	APIKey      string  `json:"apiKey"`      // For API provider
 	Temperature float32 `json:"temperature"` // 0.0 to 2.0

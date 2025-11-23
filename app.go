@@ -194,7 +194,13 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 
 // GenerateText generates text using the configured LLM
 func (a *App) GenerateText(prompt string, systemPrompt string) (*domain.LLMResponse, error) {
+	fmt.Printf("[App.GenerateText] Called with prompt length: %d\n", len(prompt))
+	fmt.Printf("[App.GenerateText] LLM Manager available: %v\n", a.llmManager.IsAvailable())
+
 	if !a.llmManager.IsAvailable() {
+		fmt.Println("[App.GenerateText] LLM service not available")
+		status := a.llmManager.GetStatus()
+		fmt.Printf("[App.GenerateText] Status: %+v\n", status)
 		return nil, fmt.Errorf("LLM service not available. Please configure LLM settings")
 	}
 
@@ -203,6 +209,7 @@ func (a *App) GenerateText(prompt string, systemPrompt string) (*domain.LLMRespo
 		SystemPrompt: systemPrompt,
 	}
 
+	fmt.Println("[App.GenerateText] Calling llmManager.Generate...")
 	return a.llmManager.Generate(a.ctx, request)
 }
 
@@ -224,7 +231,19 @@ func (a *App) GenerateTextWithOptions(prompt string, systemPrompt string, temper
 
 // GetLLMStatus returns LLM availability and configuration
 func (a *App) GetLLMStatus() map[string]interface{} {
-	return a.llmManager.GetStatus()
+	status := a.llmManager.GetStatus()
+
+	// Add detailed debugging info
+	if provider := a.llmManager.GetProvider(); provider != nil {
+		status["providerAvailable"] = provider.IsAvailable()
+		status["providerInfo"] = provider.GetModelInfo()
+	} else {
+		status["providerAvailable"] = false
+		status["providerInfo"] = nil
+	}
+
+	fmt.Printf("[DEBUG] LLM Status: %+v\n", status)
+	return status
 }
 
 // UpdateLLMConfig updates LLM configuration and switches provider

@@ -19,10 +19,15 @@ type APILLMAdapter struct {
 func NewLLMProvider(basePath string, config *domain.LLMConfig) (service.LLMProvider, error) {
 	switch config.Provider {
 	case "local":
-		provider, err := NewLocalLLMProvider(basePath, config)
+		provider, err := NewLocalLLMProvider(basePath, config, downloadScriptLLM)
 		if err != nil {
 			return nil, err
 		}
+
+		// Create and set the llama-server manager
+		serverManager := NewLlamaServerManager(basePath, downloadScriptLlamaServer)
+		provider.SetServerManager(serverManager)
+
 		return &LocalLLMAdapter{LocalLLMProvider: provider}, nil
 
 	case "api":

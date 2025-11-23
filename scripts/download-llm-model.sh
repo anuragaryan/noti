@@ -29,20 +29,20 @@ echo "This may take a while depending on your internet connection..."
 # Map common model names to Hugging Face repositories
 case "$MODEL_NAME" in
     gemma-3-270m-it-q4_k_m|gemma-3-270m-it)
-        REPO="google/gemma-3-270m-it"
-        FILE="gemma-3-270m-it-q4_k_m.gguf"
+        REPO="ggml-org/gemma-3-270m-it-GGUF"
+        FILE="gemma-3-270m-it-Q8_0.gguf"
         ;;
     gemma-3-1b-it-q4_k_m|gemma-3-1b-it)
-        REPO="google/gemma-3-1b-it"
-        FILE="gemma-3-1b-it-q4_k_m.gguf"
+        REPO="ggml-org/gemma-3-1b-it-GGUF"
+        FILE="gemma-3-1b-it-Q4_K_M.gguf"
         ;;
-    gemma-2b-it-q4_k_m|gemma-2b-it)
-        REPO="google/gemma-2b-it-GGUF"
-        FILE="gemma-2b-it-q4_k_m.gguf"
+    gemma-2-2b-it-q4_k_m|gemma-2-2b-it)
+        REPO="ggml-org/gemma-2-2b-it-GGUF"
+        FILE="gemma-2-2b-it-Q4_K_M.gguf"
         ;;
-    gemma-7b-it-q4_k_m|gemma-7b-it)
-        REPO="google/gemma-7b-it-GGUF"
-        FILE="gemma-7b-it-q4_k_m.gguf"
+    gemma-2-9b-it-q4_k_m|gemma-2-9b-it)
+        REPO="ggml-org/gemma-2-9b-it-GGUF"
+        FILE="gemma-2-9b-it-Q4_K_M.gguf"
         ;;
     llama-2-7b-q4_k_m|llama-2-7b)
         REPO="TheBloke/Llama-2-7B-GGUF"
@@ -53,8 +53,8 @@ case "$MODEL_NAME" in
         echo "Supported models:"
         echo "  - gemma-3-270m-it-q4_k_m (Google Gemma 3 270M Instruct, Q4_K_M quantization)"
         echo "  - gemma-3-1b-it-q4_k_m (Google Gemma 3 1B Instruct, Q4_K_M quantization)"
-        echo "  - gemma-2b-it-q4_k_m (Google Gemma 2B Instruct, Q4_K_M quantization)"
-        echo "  - gemma-7b-it-q4_k_m (Google Gemma 7B Instruct, Q4_K_M quantization)"
+        echo "  - gemma-2-2b-it-q4_k_m (Google Gemma 2 2B Instruct, Q4_K_M quantization)"
+        echo "  - gemma-2-9b-it-q4_k_m (Google Gemma 2 9B Instruct, Q4_K_M quantization)"
         echo "  - llama-2-7b-q4_k_m (Llama 2 7B, Q4_K_M quantization)"
         exit 1
         ;;
