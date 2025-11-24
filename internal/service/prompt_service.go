@@ -254,7 +254,24 @@ func (s *PromptService) createDefaultPrompts() error {
 			systemPrompt: "You are a helpful assistant that creates clear, concise summaries.",
 			userPrompt:   "Please summarize the following note in 3-5 bullet points:\n\n{{content}}",
 			temperature:  0.3,
-			maxTokens:    300,
+			maxTokens:    2048,
+		},
+		{
+			name:         "Cleanup",
+			description:  "Cleans up your note and write grammatically correct text.",
+			systemPrompt: "You are a meticulous copyeditor. Your sole task is to take the provided raw text and correct it to strictly adhere to standard written English language rules.",
+			userPrompt: `Goal: Produce a final text that is grammatically perfect and professionally formatted, while ensuring the meaning and vocabulary of the original text remain completely unchanged.
+							Instructions:
+							Grammar Correction: Fix all grammatical errors, including subject-verb agreement issues, tense inconsistencies, pronoun errors, and modifier misplacements.
+							Punctuation and Capitalization: Add or adjust standard punctuation (periods, commas, semicolons, etc.) and correct capitalization to create distinct, well-formed sentences.
+							Spelling: Correct any misspelled words.
+							Standard Formatting: Ensure proper spacing and indentation where applicable (e.g., separating paragraphs).
+							Strict Constraint: Do not delete, add, or substitute any words or phrases unless they are filler words (like uh, um) or misspellings. If a sentence is awkward but grammatically correct, leave it alone. The goal is to polish, not rephrase.
+							Input Text (to be inserted below): {{content}}
+
+							Output Format: Provide only the final, cleaned, and correctly formatted text.`,
+			temperature: 0.2,
+			maxTokens:   2048,
 		},
 		{
 			name:         "Expand Ideas",
@@ -262,7 +279,7 @@ func (s *PromptService) createDefaultPrompts() error {
 			systemPrompt: "You are a creative thinking assistant that helps expand and develop ideas.",
 			userPrompt:   "Please expand on the following ideas with additional details, examples, and perspectives:\n\n{{content}}",
 			temperature:  0.7,
-			maxTokens:    800,
+			maxTokens:    2048,
 		},
 		{
 			name:         "Improve Writing",
@@ -270,7 +287,7 @@ func (s *PromptService) createDefaultPrompts() error {
 			systemPrompt: "You are an expert editor. Improve clarity, grammar, and style while maintaining the original meaning.",
 			userPrompt:   "Please improve the writing of the following text:\n\n{{content}}",
 			temperature:  0.5,
-			maxTokens:    1000,
+			maxTokens:    2048,
 		},
 		{
 			name:         "Extract Action Items",
@@ -278,7 +295,7 @@ func (s *PromptService) createDefaultPrompts() error {
 			systemPrompt: "You are a productivity assistant that identifies actionable tasks.",
 			userPrompt:   "Please extract all action items and tasks from the following note as a numbered list:\n\n{{content}}",
 			temperature:  0.2,
-			maxTokens:    400,
+			maxTokens:    2048,
 		},
 		{
 			name:         "Generate Questions",
@@ -286,7 +303,7 @@ func (s *PromptService) createDefaultPrompts() error {
 			systemPrompt: "You are a curious assistant that asks insightful questions to deepen understanding.",
 			userPrompt:   "Please generate 5-7 thought-provoking questions about the following content:\n\n{{content}}",
 			temperature:  0.6,
-			maxTokens:    400,
+			maxTokens:    2048,
 		},
 	}
 
