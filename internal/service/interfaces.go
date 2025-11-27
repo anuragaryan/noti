@@ -14,8 +14,15 @@ type LLMProvider interface {
 	// Generate produces text based on the request
 	Generate(ctx context.Context, request *domain.LLMRequest) (*domain.LLMResponse, error)
 
+	// GenerateStream produces text with streaming response
+	// The callback is called for each chunk received
+	GenerateStream(ctx context.Context, request *domain.LLMRequest, callback domain.StreamCallback) error
+
 	// IsAvailable returns whether the provider is ready to use
 	IsAvailable() bool
+
+	// SupportsStreaming returns whether the provider supports streaming
+	SupportsStreaming() bool
 
 	// Cleanup releases resources
 	Cleanup()

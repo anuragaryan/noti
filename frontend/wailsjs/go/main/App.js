@@ -30,12 +30,28 @@ export function ExecutePromptOnContent(arg1, arg2) {
   return window['go']['main']['App']['ExecutePromptOnContent'](arg1, arg2);
 }
 
+export function ExecutePromptOnContentStream(arg1, arg2) {
+  return window['go']['main']['App']['ExecutePromptOnContentStream'](arg1, arg2);
+}
+
 export function ExecutePromptOnNote(arg1, arg2) {
   return window['go']['main']['App']['ExecutePromptOnNote'](arg1, arg2);
 }
 
+export function ExecutePromptOnNoteStream(arg1, arg2) {
+  return window['go']['main']['App']['ExecutePromptOnNoteStream'](arg1, arg2);
+}
+
 export function GenerateText(arg1, arg2) {
   return window['go']['main']['App']['GenerateText'](arg1, arg2);
+}
+
+export function GenerateTextStream(arg1, arg2) {
+  return window['go']['main']['App']['GenerateTextStream'](arg1, arg2);
+}
+
+export function GenerateTextStreamWithOptions(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GenerateTextStreamWithOptions'](arg1, arg2, arg3, arg4);
 }
 
 export function GenerateTextWithOptions(arg1, arg2, arg3, arg4) {
@@ -72,6 +88,10 @@ export function GetPrompt(arg1) {
 
 export function GetSTTStatus() {
   return window['go']['main']['App']['GetSTTStatus']();
+}
+
+export function GetStreamingSupport() {
+  return window['go']['main']['App']['GetStreamingSupport']();
 }
 
 export function IsRecording() {

@@ -11,13 +11,15 @@ import (
 	"noti/internal/domain"
 	"noti/internal/repository"
 	"noti/internal/service"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
 type App struct {
 	ctx           context.Context
 	basePath      string
-	configPath    string
+	structurePath string
 	notesPath     string
 	config        *domain.Config
 	structureRepo *repository.StructureRepository
@@ -36,10 +38,10 @@ func NewApp() *App {
 	homeDir, _ := os.UserHomeDir()
 	basePath := filepath.Join(homeDir, "Documents", "Noti")
 	notesPath := filepath.Join(basePath, "notes")
-	configPath := filepath.Join(notesPath, "structure.json")
+	structurePath := filepath.Join(notesPath, "structure.json")
 
 	// Initialize repositories
-	structureRepo := repository.NewStructureRepository(configPath)
+	structureRepo := repository.NewStructureRepository(structurePath)
 	pathResolver := repository.NewPathResolver(notesPath)
 	fileSystem := repository.NewFileSystem(pathResolver)
 
@@ -53,7 +55,7 @@ func NewApp() *App {
 
 	return &App{
 		basePath:      basePath,
-		configPath:    configPath,
+		structurePath: structurePath,
 		notesPath:     notesPath,
 		structureRepo: structureRepo,
 		pathResolver:  pathResolver,
@@ -128,7 +130,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Create structure.json if it doesn't exist
-	if _, err := os.Stat(a.configPath); os.IsNotExist(err) {
+	if _, err := os.Stat(a.structurePath); os.IsNotExist(err) {
 		if err := a.saveStructure(&domain.FolderStructure{
 			Folders: []domain.Folder{},
 			Notes:   []domain.Note{},
@@ -152,7 +154,7 @@ func (a *App) shutdown(ctx context.Context) {
 // StartVoiceRecording starts recording audio from microphone
 func (a *App) StartVoiceRecording() error {
 	if !a.sttManager.IsAvailable() {
-		return fmt.Errorf("STT service not available. Please download the Whisper model")
+		return fmt.Errorf("STT service not available. Please download the STT model")
 	}
 	return a.sttManager.GetService().StartRecording()
 }
@@ -262,6 +264,124 @@ func (a *App) UpdateLLMConfig(llmConfig domain.LLMConfig) error {
 	}
 
 	return nil
+}
+
+// GenerateTextStream generates text with streaming response
+// Emits events: llm:stream:chunk, llm:stream:done, llm:stream:error
+func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
+	if !a.llmManager.SupportsStreaming() {
+		runtime.EventsEmit(a.ctx, "llm:stream:error", "Streaming not available")
+		return fmt.Errorf("streaming not available")
+	}
+
+	request := &domain.LLMRequest{
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+	}
+
+	// Run streaming in goroutine to not block
+	go func() {
+		err := a.llmManager.GenerateStream(a.ctx, request,
+			func(chunk *domain.StreamChunk) error {
+				if chunk.Done {
+					runtime.EventsEmit(a.ctx, "llm:stream:done", chunk)
+				} else {
+					runtime.EventsEmit(a.ctx, "llm:stream:chunk", chunk)
+				}
+				return nil
+			})
+
+		if err != nil {
+			runtime.EventsEmit(a.ctx, "llm:stream:error", err.Error())
+		}
+	}()
+
+	return nil
+}
+
+// GenerateTextStreamWithOptions generates text with streaming and custom parameters
+func (a *App) GenerateTextStreamWithOptions(prompt string, systemPrompt string, temperature float32, maxTokens int) error {
+	if !a.llmManager.SupportsStreaming() {
+		runtime.EventsEmit(a.ctx, "llm:stream:error", "Streaming not available")
+		return fmt.Errorf("streaming not available")
+	}
+
+	request := &domain.LLMRequest{
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+		Temperature:  temperature,
+		MaxTokens:    maxTokens,
+	}
+
+	// Run streaming in goroutine to not block
+	go func() {
+		err := a.llmManager.GenerateStream(a.ctx, request,
+			func(chunk *domain.StreamChunk) error {
+				if chunk.Done {
+					runtime.EventsEmit(a.ctx, "llm:stream:done", chunk)
+				} else {
+					runtime.EventsEmit(a.ctx, "llm:stream:chunk", chunk)
+				}
+				return nil
+			})
+
+		if err != nil {
+			runtime.EventsEmit(a.ctx, "llm:stream:error", err.Error())
+		}
+	}()
+
+	return nil
+}
+
+// ExecutePromptOnNoteStream executes a prompt on a note with streaming
+func (a *App) ExecutePromptOnNoteStream(promptID, noteID string) error {
+	// Get the prompt
+	prompt, err := a.promptService.Get(promptID)
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:stream:error", fmt.Sprintf("failed to get prompt: %v", err))
+		return fmt.Errorf("failed to get prompt: %w", err)
+	}
+
+	// Get the note
+	note, err := a.noteService.Get(noteID)
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:stream:error", fmt.Sprintf("failed to get note: %v", err))
+		return fmt.Errorf("failed to get note: %w", err)
+	}
+
+	// Replace {{content}} placeholder in user prompt
+	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", note.Content)
+
+	return a.GenerateTextStreamWithOptions(userPrompt, prompt.SystemPrompt, prompt.Temperature, prompt.MaxTokens)
+}
+
+// ExecutePromptOnContentStream executes a prompt on content with streaming
+func (a *App) ExecutePromptOnContentStream(promptID, content string) error {
+	// Get the prompt
+	prompt, err := a.promptService.Get(promptID)
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "llm:stream:error", fmt.Sprintf("failed to get prompt: %v", err))
+		return fmt.Errorf("failed to get prompt: %w", err)
+	}
+
+	// Replace {{content}} placeholder in user prompt
+	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", content)
+
+	return a.GenerateTextStreamWithOptions(userPrompt, prompt.SystemPrompt, prompt.Temperature, prompt.MaxTokens)
+}
+
+// GetStreamingSupport returns whether streaming is available
+func (a *App) GetStreamingSupport() bool {
+	supported := a.llmManager.SupportsStreaming()
+	fmt.Printf("[App.GetStreamingSupport] Streaming supported: %v\n", supported)
+	fmt.Printf("[App.GetStreamingSupport] LLM available: %v\n", a.llmManager.IsAvailable())
+	if provider := a.llmManager.GetProvider(); provider != nil {
+		fmt.Printf("[App.GetStreamingSupport] Provider available: %v\n", provider.IsAvailable())
+		fmt.Printf("[App.GetStreamingSupport] Provider supports streaming: %v\n", provider.SupportsStreaming())
+	} else {
+		fmt.Printf("[App.GetStreamingSupport] No provider configured\n")
+	}
+	return supported
 }
 
 // ============================================================================

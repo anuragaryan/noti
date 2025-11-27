@@ -1118,3 +1118,81 @@ body {
     font-size: 14px;
     margin-bottom: 20px;
 }
+
+/* Streaming Toggle Styles */
+.streaming-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.streaming-toggle-label {
+    color: #aaa;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.streaming-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #5a7a9a;
+}
+
+.streaming-checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.streaming-toggle-label.disabled {
+    color: #666;
+    cursor: not-allowed;
+}
+
+/* Streaming indicator in prompt output */
+.prompt-output.streaming {
+    border-color: #5a7a9a;
+    position: relative;
+}
+
+.prompt-output.streaming::after {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: #5a7a9a;
+    animation: cursor-blink 1s infinite;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+}
+
+@keyframes cursor-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Streaming status indicator */
+.streaming-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #2a3a4a;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #8ab4f8;
+}
+
+.streaming-status .spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #3a4a5a;
+    border-top-color: #8ab4f8;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}

@@ -1,15 +1,32 @@
 import { promptManager } from './prompt-manager.js';
+import { streamManager } from './stream-manager.js';
 import State from '../state.js';
+
+// Import Wails runtime for event listening
+const { EventsOn } = window.runtime || {};
 
 class PromptUI {
     constructor() {
         this.currentEditingPromptId = null;
         this.selectedPromptId = null;
+        this.streamingEnabled = false;
     }
 
     initialize() {
         this.setupEventListeners();
         this.loadPromptsIntoDropdown();
+        this.checkStreamingSupport();
+        this.listenForLLMReady();
+    }
+
+    // Listen for LLM ready event to re-check streaming support
+    listenForLLMReady() {
+        if (window.runtime && window.runtime.EventsOn) {
+            window.runtime.EventsOn('llm:ready', () => {
+                // Re-check streaming support now that LLM is initialized
+                this.checkStreamingSupport();
+            });
+        }
     }
 
     setupEventListeners() {
@@ -111,6 +128,8 @@ class PromptUI {
     async executePrompt() {
         const promptId = document.getElementById('promptSelector').value;
         const noteId = State.currentNote?.id;
+        const streamingToggle = document.getElementById('streamingToggle');
+        const useStreaming = streamingToggle ? streamingToggle.checked : false;
 
         if (!promptId) {
             alert('Please select a prompt');
@@ -122,28 +141,107 @@ class PromptUI {
             return;
         }
 
+        const runBtn = document.getElementById('runPromptBtn');
+        const outputEl = document.getElementById('promptOutput');
+        const resultPanel = document.getElementById('promptResult');
+
         try {
             // Show loading state
-            const runBtn = document.getElementById('runPromptBtn');
             const originalText = runBtn.textContent;
-            runBtn.textContent = 'Running...';
+            runBtn.textContent = useStreaming ? 'Streaming...' : 'Running...';
             runBtn.disabled = true;
+            resultPanel.style.display = 'block';
+            outputEl.textContent = '';
 
-            const result = await promptManager.executeOnNote(promptId, noteId);
-
-            // Show result
-            document.getElementById('promptOutput').textContent = result.output;
-            document.getElementById('promptResult').style.display = 'block';
-
-            runBtn.textContent = originalText;
-            runBtn.disabled = false;
+            if (useStreaming) {
+                // Use streaming mode
+                await this.executePromptWithStreaming(promptId, noteId, runBtn, outputEl, originalText);
+            } else {
+                // Use non-streaming mode
+                // Show thinking indicator while waiting for response
+                outputEl.textContent = 'Thinking...';
+                const result = await promptManager.executeOnNote(promptId, noteId);
+                outputEl.textContent = result.output;
+                runBtn.textContent = originalText;
+                runBtn.disabled = false;
+            }
         } catch (error) {
             alert('Failed to execute prompt: ' + error.message);
             console.error('Prompt execution error:', error);
-            
-            const runBtn = document.getElementById('runPromptBtn');
             runBtn.textContent = 'Run Prompt';
             runBtn.disabled = false;
+        }
+    }
+
+    async executePromptWithStreaming(promptId, noteId, runBtn, outputEl, originalText) {
+        return new Promise((resolve, reject) => {
+            // Show thinking indicator while waiting for first chunk
+            outputEl.textContent = 'Thinking...';
+            outputEl.classList.add('streaming');
+            let receivedFirstChunk = false;
+
+            // Start listening for stream events
+            streamManager.startListening({
+                onChunk: (chunkText, fullText, chunkIndex) => {
+                    // Clear thinking indicator on first chunk
+                    if (!receivedFirstChunk) {
+                        receivedFirstChunk = true;
+                        outputEl.textContent = '';
+                    }
+                    // Update output with accumulated text
+                    outputEl.textContent = fullText;
+                    // Auto-scroll to bottom if content overflows
+                    outputEl.scrollTop = outputEl.scrollHeight;
+                },
+                onComplete: (finalText, chunk) => {
+                    outputEl.classList.remove('streaming');
+                    outputEl.textContent = finalText;
+                    runBtn.textContent = originalText;
+                    runBtn.disabled = false;
+                    resolve();
+                },
+                onError: (error) => {
+                    outputEl.classList.remove('streaming');
+                    runBtn.textContent = originalText;
+                    runBtn.disabled = false;
+                    reject(new Error(error));
+                }
+            });
+
+            // Start the streaming request
+            window.go.main.App.ExecutePromptOnNoteStream(promptId, noteId)
+                .catch((err) => {
+                    streamManager.cleanup();
+                    runBtn.textContent = originalText;
+                    runBtn.disabled = false;
+                    reject(err);
+                });
+        });
+    }
+
+    async checkStreamingSupport() {
+        try {
+            const supported = await window.go.main.App.GetStreamingSupport();
+            this.streamingEnabled = supported;
+            
+            // Update UI based on streaming support
+            const streamingToggle = document.getElementById('streamingToggle');
+            const streamingLabel = document.getElementById('streamingLabel');
+            
+            if (streamingToggle && streamingLabel) {
+                if (supported) {
+                    streamingToggle.disabled = false;
+                    streamingLabel.textContent = 'Enable streaming';
+                } else {
+                    streamingToggle.disabled = true;
+                    streamingToggle.checked = false;
+                    streamingLabel.textContent = 'Streaming not available';
+                }
+            }
+            
+            return supported;
+        } catch (error) {
+            return false;
         }
     }
 

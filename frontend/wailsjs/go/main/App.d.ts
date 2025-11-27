@@ -16,9 +16,17 @@ export function DeletePrompt(arg1:string):Promise<void>;
 
 export function ExecutePromptOnContent(arg1:string,arg2:string):Promise<domain.PromptExecutionResult>;
 
+export function ExecutePromptOnContentStream(arg1:string,arg2:string):Promise<void>;
+
 export function ExecutePromptOnNote(arg1:string,arg2:string):Promise<domain.PromptExecutionResult>;
 
+export function ExecutePromptOnNoteStream(arg1:string,arg2:string):Promise<void>;
+
 export function GenerateText(arg1:string,arg2:string):Promise<domain.LLMResponse>;
+
+export function GenerateTextStream(arg1:string,arg2:string):Promise<void>;
+
+export function GenerateTextStreamWithOptions(arg1:string,arg2:string,arg3:number,arg4:number):Promise<void>;
 
 export function GenerateTextWithOptions(arg1:string,arg2:string,arg3:number,arg4:number):Promise<domain.LLMResponse>;
 
@@ -37,6 +45,8 @@ export function GetNote(arg1:string):Promise<domain.Note>;
 export function GetPrompt(arg1:string):Promise<domain.Prompt>;
 
 export function GetSTTStatus():Promise<Record<string, any>>;
+
+export function GetStreamingSupport():Promise<boolean>;
 
 export function IsRecording():Promise<boolean>;
 

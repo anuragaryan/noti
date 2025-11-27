@@ -49,13 +49,21 @@ func (m *LLMManager) Initialize(config *domain.LLMConfig) error {
 	// Create provider based on configuration
 	switch config.Provider {
 	case "api":
-		provider, err = api.NewProvider(config)
+		apiProvider, apiErr := api.NewProvider(config)
+		if apiErr != nil {
+			err = apiErr
+		} else {
+			provider = apiProvider
+		}
 	case "local":
-		provider, err = local.NewProvider(m.basePath, config, m.downloadScriptLLM)
-		if err == nil {
+		localProvider, localErr := local.NewProvider(m.basePath, config, m.downloadScriptLLM)
+		if localErr != nil {
+			err = localErr
+		} else {
 			// Set up server manager for local provider
 			serverManager := local.NewServerManager(m.basePath, m.downloadScriptLlama)
-			provider.(*local.Provider).SetServerManager(serverManager)
+			localProvider.SetServerManager(serverManager)
+			provider = localProvider
 		}
 	default:
 		return fmt.Errorf("unknown provider: %s", config.Provider)
@@ -95,6 +103,20 @@ func (m *LLMManager) Generate(ctx context.Context, request *domain.LLMRequest) (
 	}
 
 	return m.provider.Generate(ctx, request)
+}
+
+// GenerateStream produces text using streaming
+func (m *LLMManager) GenerateStream(ctx context.Context, request *domain.LLMRequest, callback domain.StreamCallback) error {
+	if !m.SupportsStreaming() {
+		return fmt.Errorf("streaming not available")
+	}
+
+	return m.provider.GenerateStream(ctx, request, callback)
+}
+
+// SupportsStreaming checks if current provider supports streaming
+func (m *LLMManager) SupportsStreaming() bool {
+	return m.provider != nil && m.provider.IsAvailable() && m.provider.SupportsStreaming()
 }
 
 // SwitchProvider switches to a different provider configuration

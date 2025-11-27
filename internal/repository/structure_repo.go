@@ -11,19 +11,19 @@ import (
 
 // StructureRepository handles persistence of folder/note structure
 type StructureRepository struct {
-	configPath string
+	structurePath string
 }
 
 // NewStructureRepository creates a new structure repository
-func NewStructureRepository(configPath string) *StructureRepository {
+func NewStructureRepository(structurePath string) *StructureRepository {
 	return &StructureRepository{
-		configPath: configPath,
+		structurePath: structurePath,
 	}
 }
 
 // Load reads the folder structure from disk
 func (r *StructureRepository) Load() (*domain.FolderStructure, error) {
-	data, err := os.ReadFile(r.configPath)
+	data, err := os.ReadFile(r.structurePath)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (r *StructureRepository) Load() (*domain.FolderStructure, error) {
 // Save writes the folder structure to disk
 func (r *StructureRepository) Save(structure *domain.FolderStructure) error {
 	// Ensure the directory for structure.json exists
-	dir := filepath.Dir(r.configPath)
+	dir := filepath.Dir(r.structurePath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory for structure.json: %w", err)
 	}
@@ -49,5 +49,5 @@ func (r *StructureRepository) Save(structure *domain.FolderStructure) error {
 		return err
 	}
 
-	return os.WriteFile(r.configPath, data, 0644)
+	return os.WriteFile(r.structurePath, data, 0644)
 }

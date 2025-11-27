@@ -14,11 +14,12 @@ import (
 
 // Provider implements LLM using OpenAI-compatible API endpoints
 type Provider struct {
-	client    *shared.Client
-	endpoint  string
-	config    *domain.LLMConfig
-	available bool
-	mutex     sync.Mutex
+	client          *shared.Client
+	streamingClient *shared.StreamingClient
+	endpoint        string
+	config          *domain.LLMConfig
+	available       bool
+	mutex           sync.Mutex
 }
 
 // NewProvider creates a new API-based LLM provider
@@ -39,12 +40,14 @@ func NewProvider(config *domain.LLMConfig) (*Provider, error) {
 	}
 
 	client := shared.NewClient(endpoint, config.APIKey, 60*time.Second)
+	streamingClient := shared.NewStreamingClient(endpoint, config.APIKey, 120*time.Second)
 
 	return &Provider{
-		client:    client,
-		endpoint:  endpoint,
-		config:    config,
-		available: false,
+		client:          client,
+		streamingClient: streamingClient,
+		endpoint:        endpoint,
+		config:          config,
+		available:       false,
 	}, nil
 }
 
@@ -136,8 +139,68 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 	}, nil
 }
 
+// GenerateStream produces text with streaming response
+func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMRequest, callback domain.StreamCallback) error {
+	p.mutex.Lock()
+	if !p.available {
+		p.mutex.Unlock()
+		return fmt.Errorf("provider not initialized")
+	}
+	p.mutex.Unlock()
+
+	// Use request-specific parameters or fall back to config defaults
+	temperature := shared.GetEffectiveTemperature(request.Temperature, p.config.Temperature)
+	maxTokens := shared.GetEffectiveMaxTokens(request.MaxTokens, p.config.MaxTokens)
+
+	// Build messages array
+	messages := shared.BuildMessages(request)
+
+	// Create streaming API request
+	streamReq := &shared.StreamChatRequest{
+		Model:       p.config.ModelName,
+		Messages:    messages,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
+		Stream:      true,
+	}
+
+	fmt.Printf("[LLM API] Starting streaming response for prompt (length: %d chars)\n", len(request.Prompt))
+	fmt.Printf("[LLM API] Temperature: %.2f, Max tokens: %d\n", temperature, maxTokens)
+
+	// Track chunk index
+	chunkIndex := 0
+
+	// Use streaming client
+	err := p.streamingClient.StreamChatCompletion(ctx, streamReq,
+		func(text string, done bool, finishReason string) error {
+			chunk := &domain.StreamChunk{
+				Text:         text,
+				Index:        chunkIndex,
+				FinishReason: finishReason,
+				Done:         done,
+			}
+			chunkIndex++
+			return callback(chunk)
+		})
+
+	if err != nil {
+		return fmt.Errorf("streaming failed: %w", err)
+	}
+
+	fmt.Printf("[LLM API] Streaming completed, sent %d chunks\n", chunkIndex)
+	return nil
+}
+
 // IsAvailable returns whether the provider is ready to use
 func (p *Provider) IsAvailable() bool {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.available
+}
+
+// SupportsStreaming returns whether the provider supports streaming
+// API providers always support streaming when available (OpenAI-compatible APIs support SSE)
+func (p *Provider) SupportsStreaming() bool {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.available
@@ -151,6 +214,9 @@ func (p *Provider) Cleanup() {
 
 	if p.client != nil {
 		p.client.Close()
+	}
+	if p.streamingClient != nil {
+		p.streamingClient.Close()
 	}
 	p.available = false
 }
