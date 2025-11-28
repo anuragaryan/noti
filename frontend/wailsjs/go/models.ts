@@ -1,5 +1,27 @@
 export namespace domain {
 	
+	export class AudioDevice {
+	    id: string;
+	    name: string;
+	    source: number;
+	    isDefault: boolean;
+	    sampleRate: number;
+	    channels: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AudioDevice(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.source = source["source"];
+	        this.isDefault = source["isDefault"];
+	        this.sampleRate = source["sampleRate"];
+	        this.channels = source["channels"];
+	    }
+	}
 	export class Folder {
 	    id: string;
 	    name: string;

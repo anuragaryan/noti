@@ -5,6 +5,10 @@
         <key>NSMicrophoneUsageDescription</key>
         <string>This app needs microphone access for voice-to-text transcription in your notes.</string>
         
+        <!-- Screen Recording permission for system audio capture (ScreenCaptureKit) -->
+        <key>NSScreenCaptureUsageDescription</key>
+        <string>This app needs screen recording permission to capture system audio for transcription. Only audio is captured, not video.</string>
+        
         <!-- App Information -->
         <key>CFBundlePackageType</key>
         <string>APPL</string>
@@ -23,7 +27,7 @@
         <key>CFBundleIconFile</key>
         <string>iconfile</string>
         <key>LSMinimumSystemVersion</key>
-        <string>10.13.0</string>
+        <string>12.3</string>
         <key>NSHighResolutionCapable</key>
         <string>true</string>
         <key>NSHumanReadableCopyright</key>

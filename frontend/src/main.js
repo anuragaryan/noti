@@ -25,6 +25,7 @@ async function init() {
     FolderManager.renderFolderTree();
     EventHandlers.setupEventListeners();
     VoiceRecording.setupRealtimeTranscription(); // Setup real-time event listener
+    VoiceRecording.initializeAudio(); // Setup audio source listeners
     
     // Initialize prompt system
     await promptManager.initialize();

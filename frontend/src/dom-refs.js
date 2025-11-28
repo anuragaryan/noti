@@ -31,6 +31,12 @@ export default {
     closeSttSetupBtn: document.getElementById('closeSttSetupBtn'),
     modelPathEl: document.getElementById('modelPath'),
     
+    // Audio source elements
+    audioSourceBar: document.getElementById('audioSourceBar'),
+    audioSourceSelect: document.getElementById('audioSourceSelect'),
+    audioPermissionBtn: document.getElementById('audioPermissionBtn'),
+    audioPermissionStatus: document.getElementById('audioPermissionStatus'),
+    
     // Folder modal elements
     folderModal: document.getElementById('folderModal'),
     folderModalTitle: document.getElementById('folderModalTitle'),

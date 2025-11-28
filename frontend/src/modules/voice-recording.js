@@ -24,9 +24,124 @@ export default {
                     DOMRefs.voiceBtn.style.opacity = '1';
                 }
             }
+            
+            // Load available audio sources
+            await this.loadAudioSources();
         } catch (error) {
             console.error('Error checking STT status:', error);
             State.sttAvailable = false;
+        }
+    },
+
+    async loadAudioSources() {
+        try {
+            const sources = await window.go.main.App.GetAudioSources();
+            State.availableAudioSources = sources;
+            
+            // Update dropdown with available sources
+            if (DOMRefs.audioSourceSelect) {
+                // Clear existing options
+                DOMRefs.audioSourceSelect.innerHTML = '';
+                
+                // Add options for each available source
+                sources.forEach(source => {
+                    const option = document.createElement('option');
+                    option.value = source.id;
+                    option.textContent = this.getSourceIcon(source.id) + ' ' + source.name;
+                    DOMRefs.audioSourceSelect.appendChild(option);
+                });
+                
+                // Get current source
+                const currentSource = await window.go.main.App.GetCurrentAudioSource();
+                DOMRefs.audioSourceSelect.value = currentSource;
+                State.audioSource = currentSource;
+                
+                // Check permissions for current source
+                await this.checkAudioPermissions(currentSource);
+            }
+        } catch (error) {
+            console.error('Error loading audio sources:', error);
+        }
+    },
+
+    getSourceIcon(sourceId) {
+        switch (sourceId) {
+            case 'microphone': return '🎤';
+            case 'system': return '🔊';
+            case 'mixed': return '🎛️';
+            default: return '🎤';
+        }
+    },
+
+    async checkAudioPermissions(source) {
+        try {
+            const result = await window.go.main.App.CheckAudioPermissions(source);
+            State.audioPermissions[source] = result;
+            
+            // Update UI based on permission status
+            if (DOMRefs.audioPermissionStatus) {
+                if (result.granted) {
+                    DOMRefs.audioPermissionStatus.textContent = '✓ Ready';
+                    DOMRefs.audioPermissionStatus.className = 'audio-permission-status granted';
+                    if (DOMRefs.audioPermissionBtn) {
+                        DOMRefs.audioPermissionBtn.style.display = 'none';
+                    }
+                } else if (result.status === 'denied') {
+                    DOMRefs.audioPermissionStatus.textContent = '✗ Permission denied';
+                    DOMRefs.audioPermissionStatus.className = 'audio-permission-status denied';
+                    if (DOMRefs.audioPermissionBtn) {
+                        DOMRefs.audioPermissionBtn.style.display = 'inline-block';
+                        DOMRefs.audioPermissionBtn.textContent = 'Open Settings';
+                    }
+                } else {
+                    DOMRefs.audioPermissionStatus.textContent = '? Permission required';
+                    DOMRefs.audioPermissionStatus.className = 'audio-permission-status unknown';
+                    if (DOMRefs.audioPermissionBtn) {
+                        DOMRefs.audioPermissionBtn.style.display = 'inline-block';
+                        DOMRefs.audioPermissionBtn.textContent = 'Grant Permission';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking audio permissions:', error);
+        }
+    },
+
+    async requestAudioPermissions() {
+        try {
+            await window.go.main.App.RequestAudioPermissions(State.audioSource);
+            // Re-check permissions after request
+            await this.checkAudioPermissions(State.audioSource);
+        } catch (error) {
+            console.error('Error requesting audio permissions:', error);
+            alert('Failed to request permissions. Please grant access in System Preferences.');
+        }
+    },
+
+    async setAudioSource(source) {
+        try {
+            await window.go.main.App.SetAudioSource(source);
+            State.audioSource = source;
+            await this.checkAudioPermissions(source);
+        } catch (error) {
+            console.error('Error setting audio source:', error);
+            alert('Failed to set audio source: ' + error);
+        }
+    },
+
+    setupAudioSourceListeners() {
+        // Audio source dropdown change
+        if (DOMRefs.audioSourceSelect) {
+            DOMRefs.audioSourceSelect.addEventListener('change', async (e) => {
+                await this.setAudioSource(e.target.value);
+            });
+        }
+        
+        // Permission button click
+        if (DOMRefs.audioPermissionBtn) {
+            DOMRefs.audioPermissionBtn.addEventListener('click', async () => {
+                await this.requestAudioPermissions();
+            });
         }
     },
 
@@ -38,8 +153,16 @@ export default {
         
         if (State.isRecording) return;
         
+        // Check permissions before starting
+        const permResult = State.audioPermissions[State.audioSource];
+        if (permResult && !permResult.granted && permResult.status !== 'unknown') {
+            alert('Please grant audio permission before recording.');
+            return;
+        }
+        
         try {
-            await window.go.main.App.StartVoiceRecording();
+            // Use the new source-aware recording method
+            await window.go.main.App.StartVoiceRecordingWithSource(State.audioSource);
             State.isRecording = true;
             State.recordingStartTime = Date.now();
             
@@ -179,5 +302,10 @@ export default {
             DOMRefs.noteContent.setSelectionRange(State.lastInsertPosition, State.lastInsertPosition);
             DOMRefs.noteContent.focus();
         });
+    },
+
+    // Initialize all audio-related functionality
+    initializeAudio() {
+        this.setupAudioSourceListeners();
     }
 };

@@ -1,6 +1,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
     <dict>
+        <!-- CRITICAL: Microphone permission request -->
+        <key>NSMicrophoneUsageDescription</key>
+        <string>This app needs microphone access for voice-to-text transcription in your notes.</string>
+        
+        <!-- Screen Recording permission for system audio capture (ScreenCaptureKit) -->
+        <key>NSScreenCaptureUsageDescription</key>
+        <string>This app needs screen recording permission to capture system audio for transcription. Only audio is captured, not video.</string>
+        
         <key>CFBundlePackageType</key>
         <string>APPL</string>
         <key>CFBundleName</key>
@@ -18,7 +26,7 @@
         <key>CFBundleIconFile</key>
         <string>iconfile</string>
         <key>LSMinimumSystemVersion</key>
-        <string>10.13.0</string>
+        <string>12.3</string>
         <key>NSHighResolutionCapable</key>
         <string>true</string>
         <key>NSHumanReadableCopyright</key>

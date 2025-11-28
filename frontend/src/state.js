@@ -17,5 +17,10 @@ export default {
     recordingStartTime: null,
     recordingTimer: null,
     sttAvailable: false,
-    lastInsertPosition: null
+    lastInsertPosition: null,
+    
+    // Audio source state
+    audioSource: 'microphone',
+    availableAudioSources: [],
+    audioPermissions: {}
 };

@@ -81,6 +81,23 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 		config.LLM.MaxTokens = 512
 	}
 
+	// Set Audio defaults if not configured
+	if config.Audio.DefaultSource == "" {
+		config.Audio.DefaultSource = "microphone"
+	}
+	if config.Audio.SampleRate == 0 {
+		config.Audio.SampleRate = 16000
+	}
+	if config.Audio.Mixer.MicrophoneGain == 0 {
+		config.Audio.Mixer.MicrophoneGain = 1.0
+	}
+	if config.Audio.Mixer.SystemGain == 0 {
+		config.Audio.Mixer.SystemGain = 1.0
+	}
+	if config.Audio.Mixer.MixMode == "" {
+		config.Audio.Mixer.MixMode = "sum"
+	}
+
 	fmt.Printf("Loaded config from: %s\n", configFilePath)
 	return &config, nil
 }

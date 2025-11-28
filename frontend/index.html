@@ -86,6 +86,21 @@
                     </div>
                 </div>
 
+                <!-- Audio Source Selector -->
+                <div id="audioSourceBar" class="audio-source-bar">
+                    <div class="audio-source-content">
+                        <label for="audioSourceSelect" class="audio-source-label">Audio Source:</label>
+                        <select id="audioSourceSelect" class="audio-source-dropdown">
+                            <option value="microphone">🎤 Microphone</option>
+                            <!-- System and Mixed options added dynamically if available -->
+                        </select>
+                        <button id="audioPermissionBtn" class="btn btn-secondary btn-sm" style="display: none;">
+                            Grant Permission
+                        </button>
+                        <span id="audioPermissionStatus" class="audio-permission-status"></span>
+                    </div>
+                </div>
+
                 <!-- Voice Recording Status Bar -->
                 <div id="voiceStatusBar" class="voice-status-bar" style="display: none;">
                     <div class="voice-status-content">

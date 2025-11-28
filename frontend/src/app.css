@@ -1196,3 +1196,70 @@ body {
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
+
+/* Audio Source Bar Styles */
+.audio-source-bar {
+    background: #252525;
+    border-bottom: 1px solid #3a3a3a;
+    padding: 10px 20px;
+}
+
+.audio-source-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.audio-source-label {
+    color: #aaa;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.audio-source-dropdown {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    color: #fff;
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+    min-width: 180px;
+}
+
+.audio-source-dropdown:focus {
+    border-color: #5a7a9a;
+}
+
+.audio-source-dropdown option {
+    background: #2a2a2a;
+    color: #fff;
+}
+
+.audio-permission-status {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.audio-permission-status.granted {
+    color: #4CAF50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.audio-permission-status.denied {
+    color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.audio-permission-status.unknown {
+    color: #ff9800;
+    background: rgba(255, 152, 0, 0.1);
+}
+
+/* Hide audio source bar when not in editor view */
+.audio-source-bar.hidden {
+    display: none;
+}

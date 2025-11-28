@@ -7,6 +7,15 @@
     "apiEndpoint": "",
     "apiKey": "",
     "temperature": 0.7,
-    "maxTokens": 512
+    "maxTokens": 2048
+  },
+  "audio": {
+    "defaultSource": "microphone",
+    "sampleRate": 16000,
+    "mixer": {
+      "microphoneGain": 1.0,
+      "systemGain": 1.0,
+      "mixMode": "sum"
+    }
   }
 }

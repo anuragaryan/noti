@@ -18,7 +18,10 @@ type STTManager struct {
 	basePath       string
 	ctx            context.Context
 	sttService     STTService
+	transcriber    *whisper.Transcriber
+	audioManager   *AudioManager
 	downloadScript []byte
+	activeSource   domain.AudioSource
 }
 
 // NewSTTManager creates a new STT manager
@@ -26,31 +29,51 @@ func NewSTTManager(basePath string, downloadScript []byte) *STTManager {
 	return &STTManager{
 		basePath:       basePath,
 		downloadScript: downloadScript,
+		activeSource:   domain.AudioSourceMicrophone,
 	}
 }
 
 // SetContext sets the Wails runtime context
 func (m *STTManager) SetContext(ctx context.Context) {
 	m.ctx = ctx
+	if m.audioManager != nil {
+		m.audioManager.SetContext(ctx)
+	}
+}
+
+// SetAudioManager sets the audio manager for audio capture
+func (m *STTManager) SetAudioManager(audioManager *AudioManager) {
+	m.audioManager = audioManager
 }
 
 // Initialize attempts to initialize the STT service with self-healing
 func (m *STTManager) Initialize(config *domain.STTConfig) error {
 	// Helper function to attempt STT initialization
 	tryInitialize := func() bool {
-		sttService, err := whisper.NewService(m.basePath, config)
+		// Try to create transcriber
+		transcriber, err := whisper.NewTranscriber(m.basePath, config)
 		if err != nil {
 			// This handles file-not-found
 			return false
 		}
-		if err := sttService.Initialize(); err != nil {
+		if err := transcriber.Initialize(); err != nil {
 			// This handles model loading/corruption errors
 			fmt.Printf("Failed to initialize STT model: %v\n", err)
 			return false
 		}
 		// Success
-		sttService.SetContext(m.ctx)
-		m.sttService = sttService
+		transcriber.SetContext(m.ctx)
+		m.transcriber = transcriber
+
+		// Also create legacy service for backward compatibility
+		sttService, err := whisper.NewService(m.basePath, config)
+		if err == nil {
+			if err := sttService.Initialize(); err == nil {
+				sttService.SetContext(m.ctx)
+				m.sttService = sttService
+			}
+		}
+
 		fmt.Println("STT service initialized successfully.")
 		if m.ctx != nil {
 			runtime.EventsEmit(m.ctx, "stt:ready")
@@ -156,13 +179,115 @@ func (m *STTManager) GetService() STTService {
 	return m.sttService
 }
 
+// GetTranscriber returns the transcriber
+func (m *STTManager) GetTranscriber() *whisper.Transcriber {
+	return m.transcriber
+}
+
 // IsAvailable returns whether the STT service is available
 func (m *STTManager) IsAvailable() bool {
-	return m.sttService != nil
+	return m.transcriber != nil || m.sttService != nil
+}
+
+// SetAudioSource sets the audio source for recording
+func (m *STTManager) SetAudioSource(source domain.AudioSource) error {
+	if m.audioManager == nil {
+		return fmt.Errorf("audio manager not set")
+	}
+	if err := m.audioManager.SetAudioSource(source); err != nil {
+		return err
+	}
+	m.activeSource = source
+	return nil
+}
+
+// GetAudioSource returns the current audio source
+func (m *STTManager) GetAudioSource() domain.AudioSource {
+	return m.activeSource
+}
+
+// GetAvailableAudioSources returns available audio sources
+func (m *STTManager) GetAvailableAudioSources() []domain.AudioSource {
+	if m.audioManager == nil {
+		return []domain.AudioSource{domain.AudioSourceMicrophone}
+	}
+	return m.audioManager.GetAvailableSources()
+}
+
+// StartRecordingWithSource starts recording with the specified audio source
+func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
+	if m.audioManager == nil {
+		// Fall back to legacy service
+		if m.sttService != nil {
+			return m.sttService.StartRecording()
+		}
+		return fmt.Errorf("no audio manager or STT service available")
+	}
+
+	if m.transcriber == nil {
+		return fmt.Errorf("transcriber not initialized")
+	}
+
+	// Set the audio source
+	if err := m.audioManager.SetAudioSource(source); err != nil {
+		return fmt.Errorf("failed to set audio source: %w", err)
+	}
+	m.activeSource = source
+
+	// Start the transcriber
+	if err := m.transcriber.StartProcessing(); err != nil {
+		return fmt.Errorf("failed to start transcriber: %w", err)
+	}
+
+	// Configure audio capture
+	config := domain.AudioCaptureConfig{
+		Source:     source,
+		SampleRate: 16000, // Whisper expects 16kHz
+		Channels:   1,     // Mono for speech
+		BufferSize: 1024,
+	}
+
+	// Start audio capture with callback to transcriber
+	err := m.audioManager.StartCapture(config, func(chunk domain.AudioChunk) {
+		m.transcriber.ProcessChunk(chunk)
+	})
+	if err != nil {
+		m.transcriber.StopProcessing()
+		return fmt.Errorf("failed to start audio capture: %w", err)
+	}
+
+	fmt.Printf("Recording started with source: %s\n", source.String())
+	return nil
+}
+
+// StopRecordingWithTranscription stops recording and returns the transcription
+func (m *STTManager) StopRecordingWithTranscription() (*domain.TranscriptionResult, error) {
+	if m.audioManager == nil {
+		// Fall back to legacy service
+		if m.sttService != nil {
+			return m.sttService.StopRecording()
+		}
+		return nil, fmt.Errorf("no audio manager or STT service available")
+	}
+
+	// Stop audio capture
+	if err := m.audioManager.StopCapture(); err != nil {
+		fmt.Printf("Warning: error stopping audio capture: %v\n", err)
+	}
+
+	// Stop transcriber and get final result
+	if m.transcriber != nil {
+		return m.transcriber.StopProcessing()
+	}
+
+	return nil, fmt.Errorf("transcriber not initialized")
 }
 
 // Cleanup cleans up the STT service
 func (m *STTManager) Cleanup() {
+	if m.transcriber != nil {
+		m.transcriber.Cleanup()
+	}
 	if m.sttService != nil {
 		m.sttService.Cleanup()
 	}

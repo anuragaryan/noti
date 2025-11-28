@@ -31,6 +31,7 @@ type App struct {
 	sttManager    *service.STTManager
 	llmManager    *service.LLMManager
 	promptService *service.PromptService
+	audioManager  *service.AudioManager
 }
 
 // NewApp creates a new App application struct
@@ -52,6 +53,10 @@ func NewApp() *App {
 	sttManager := service.NewSTTManager(basePath, downloadScript)
 	llmManager := service.NewLLMManager(basePath, downloadScriptLLM, downloadScriptLlamaServer)
 	promptService := service.NewPromptService(basePath)
+	audioManager := service.NewAudioManager()
+
+	// Connect audio manager to STT manager
+	sttManager.SetAudioManager(audioManager)
 
 	return &App{
 		basePath:      basePath,
@@ -66,6 +71,7 @@ func NewApp() *App {
 		sttManager:    sttManager,
 		llmManager:    llmManager,
 		promptService: promptService,
+		audioManager:  audioManager,
 	}
 }
 
@@ -101,6 +107,13 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Println("Using default STT config.")
 	} else {
 		a.config = config
+	}
+
+	// Initialize Audio Manager
+	a.audioManager.SetContext(ctx)
+	if err := a.audioManager.Initialize(); err != nil {
+		fmt.Printf("Audio Manager initialization failed: %v\n", err)
+		fmt.Println("Audio capture features may be limited.")
 	}
 
 	// Initialize STT service with self-healing
@@ -145,18 +158,31 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 	a.sttManager.Cleanup()
 	a.llmManager.Cleanup()
+	if a.audioManager != nil {
+		a.audioManager.Cleanup()
+	}
 }
 
 // ============================================================================
 // STT OPERATIONS
 // ============================================================================
 
-// StartVoiceRecording starts recording audio from microphone
+// StartVoiceRecording starts recording audio from the current audio source
 func (a *App) StartVoiceRecording() error {
 	if !a.sttManager.IsAvailable() {
 		return fmt.Errorf("STT service not available. Please download the STT model")
 	}
-	return a.sttManager.GetService().StartRecording()
+	// Use the new audio source-aware recording
+	return a.sttManager.StartRecordingWithSource(a.sttManager.GetAudioSource())
+}
+
+// StartVoiceRecordingWithSource starts recording with a specific audio source
+func (a *App) StartVoiceRecordingWithSource(source string) error {
+	if !a.sttManager.IsAvailable() {
+		return fmt.Errorf("STT service not available. Please download the STT model")
+	}
+	audioSource := domain.AudioSourceFromString(source)
+	return a.sttManager.StartRecordingWithSource(audioSource)
 }
 
 // StopVoiceRecording stops recording and returns transcribed text
@@ -164,15 +190,22 @@ func (a *App) StopVoiceRecording() (*domain.TranscriptionResult, error) {
 	if !a.sttManager.IsAvailable() {
 		return nil, fmt.Errorf("STT service not available")
 	}
-	return a.sttManager.GetService().StopRecording()
+	return a.sttManager.StopRecordingWithTranscription()
 }
 
 // IsRecording returns current recording status
 func (a *App) IsRecording() bool {
+	if a.audioManager != nil && a.audioManager.IsCapturing() {
+		return true
+	}
 	if !a.sttManager.IsAvailable() {
 		return false
 	}
-	return a.sttManager.GetService().IsRecording()
+	svc := a.sttManager.GetService()
+	if svc != nil {
+		return svc.IsRecording()
+	}
+	return false
 }
 
 // GetSTTStatus returns whether STT is available
@@ -188,6 +221,117 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 		"available": available,
 		"modelPath": modelPath,
 	}
+}
+
+// ============================================================================
+// AUDIO SOURCE OPERATIONS
+// ============================================================================
+
+// GetAudioSources returns available audio sources
+func (a *App) GetAudioSources() []map[string]interface{} {
+	sources := a.sttManager.GetAvailableAudioSources()
+	result := make([]map[string]interface{}, len(sources))
+	for i, source := range sources {
+		result[i] = map[string]interface{}{
+			"id":   source.String(),
+			"name": source.DisplayName(),
+		}
+	}
+	return result
+}
+
+// GetCurrentAudioSource returns the current audio source
+func (a *App) GetCurrentAudioSource() string {
+	return a.sttManager.GetAudioSource().String()
+}
+
+// SetAudioSource sets the audio source for recording
+func (a *App) SetAudioSource(source string) error {
+	audioSource := domain.AudioSourceFromString(source)
+	return a.sttManager.SetAudioSource(audioSource)
+}
+
+// GetAudioDevices returns all available audio devices
+func (a *App) GetAudioDevices() ([]domain.AudioDevice, error) {
+	if a.audioManager == nil {
+		return nil, fmt.Errorf("audio manager not initialized")
+	}
+	return a.audioManager.GetAvailableDevices()
+}
+
+// CheckAudioPermissions checks permissions for the specified audio source
+func (a *App) CheckAudioPermissions(source string) map[string]interface{} {
+	if a.audioManager == nil {
+		return map[string]interface{}{
+			"status":  "unknown",
+			"message": "Audio manager not initialized",
+		}
+	}
+	audioSource := domain.AudioSourceFromString(source)
+	status := a.audioManager.CheckPermissions(audioSource)
+	return map[string]interface{}{
+		"status":  status.String(),
+		"granted": status == domain.PermissionGranted,
+	}
+}
+
+// RequestAudioPermissions requests permissions for the specified audio source
+func (a *App) RequestAudioPermissions(source string) error {
+	if a.audioManager == nil {
+		return fmt.Errorf("audio manager not initialized")
+	}
+	audioSource := domain.AudioSourceFromString(source)
+	return a.audioManager.RequestPermissions(audioSource)
+}
+
+// GetMixerConfig returns the current audio mixer configuration
+func (a *App) GetMixerConfig() map[string]interface{} {
+	if a.audioManager == nil {
+		return map[string]interface{}{}
+	}
+	config := a.audioManager.GetMixerConfig()
+	return map[string]interface{}{
+		"microphoneGain": config.MicrophoneGain,
+		"systemGain":     config.SystemGain,
+		"mixMode":        config.MixMode,
+	}
+}
+
+// SetMixerConfig updates the audio mixer configuration
+func (a *App) SetMixerConfig(micGain, sysGain float32, mixMode string) {
+	if a.audioManager == nil {
+		return
+	}
+	config := domain.AudioMixerConfig{
+		MicrophoneGain: micGain,
+		SystemGain:     sysGain,
+		MixMode:        mixMode,
+	}
+	a.audioManager.SetMixerConfig(config)
+}
+
+// GetAudioStatus returns comprehensive audio system status
+func (a *App) GetAudioStatus() map[string]interface{} {
+	status := map[string]interface{}{
+		"initialized":   a.audioManager != nil,
+		"currentSource": a.sttManager.GetAudioSource().String(),
+		"isCapturing":   false,
+	}
+
+	if a.audioManager != nil {
+		status["isCapturing"] = a.audioManager.IsCapturing()
+		status["availableSources"] = a.GetAudioSources()
+
+		// Check permissions for each source
+		permissions := make(map[string]string)
+		for _, source := range a.sttManager.GetAvailableAudioSources() {
+			perm := a.audioManager.CheckPermissions(source)
+			permissions[source.String()] = perm.String()
+		}
+		status["permissions"] = permissions
+	}
+
+	return status
 }
 
 // ============================================================================
