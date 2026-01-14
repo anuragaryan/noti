@@ -23,14 +23,14 @@ chmod +x scripts/download-ggml-model.sh
 echo ""
 echo "📦 Step 2: Installing frontend dependencies..."
 cd frontend
-npm install
+bun install
 cd ..
 
 # Step 3: Build frontend (if needed)
 echo ""
 echo "🎨 Step 3: Building frontend..."
 cd frontend
-npm run build
+bun run build
 cd ..
 
 # Step 4: Generate Wails bindings

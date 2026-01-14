@@ -24,7 +24,7 @@ func main() {
 
 	// File menu
 	fileMenu := appMenu.AddSubmenu("File")
-	fileMenu.AddText("Settings...", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
+	fileMenu.AddText("Settings", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
 		runtime.EventsEmit(app.ctx, "menu:settings")
 	})
 	fileMenu.AddSeparator()
