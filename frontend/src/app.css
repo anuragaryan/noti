@@ -220,6 +220,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0;
 }
 
 /* Breadcrumb */
@@ -286,8 +287,8 @@ body {
 
 .editor-container {
     flex: 1;
-    overflow: hidden;
     position: relative;
+    min-height: 0;
 }
 
 .editor-mode,

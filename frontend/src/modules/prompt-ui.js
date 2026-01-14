@@ -186,10 +186,11 @@ class PromptUI {
                     // Clear thinking indicator on first chunk
                     if (!receivedFirstChunk) {
                         receivedFirstChunk = true;
-                        outputEl.textContent = '';
+                        outputEl.textContent = chunkText; // Set first chunk
+                    } else {
+                        // Append subsequent chunks to force incremental rendering
+                        outputEl.textContent += chunkText;
                     }
-                    // Update output with accumulated text
-                    outputEl.textContent = fullText;
                     // Auto-scroll to bottom if content overflows
                     outputEl.scrollTop = outputEl.scrollHeight;
                 },

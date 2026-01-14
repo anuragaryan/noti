@@ -110,8 +110,8 @@ func (c *StreamingClient) StreamChatCompletion(
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Read SSE stream
-	reader := bufio.NewReader(resp.Body)
+	// Read SSE stream with minimal buffering to avoid delays
+	reader := bufio.NewReaderSize(resp.Body, 1) // Use size 1 to minimize buffering
 	for {
 		select {
 		case <-ctx.Done():
