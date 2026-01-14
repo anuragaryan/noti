@@ -11,6 +11,7 @@ import Preview from './modules/preview.js';
 import EventHandlers from './modules/event-handlers.js';
 import { promptManager } from './modules/prompt-manager.js';
 import PromptUI from './modules/prompt-ui.js';
+import settings from './modules/settings.js';
 
 
 // Main application entry point
@@ -30,10 +31,27 @@ async function init() {
     // Initialize prompt system
     await promptManager.initialize();
     PromptUI.initialize();
+    
+    // Initialize settings
+    settings.initialize();
+    setupSettingsListener();
 }
 
 // Start the app
 window.addEventListener('DOMContentLoaded', init);
+
+function setupSettingsListener() {
+    // Listen for menu:settings event from the native menu
+    EventsOn('menu:settings', () => {
+        console.log('Settings menu clicked');
+        settings.open();
+    });
+    
+    // Listen for config:saved event
+    EventsOn('config:saved', () => {
+        console.log('Configuration saved successfully');
+    });
+}
 
 function setupDownloadListeners() {
     const notification = document.createElement('div');

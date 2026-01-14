@@ -86,6 +86,10 @@ export function GetAudioStatus() {
   return window['go']['main']['App']['GetAudioStatus']();
 }
 
+export function GetConfig() {
+  return window['go']['main']['App']['GetConfig']();
+}
+
 export function GetCurrentAudioSource() {
   return window['go']['main']['App']['GetCurrentAudioSource']();
 }
@@ -128,6 +132,10 @@ export function MoveNote(arg1, arg2) {
 
 export function RequestAudioPermissions(arg1) {
   return window['go']['main']['App']['RequestAudioPermissions'](arg1);
+}
+
+export function SaveConfig(arg1) {
+  return window['go']['main']['App']['SaveConfig'](arg1);
 }
 
 export function SetAudioSource(arg1) {

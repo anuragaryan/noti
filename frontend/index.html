@@ -309,5 +309,148 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content settings-modal-large">
+            <div class="settings-modal-header">
+                <h3>Settings</h3>
+                <button id="closeSettingsBtn" class="btn-icon">✕</button>
+            </div>
+            
+            <div class="settings-container">
+                <!-- Speech-to-Text Settings -->
+                <fieldset class="settings-section">
+                    <legend>Speech-to-Text</legend>
+                    
+                    <div class="form-group">
+                        <label for="sttChunkSeconds">Transcription Chunk Duration (seconds)</label>
+                        <input type="number" id="sttChunkSeconds" class="modal-input" min="1" max="30" value="3">
+                        <small class="form-hint">Duration of audio chunks for real-time transcription (1-30 seconds)</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sttModelName">Whisper Model</label>
+                        <select id="sttModelName" class="modal-input">
+                            <option value="tiny.en">tiny.en (Fastest, ~75MB)</option>
+                            <option value="tiny">tiny (Multilingual, ~75MB)</option>
+                            <option value="base.en">base.en (~140MB)</option>
+                            <option value="base">base (Multilingual, ~140MB)</option>
+                            <option value="small.en">small.en (~465MB)</option>
+                            <option value="small">small (Multilingual, ~465MB)</option>
+                            <option value="medium.en">medium.en (Best quality, ~1.5GB)</option>
+                            <option value="medium">medium (Multilingual, ~1.5GB)</option>
+                            <option value="large-v1">large-v1 (Multilingual, ~2.9GB)</option>
+                            <option value="large-v2">large-v2 (Multilingual, ~2.9GB)</option>
+                            <option value="large-v3">large-v3 (Multilingual, ~2.9GB)</option>
+                        </select>
+                        <small class="form-hint">Note: Changing the model requires downloading the new model file</small>
+                    </div>
+                </fieldset>
+
+                <!-- LLM Configuration -->
+                <fieldset class="settings-section">
+                    <legend>LLM Configuration</legend>
+                    
+                    <div class="form-group">
+                        <label for="llmProvider">Provider</label>
+                        <select id="llmProvider" class="modal-input">
+                            <option value="api">API (OpenAI, Anthropic, Google, etc.)</option>
+                            <option value="local">Local (Llama.cpp server)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="llmModelName">Model Name</label>
+                        <input type="text" id="llmModelName" class="modal-input" placeholder="e.g., gemini-2-5-flash, gpt-4, claude-3-5-sonnet">
+                        <small class="form-hint">For API: model identifier. For local: model file name</small>
+                    </div>
+                    
+                    <div class="form-group" id="llmApiEndpointGroup">
+                        <label for="llmApiEndpoint">API Endpoint (optional)</label>
+                        <input type="text" id="llmApiEndpoint" class="modal-input" placeholder="https://api.openai.com/v1 or leave empty for default">
+                        <small class="form-hint">Leave empty to use the default endpoint for your provider</small>
+                    </div>
+                    
+                    <div class="form-group" id="llmApiKeyGroup">
+                        <label for="llmApiKey">API Key</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="llmApiKey" class="modal-input" placeholder="Enter your API key">
+                            <button type="button" id="toggleApiKeyBtn" class="btn-icon password-toggle" title="Show/Hide">👁</button>
+                        </div>
+                        <small class="form-hint">Your API key is stored locally and never shared</small>
+                    </div>
+                    
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label for="llmTemperature">Temperature: <span id="llmTempValue">0.7</span></label>
+                            <input type="range" id="llmTemperature" class="range-input" min="0" max="2" step="0.1" value="0.7">
+                            <small class="form-hint">Lower = more focused, Higher = more creative</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="llmMaxTokens">Max Tokens</label>
+                            <input type="number" id="llmMaxTokens" class="modal-input" min="50" max="8000" value="2048">
+                            <small class="form-hint">Maximum response length (50-8000)</small>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- Audio Settings -->
+                <fieldset class="settings-section">
+                    <legend>Audio Settings</legend>
+                    
+                    <div class="form-group">
+                        <label for="audioDefaultSource">Default Audio Source</label>
+                        <select id="audioDefaultSource" class="modal-input">
+                            <option value="microphone">🎤 Microphone</option>
+                            <option value="system">🔊 System Audio</option>
+                            <option value="mixed">🎧 Mixed (Microphone + System)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="audioSampleRate">Sample Rate</label>
+                        <select id="audioSampleRate" class="modal-input">
+                            <option value="8000">8000 Hz (Phone quality)</option>
+                            <option value="16000">16000 Hz (Recommended for speech)</option>
+                            <option value="22050">22050 Hz</option>
+                            <option value="44100">44100 Hz (CD quality)</option>
+                            <option value="48000">48000 Hz (Professional)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="settings-subsection">
+                        <h4>Audio Mixer</h4>
+                        <small class="form-hint">These settings apply when using Mixed audio source</small>
+                        
+                        <div class="form-group">
+                            <label for="audioMicGain">Microphone Gain: <span id="audioMicGainValue">1.0</span></label>
+                            <input type="range" id="audioMicGain" class="range-input" min="0" max="2" step="0.1" value="1.0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="audioSystemGain">System Audio Gain: <span id="audioSystemGainValue">1.0</span></label>
+                            <input type="range" id="audioSystemGain" class="range-input" min="0" max="2" step="0.1" value="1.0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="audioMixMode">Mix Mode</label>
+                            <select id="audioMixMode" class="modal-input">
+                                <option value="sum">Sum (Add both sources)</option>
+                                <option value="average">Average (Blend both sources)</option>
+                            </select>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- Action Buttons -->
+                <div class="settings-actions">
+                    <button id="cancelSettingsBtn" class="btn btn-secondary">Cancel</button>
+                    <button id="saveSettingsBtn" class="btn btn-primary">Save Settings</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>

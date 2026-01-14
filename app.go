@@ -690,6 +690,91 @@ func (a *App) DeleteNote(id string) error {
 }
 
 // ============================================================================
+// CONFIG OPERATIONS
+// ============================================================================
+
+// GetConfig returns the current application configuration
+func (a *App) GetConfig() *domain.Config {
+	return a.config
+}
+
+// SaveConfig saves the configuration and reinitializes affected services
+func (a *App) SaveConfig(config domain.Config) error {
+	// Validate configuration
+	if config.RealtimeTranscriptionChunkSeconds < 1 || config.RealtimeTranscriptionChunkSeconds > 30 {
+		return fmt.Errorf("transcription chunk seconds must be between 1 and 30")
+	}
+	if config.ModelName == "" {
+		return fmt.Errorf("STT model name cannot be empty")
+	}
+	if config.LLM.Temperature < 0 || config.LLM.Temperature > 2 {
+		return fmt.Errorf("LLM temperature must be between 0 and 2")
+	}
+	if config.LLM.MaxTokens < 50 || config.LLM.MaxTokens > 8000 {
+		return fmt.Errorf("LLM max tokens must be between 50 and 8000")
+	}
+	if config.Audio.SampleRate != 8000 && config.Audio.SampleRate != 16000 &&
+		config.Audio.SampleRate != 22050 && config.Audio.SampleRate != 44100 &&
+		config.Audio.SampleRate != 48000 {
+		return fmt.Errorf("invalid sample rate")
+	}
+	if config.Audio.Mixer.MicrophoneGain < 0 || config.Audio.Mixer.MicrophoneGain > 2 {
+		return fmt.Errorf("microphone gain must be between 0 and 2")
+	}
+	if config.Audio.Mixer.SystemGain < 0 || config.Audio.Mixer.SystemGain > 2 {
+		return fmt.Errorf("system gain must be between 0 and 2")
+	}
+
+	// Save configuration to file
+	if err := a.configService.Save(&config); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	// Update in-memory config
+	oldConfig := a.config
+	a.config = &config
+
+	// Reinitialize STT if model changed
+	if oldConfig.ModelName != config.ModelName ||
+		oldConfig.RealtimeTranscriptionChunkSeconds != config.RealtimeTranscriptionChunkSeconds {
+		sttConfig := &domain.STTConfig{
+			ModelName:         config.ModelName,
+			ChunkDurationSecs: config.RealtimeTranscriptionChunkSeconds,
+		}
+		if err := a.sttManager.Initialize(sttConfig); err != nil {
+			fmt.Printf("Warning: STT reinitialization failed: %v\n", err)
+		}
+	}
+
+	// Reinitialize LLM if config changed
+	if oldConfig.LLM.Provider != config.LLM.Provider ||
+		oldConfig.LLM.ModelName != config.LLM.ModelName ||
+		oldConfig.LLM.APIEndpoint != config.LLM.APIEndpoint ||
+		oldConfig.LLM.APIKey != config.LLM.APIKey {
+		if err := a.llmManager.SwitchProvider(&config.LLM); err != nil {
+			fmt.Printf("Warning: LLM reinitialization failed: %v\n", err)
+		}
+	}
+
+	// Update audio settings
+	if oldConfig.Audio.DefaultSource != config.Audio.DefaultSource {
+		audioSource := domain.AudioSourceFromString(config.Audio.DefaultSource)
+		if err := a.sttManager.SetAudioSource(audioSource); err != nil {
+			fmt.Printf("Warning: Failed to set audio source: %v\n", err)
+		}
+	}
+
+	// Update mixer config
+	if a.audioManager != nil {
+		a.audioManager.SetMixerConfig(config.Audio.Mixer)
+	}
+
+	fmt.Println("Configuration saved and services reinitialized successfully")
+	runtime.EventsEmit(a.ctx, "config:saved")
+	return nil
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 

@@ -1264,3 +1264,164 @@ body {
 .audio-source-bar.hidden {
     display: none;
 }
+
+/* Settings Modal Styles */
+.settings-modal-large {
+    min-width: 700px;
+    max-width: 900px;
+    width: 85vw;
+    max-height: 90vh;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+    border-bottom: 1px solid #3a3a3a;
+    background: #252525;
+}
+
+.settings-modal-header h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 20px;
+}
+
+.settings-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px;
+}
+
+.settings-section {
+    background: #252525;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.settings-section legend {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 0 10px;
+    margin-bottom: 15px;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.settings-subsection {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #3a3a3a;
+}
+
+.settings-subsection h4 {
+    color: #ccc;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.password-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    flex: 1;
+    padding-right: 45px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 6px;
+    transition: color 0.2s;
+}
+
+.password-toggle:hover {
+    color: #fff;
+    background: #3a3a3a;
+}
+
+.settings-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding-top: 20px;
+    border-top: 1px solid #3a3a3a;
+    margin-top: 20px;
+}
+
+/* Settings form elements */
+.settings-section select.modal-input,
+.settings-section input[type="number"].modal-input,
+.settings-section input[type="text"].modal-input,
+.settings-section input[type="password"].modal-input {
+    margin-bottom: 0;
+}
+
+.settings-section .form-group:last-child {
+    margin-bottom: 0;
+}
+
+/* Responsive settings modal */
+@media (max-width: 900px) {
+    .settings-modal-large {
+        min-width: 90vw;
+        max-width: 90vw;
+    }
+    
+    .settings-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Input Error States */
+.modal-input.error,
+.range-input.error {
+    border-color: #e74c3c !important;
+    background: rgba(231, 76, 60, 0.05);
+}
+
+.modal-input.error:focus,
+.range-input.error:focus {
+    border-color: #e74c3c !important;
+    box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.1);
+}
+
+.error-message {
+    color: #e74c3c;
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

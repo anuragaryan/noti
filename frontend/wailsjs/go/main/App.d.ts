@@ -44,6 +44,8 @@ export function GetAudioSources():Promise<Array<Record<string, any>>>;
 
 export function GetAudioStatus():Promise<Record<string, any>>;
 
+export function GetConfig():Promise<domain.Config>;
+
 export function GetCurrentAudioSource():Promise<string>;
 
 export function GetFolderPath(arg1:string):Promise<Array<domain.Folder>>;
@@ -65,6 +67,8 @@ export function IsRecording():Promise<boolean>;
 export function MoveNote(arg1:string,arg2:string):Promise<void>;
 
 export function RequestAudioPermissions(arg1:string):Promise<void>;
+
+export function SaveConfig(arg1:domain.Config):Promise<void>;
 
 export function SetAudioSource(arg1:string):Promise<void>;
 
