@@ -14,6 +14,8 @@ import { renderSettingsModal } from './components/modals/settings'
 import { renderPromptsModal } from './components/modals/prompts'
 import { renderDeleteConfirmModal } from './components/modals/delete-confirm'
 import { renderCreateFolderModal } from './components/modals/create-folder'
+import { renderRenameModal } from './components/modals/rename'
+import { renderMoveModal } from './components/modals/move'
 import { AppEvents } from './events'
 import { NotesAPI, FoldersAPI, AudioAPI, ConfigAPI } from './api'
 import state from './state'
@@ -50,6 +52,14 @@ function initModalSystem(): void {
         break
       case 'create-folder':
         renderCreateFolderModal(content)
+        break
+      case 'rename-note':
+      case 'rename-folder':
+        renderRenameModal(content)
+        break
+      case 'move-note':
+      case 'move-folder':
+        renderMoveModal(content)
         break
     }
   }

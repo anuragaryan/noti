@@ -7,10 +7,78 @@
 import { renderThemeToggle } from './theme-toggle'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
+import { NotesAPI, FoldersAPI } from '../api'
 import state from '../state'
 import type { Folder, Note } from '../types'
-import { NotesAPI, FoldersAPI } from '../api'
 
+// ─── Context Menu ────────────────────────────────────────────────────────────
+
+/** Dismisses any currently open context menu. */
+function dismissContextMenu(): void {
+  document.getElementById('__context-menu__')?.remove()
+}
+
+/** Shows a context menu at the given page coordinates. */
+function showContextMenu(
+  x: number,
+  y: number,
+  items: Array<{ label: string; iconName: string; danger?: boolean; action: () => void } | 'separator'>,
+): void {
+  dismissContextMenu()
+
+  const menu = document.createElement('div')
+  menu.id = '__context-menu__'
+  menu.className = 'context-menu'
+
+  for (const item of items) {
+    if (item === 'separator') {
+      const sep = document.createElement('div')
+      sep.className = 'context-menu-separator'
+      menu.appendChild(sep)
+      continue
+    }
+
+    const btn = document.createElement('button')
+    btn.className = `context-menu-item${item.danger ? ' danger' : ''}`
+    btn.innerHTML = `${icon(item.iconName, 14)}<span>${item.label}</span>`
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      dismissContextMenu()
+      item.action()
+    })
+    menu.appendChild(btn)
+  }
+
+  // Position: keep within viewport
+  document.body.appendChild(menu)
+  const rect = menu.getBoundingClientRect()
+  const safeX = Math.min(x, window.innerWidth - rect.width - 8)
+  const safeY = Math.min(y, window.innerHeight - rect.height - 8)
+  menu.style.left = `${safeX}px`
+  menu.style.top = `${safeY}px`
+
+  // Dismiss on outside click / scroll / Escape
+  const dismiss = (e: Event) => {
+    if (!menu.contains(e.target as Node)) {
+      dismissContextMenu()
+      cleanup()
+    }
+  }
+  const escDismiss = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { dismissContextMenu(); cleanup() }
+  }
+  const cleanup = () => {
+    document.removeEventListener('click', dismiss, true)
+    document.removeEventListener('scroll', dismiss, true)
+    document.removeEventListener('keydown', escDismiss, true)
+  }
+  // Use timeout so the triggering click doesn't immediately dismiss the menu
+  setTimeout(() => {
+    document.addEventListener('click', dismiss, true)
+    document.addEventListener('scroll', dismiss, true)
+    document.addEventListener('keydown', escDismiss, true)
+  }, 0)
+}
 // ─── Drag state ──────────────────────────────────────────────────────────────
 
 type DragPayload =
@@ -236,6 +304,62 @@ function renderFolderItem(folder: Folder, tree: Map<string, Folder[]>, depth: nu
     renderFolderList()
   })
 
+  // Context menu: right-click on folder row
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    showContextMenu(e.clientX, e.clientY, [
+      {
+        label: 'Rename',
+        iconName: 'pencil',
+        action: () => {
+          state.setState({
+            renameContext: {
+              type: 'folder',
+              id: folder.id,
+              currentName: folder.name,
+              parentId: folder.parentId ?? '',
+            },
+          })
+          state.openModal('rename-folder')
+        },
+      },
+      {
+        label: 'Move',
+        iconName: 'folder-input',
+        action: () => {
+          state.setState({
+            moveContext: {
+              type: 'folder',
+              id: folder.id,
+              name: folder.name,
+              currentParentId: folder.parentId ?? '',
+            },
+          })
+          state.openModal('move-folder')
+        },
+      },
+      'separator',
+      {
+        label: 'Delete',
+        iconName: 'trash-2',
+        danger: true,
+        action: () => {
+          const hasNotes = state.get('notes').some(n => n.folderId === folder.id)
+          state.setState({
+            deleteContext: {
+              type: 'folder',
+              id: folder.id,
+              name: folder.name,
+              hasNotes,
+            },
+          })
+          state.openModal('delete-folder')
+        },
+      },
+    ])
+  })
+
   // Drag: this folder can be dragged to reparent it
   setupDragSource(row, {
     kind: 'folder',
@@ -293,6 +417,59 @@ function renderNoteInFolderItem(note: Note): HTMLElement {
     kind: 'note',
     id: note.id,
     currentFolderId: note.folderId ?? '',
+  })
+
+  // Context menu: right-click on note inside folder
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    showContextMenu(e.clientX, e.clientY, [
+      {
+        label: 'Rename',
+        iconName: 'pencil',
+        action: () => {
+          state.setState({
+            renameContext: {
+              type: 'note',
+              id: note.id,
+              currentName: note.title || 'Untitled',
+            },
+          })
+          state.openModal('rename-note')
+        },
+      },
+      {
+        label: 'Move',
+        iconName: 'folder-input',
+        action: () => {
+          state.setState({
+            moveContext: {
+              type: 'note',
+              id: note.id,
+              name: note.title || 'Untitled',
+              currentFolderId: note.folderId ?? '',
+            },
+          })
+          state.openModal('move-note')
+        },
+      },
+      'separator',
+      {
+        label: 'Delete',
+        iconName: 'trash-2',
+        danger: true,
+        action: () => {
+          state.setState({
+            deleteContext: {
+              type: 'note',
+              id: note.id,
+              name: note.title || 'Untitled',
+            },
+          })
+          state.openModal('delete-note')
+        },
+      },
+    ])
   })
 
   return row
@@ -360,6 +537,59 @@ function renderNoteList(): void {
       kind: 'note',
       id: note.id,
       currentFolderId: '',
+    })
+
+    // Context menu: right-click on top-level note
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      showContextMenu(e.clientX, e.clientY, [
+        {
+          label: 'Rename',
+          iconName: 'pencil',
+          action: () => {
+            state.setState({
+              renameContext: {
+                type: 'note',
+                id: note.id,
+                currentName: note.title || 'Untitled',
+              },
+            })
+            state.openModal('rename-note')
+          },
+        },
+        {
+          label: 'Move',
+          iconName: 'folder-input',
+          action: () => {
+            state.setState({
+              moveContext: {
+                type: 'note',
+                id: note.id,
+                name: note.title || 'Untitled',
+                currentFolderId: '',
+              },
+            })
+            state.openModal('move-note')
+          },
+        },
+        'separator',
+        {
+          label: 'Delete',
+          iconName: 'trash-2',
+          danger: true,
+          action: () => {
+            state.setState({
+              deleteContext: {
+                type: 'note',
+                id: note.id,
+                name: note.title || 'Untitled',
+              },
+            })
+            state.openModal('delete-note')
+          },
+        },
+      ])
     })
 
     container.appendChild(row)

@@ -17,7 +17,7 @@ export type TranscriptionResult = domain.TranscriptionResult
 // UI-specific types
 export type Theme = 'light' | 'dark'
 
-export type ModalType = 'settings' | 'prompts' | 'delete-note' | 'delete-folder' | 'create-folder' | null
+export type ModalType = 'settings' | 'prompts' | 'delete-note' | 'delete-folder' | 'create-folder' | 'rename-note' | 'rename-folder' | 'move-note' | 'move-folder' | null
 
 export interface SidebarState {
   expandedFolders: Set<string>
@@ -73,4 +73,22 @@ export interface DeleteContext {
 // Create folder context
 export interface CreateFolderContext {
   parentId?: string
+}
+
+// Rename context
+export interface RenameContext {
+  type: 'note' | 'folder'
+  id: string
+  currentName: string
+  /** Only present for folders — needed to preserve parentID on rename */
+  parentId?: string
+}
+
+// Move context
+export interface MoveContext {
+  type: 'note' | 'folder'
+  id: string
+  name: string
+  currentFolderId?: string   // for notes
+  currentParentId?: string  // for folders
 }

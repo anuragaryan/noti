@@ -14,6 +14,8 @@ import type {
   StreamingState,
   DeleteContext,
   CreateFolderContext,
+  RenameContext,
+  MoveContext,
 } from './types'
 
 export interface AppState {
@@ -58,6 +60,8 @@ export interface AppState {
   activeModal: ModalType
   deleteContext: DeleteContext | null
   createFolderContext: CreateFolderContext | null
+  renameContext: RenameContext | null
+  moveContext: MoveContext | null
 
   // Notifications
   notification: { message: string; type: 'info' | 'success' | 'error' } | null
@@ -101,6 +105,8 @@ class StateManager {
     activeModal: null,
     deleteContext: null,
     createFolderContext: null,
+    renameContext: null,
+    moveContext: null,
 
     notification: null,
   }
@@ -157,6 +163,8 @@ class StateManager {
       activeModal: null,
       deleteContext: null,
       createFolderContext: null,
+      renameContext: null,
+      moveContext: null,
     })
   }
 
