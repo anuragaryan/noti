@@ -37,7 +37,12 @@ function el<K extends keyof HTMLElementTagNameMap>(
 function renderHeader(): void {
   const container = document.getElementById('sidebar-header')
   if (!container) return
-  container.innerHTML = `<span class="sidebar-logo">noti</span>`
+  container.innerHTML = `
+    <div class="sidebar-logo-lockup">
+      <div class="sidebar-app-badge">${icon('audio-waveform', 16)}</div>
+      <span class="sidebar-logo">noti</span>
+    </div>
+  `
 }
 
 // ─── Sidebar Search ───────────────────────────────────────────────────────────

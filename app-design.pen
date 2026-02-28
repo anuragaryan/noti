@@ -33,38 +33,6 @@
           "children": [
             {
               "type": "frame",
-              "id": "Ru9hJ",
-              "name": "Sidebar Header",
-              "width": "fill_container",
-              "height": 64,
-              "stroke": {
-                "align": "inside",
-                "thickness": {
-                  "bottom": 1
-                },
-                "fill": "$--sidebar-border"
-              },
-              "padding": [
-                0,
-                24
-              ],
-              "justifyContent": "space_between",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "HsLJc",
-                  "name": "logo",
-                  "fill": "$--sidebar-accent-foreground",
-                  "content": "noti",
-                  "fontFamily": "$--font-primary",
-                  "fontSize": 20,
-                  "fontWeight": "700"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "eMPVw",
               "name": "Search Wrapper",
               "width": "fill_container",
@@ -722,17 +690,18 @@
               "id": "F8aOf",
               "name": "Top Bar",
               "width": "fill_container",
-              "height": 48,
+              "height": 36,
+              "fill": "$--card",
               "stroke": {
                 "align": "inside",
                 "thickness": {
-                  "bottom": 1
+                  "bottom": 1.5
                 },
                 "fill": "$--border"
               },
               "padding": [
                 0,
-                24
+                16
               ],
               "justifyContent": "space_between",
               "alignItems": "center",
@@ -827,10 +796,11 @@
               "name": "Editor Header",
               "width": "fill_container",
               "height": 72,
+              "fill": "$--card",
               "stroke": {
                 "align": "inside",
                 "thickness": {
-                  "bottom": 1
+                  "bottom": 1.5
                 },
                 "fill": "$--border"
               },
@@ -883,7 +853,7 @@
                       "id": "0KZ1t",
                       "name": "Record Btn",
                       "height": 36,
-                      "fill": "$--secondary",
+                      "fill": "$--primary",
                       "cornerRadius": "$--radius-pill",
                       "gap": 8,
                       "padding": [
@@ -900,17 +870,17 @@
                           "height": 16,
                           "iconFontName": "mic",
                           "iconFontFamily": "lucide",
-                          "fill": "$--secondary-foreground"
+                          "fill": "$--primary-foreground"
                         },
                         {
                           "type": "text",
                           "id": "2qaZw",
                           "name": "recordLabel",
-                          "fill": "$--secondary-foreground",
+                          "fill": "$--primary-foreground",
                           "content": "Record",
                           "fontFamily": "$--font-primary",
                           "fontSize": 13,
-                          "fontWeight": "500"
+                          "fontWeight": "600"
                         }
                       ]
                     },
@@ -922,8 +892,8 @@
                       "cornerRadius": "$--radius-pill",
                       "stroke": {
                         "align": "inside",
-                        "thickness": 1,
-                        "fill": "$--border"
+                        "thickness": 1.5,
+                        "fill": "$--primary"
                       },
                       "gap": 8,
                       "padding": [
@@ -940,17 +910,17 @@
                           "height": 16,
                           "iconFontName": "eye",
                           "iconFontFamily": "lucide",
-                          "fill": "$--foreground"
+                          "fill": "$--primary"
                         },
                         {
                           "type": "text",
                           "id": "dNGFr",
                           "name": "moveLabel",
-                          "fill": "$--foreground",
+                          "fill": "$--primary",
                           "content": "Preview",
                           "fontFamily": "$--font-primary",
                           "fontSize": 13,
-                          "fontWeight": "500"
+                          "fontWeight": "600"
                         }
                       ]
                     }
@@ -968,7 +938,7 @@
               "stroke": {
                 "align": "inside",
                 "thickness": {
-                  "bottom": 1
+                  "bottom": 1.5
                 },
                 "fill": "$--border"
               },
@@ -1206,14 +1176,46 @@
               "alignItems": "center",
               "children": [
                 {
-                  "type": "text",
-                  "id": "fVXrl",
-                  "name": "logo",
-                  "fill": "$--sidebar-accent-foreground",
-                  "content": "noti",
-                  "fontFamily": "$--font-primary",
-                  "fontSize": 20,
-                  "fontWeight": "700"
+                  "type": "frame",
+                  "id": "4Q6cV",
+                  "name": "Logo Lockup",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "eI90R",
+                      "name": "App Badge",
+                      "width": 30,
+                      "height": 30,
+                      "fill": "$--primary",
+                      "cornerRadius": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "ZwQTO",
+                          "name": "waveIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "audio-waveform",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--primary-foreground"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "O9fWW",
+                      "name": "wordmark",
+                      "fill": "$--sidebar-accent-foreground",
+                      "content": "noti",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 18,
+                      "fontWeight": "700"
+                    }
+                  ]
                 }
               ]
             },
@@ -1909,17 +1911,18 @@
               "id": "w7fvo",
               "name": "Top Bar",
               "width": "fill_container",
-              "height": 48,
+              "height": 36,
+              "fill": "$--card",
               "stroke": {
                 "align": "inside",
                 "thickness": {
-                  "bottom": 1
+                  "bottom": 1.5
                 },
                 "fill": "$--border"
               },
               "padding": [
                 0,
-                24
+                16
               ],
               "justifyContent": "space_between",
               "alignItems": "center",
@@ -2014,10 +2017,11 @@
               "name": "Editor Header",
               "width": "fill_container",
               "height": 72,
+              "fill": "$--card",
               "stroke": {
                 "align": "inside",
                 "thickness": {
-                  "bottom": 1
+                  "bottom": 1.5
                 },
                 "fill": "$--border"
               },
@@ -2070,7 +2074,7 @@
                       "id": "Um8fo",
                       "name": "Record Btn",
                       "height": 36,
-                      "fill": "$--secondary",
+                      "fill": "$--primary",
                       "cornerRadius": "$--radius-pill",
                       "gap": 8,
                       "padding": [
@@ -2087,17 +2091,17 @@
                           "height": 16,
                           "iconFontName": "mic",
                           "iconFontFamily": "lucide",
-                          "fill": "$--secondary-foreground"
+                          "fill": "$--primary-foreground"
                         },
                         {
                           "type": "text",
                           "id": "psxIj",
                           "name": "voiceLabel",
-                          "fill": "$--secondary-foreground",
+                          "fill": "$--primary-foreground",
                           "content": "Record",
                           "fontFamily": "$--font-primary",
                           "fontSize": 13,
-                          "fontWeight": "500"
+                          "fontWeight": "600"
                         }
                       ]
                     },
@@ -2109,8 +2113,8 @@
                       "cornerRadius": "$--radius-pill",
                       "stroke": {
                         "align": "inside",
-                        "thickness": 1,
-                        "fill": "$--border"
+                        "thickness": 1.5,
+                        "fill": "$--primary"
                       },
                       "gap": 8,
                       "padding": [
@@ -2127,17 +2131,17 @@
                           "height": 16,
                           "iconFontName": "eye",
                           "iconFontFamily": "lucide",
-                          "fill": "$--foreground"
+                          "fill": "$--primary"
                         },
                         {
                           "type": "text",
                           "id": "rc11C",
                           "name": "moveLabel",
-                          "fill": "$--foreground",
+                          "fill": "$--primary",
                           "content": "Preview",
                           "fontFamily": "$--font-primary",
                           "fontSize": 13,
-                          "fontWeight": "500"
+                          "fontWeight": "600"
                         }
                       ]
                     }
@@ -2155,7 +2159,7 @@
               "stroke": {
                 "align": "inside",
                 "thickness": {
-                  "bottom": 1
+                  "bottom": 1.5
                 },
                 "fill": "$--border"
               },

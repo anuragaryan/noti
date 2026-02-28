@@ -211,11 +211,11 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 
 #top-bar {
-  height: 48px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -390,12 +390,29 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 
 /* ── Sidebar ──────────────────────────────────────────────── */
 
+.sidebar-logo-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-app-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
 .sidebar-logo {
-  font-family: var(--font-primary);
-  font-size: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
   font-weight: 700;
   color: var(--sidebar-accent-foreground);
-  letter-spacing: -0.5px;
 }
 
 .search-bar {
@@ -606,12 +623,12 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   border-radius: var(--radius-pill);
   font-family: var(--font-primary);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, opacity 0.15s;
 }
-.record-btn-idle   { background: var(--secondary); color: var(--secondary-foreground); }
+.record-btn-idle   { background: var(--primary); color: var(--primary-foreground); }
 .record-btn-active { background: var(--destructive); color: #ffffff; }
 
 /* Animated dot shared by record button and recording bar */
@@ -625,14 +642,15 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   padding: 0 16px;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--foreground);
+  color: var(--primary);
   font-family: var(--font-primary);
   font-size: 13px;
-  font-weight: 500;
-  border: 1px solid var(--border);
+  font-weight: 600;
+  border: 1.5px solid var(--primary);
   cursor: pointer;
   transition: background 0.15s;
 }
+.preview-btn:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
 
 .editor-textarea {
   flex: 1;
