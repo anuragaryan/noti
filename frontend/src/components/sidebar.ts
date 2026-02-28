@@ -11,6 +11,13 @@ import state from '../state'
 import type { Folder, Note } from '../types'
 import { NotesAPI, FoldersAPI } from '../api'
 
+// ─── Drag state ──────────────────────────────────────────────────────────────
+
+type DragPayload =
+  | { kind: 'note'; id: string; currentFolderId: string }
+  | { kind: 'folder'; id: string; name: string; currentParentId: string }
+
+let dragPayload: DragPayload | null = null
 // ─── Helper: create element ─────────────────────────────────────────────────
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -122,17 +129,90 @@ function buildFolderTree(folders: Folder[]): Map<string, Folder[]> {
   return tree
 }
 
+function applyDropHighlight(el: HTMLElement, active: boolean): void {
+  el.classList.toggle('drop-target-active', active)
+}
+
+function setupDragSource(el: HTMLElement, payload: DragPayload): void {
+  el.setAttribute('draggable', 'true')
+  el.addEventListener('dragstart', e => {
+    dragPayload = payload
+    e.dataTransfer!.effectAllowed = 'move'
+    setTimeout(() => el.classList.add('dragging'), 0)
+  })
+  el.addEventListener('dragend', () => {
+    dragPayload = null
+    el.classList.remove('dragging')
+  })
+}
+
+function setupDropTarget(target: HTMLElement, onDrop: (payload: DragPayload) => Promise<void>): void {
+  target.addEventListener('dragover', e => {
+    if (!dragPayload) return
+    e.preventDefault()
+    e.dataTransfer!.dropEffect = 'move'
+    applyDropHighlight(target, true)
+  })
+  target.addEventListener('dragleave', e => {
+    if (!target.contains(e.relatedTarget as Node)) {
+      applyDropHighlight(target, false)
+    }
+  })
+  target.addEventListener('drop', async e => {
+    e.preventDefault()
+    applyDropHighlight(target, false)
+    const p = dragPayload
+    dragPayload = null
+    if (!p) return
+    await onDrop(p)
+  })
+}
+
+async function executeDrop(payload: DragPayload, targetFolderId: string): Promise<void> {
+  try {
+    if (payload.kind === 'note') {
+      if (payload.currentFolderId === targetFolderId) return
+      await NotesAPI.move(payload.id, targetFolderId)
+      const notes = await NotesAPI.getAll()
+      const folders = await FoldersAPI.getAll()
+      const currentNote = state.get('currentNote')
+      if (currentNote?.id === payload.id) {
+        currentNote.folderId = targetFolderId
+        state.setState({ notes, folders, currentNote })
+      } else {
+        state.setState({ notes, folders })
+      }
+      if (targetFolderId) {
+        const expanded = new Set(state.get('expandedFolders'))
+        expanded.add(targetFolderId)
+        state.setState({ expandedFolders: expanded })
+      }
+    } else {
+      if (payload.currentParentId === targetFolderId) return
+      await FoldersAPI.update(payload.id, payload.name, targetFolderId)
+      const folders = await FoldersAPI.getAll()
+      state.setState({ folders })
+      if (targetFolderId) {
+        const expanded = new Set(state.get('expandedFolders'))
+        expanded.add(targetFolderId)
+        state.setState({ expandedFolders: expanded })
+      }
+    }
+  } catch (err) {
+    console.error('Drop failed:', err)
+    state.showNotification('Failed to move item', 'error')
+  }
+}
+
 function renderFolderItem(folder: Folder, tree: Map<string, Folder[]>, depth: number): HTMLElement {
   const expanded = state.get('expandedFolders').has(folder.id)
   const currentNote = state.get('currentNote')
   const notesInFolder = state.get('notes').filter(n => n.folderId === folder.id)
 
-  // Check if a note in this folder is currently active
   const hasActiveNote = currentNote && currentNote.folderId === folder.id
 
   const wrapper = el('div', { class: 'folder-wrapper' })
 
-  // Folder row — depth-based padding is dynamic, keep as inline style
   const row = el('div', {
     class: `sidebar-row${hasActiveNote ? ' active' : ''}`,
     style: `padding-left: ${10 + depth * 16}px;`,
@@ -156,21 +236,31 @@ function renderFolderItem(folder: Folder, tree: Map<string, Folder[]>, depth: nu
     renderFolderList()
   })
 
+  // Drag: this folder can be dragged to reparent it
+  setupDragSource(row, {
+    kind: 'folder',
+    id: folder.id,
+    name: folder.name,
+    currentParentId: folder.parentId ?? '',
+  })
+
+  // Drop: items can be dropped onto this folder's wrapper
+  setupDropTarget(wrapper, async payload => {
+    if (payload.kind === 'folder' && payload.id === folder.id) return
+    await executeDrop(payload, folder.id)
+  })
+
   wrapper.appendChild(row)
 
-  // Sub items (notes + child folders) when expanded
   if (expanded) {
-    // Depth-based padding is dynamic, keep as inline style
     const subContainer = el('div', {
       style: `padding-left: ${28 + depth * 16}px;`,
     })
 
-    // Child folders
     for (const child of sortByName(tree.get(folder.id) ?? [], state.get('sortOrder'))) {
       subContainer.appendChild(renderFolderItem(child, tree, depth + 1))
     }
 
-    // Notes in this folder
     for (const note of sortNotesByTitle(notesInFolder, state.get('sortOrder'))) {
       subContainer.appendChild(renderNoteInFolderItem(note))
     }
@@ -197,13 +287,20 @@ function renderNoteInFolderItem(note: Note): HTMLElement {
   `
 
   row.addEventListener('click', () => handleNoteSelect(note))
+
+  // Drag: note inside a folder can be dragged out or to another folder
+  setupDragSource(row, {
+    kind: 'note',
+    id: note.id,
+    currentFolderId: note.folderId ?? '',
+  })
+
   return row
 }
 
 function renderFolderList(): void {
   const container = document.getElementById('sidebar-folders')
   if (!container) return
-  // Layout defined in #sidebar-folders CSS class
   container.innerHTML = ''
 
   const folders = state.get('folders')
@@ -213,6 +310,11 @@ function renderFolderList(): void {
   for (const folder of rootFolders) {
     container.appendChild(renderFolderItem(folder, tree, 0))
   }
+
+  // The folders section itself is a drop zone for moving items to root
+  setupDropTarget(container as HTMLElement, async payload => {
+    await executeDrop(payload, '')
+  })
 }
 
 // ─── Note List ────────────────────────────────────────────────────────────────
@@ -220,7 +322,6 @@ function renderFolderList(): void {
 function renderNoteList(): void {
   const container = document.getElementById('sidebar-notes')
   if (!container) return
-  // Layout defined in #sidebar-notes CSS class
   container.innerHTML = ''
 
   const notes = sortNotesByTitle(state.get('notes').filter(n => !n.folderId), state.get('sortOrder'))
@@ -254,6 +355,13 @@ function renderNoteList(): void {
     })
     row.addEventListener('click', () => handleNoteSelect(note))
 
+    // Drag: top-level note can be dragged into a folder
+    setupDragSource(row, {
+      kind: 'note',
+      id: note.id,
+      currentFolderId: '',
+    })
+
     container.appendChild(row)
   }
 
@@ -262,6 +370,11 @@ function renderNoteList(): void {
     empty.textContent = 'No notes yet'
     container.appendChild(empty)
   }
+
+  // The notes section itself is a drop zone for moving items to root
+  setupDropTarget(container as HTMLElement, async payload => {
+    await executeDrop(payload, '')
+  })
 }
 
 // ─── Sidebar Footer ──────────────────────────────────────────────────────────

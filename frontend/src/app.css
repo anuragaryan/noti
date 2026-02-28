@@ -443,6 +443,20 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 .action-btn:hover { background: var(--sidebar-accent); }
 
+/* Drag and drop */
+.dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.drop-target-active {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+
 /* Folder rows */
 .sidebar-row {
   display: flex;
