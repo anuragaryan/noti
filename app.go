@@ -144,7 +144,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// Create structure.json if it doesn't exist
 	if _, err := os.Stat(a.structurePath); os.IsNotExist(err) {
-		if err := a.saveStructure(&domain.FolderStructure{
+		if err := a.structureRepo.Save(&domain.FolderStructure{
 			Folders: []domain.Folder{},
 			Notes:   []domain.Note{},
 		}); err != nil {
@@ -780,8 +780,4 @@ func (a *App) SaveConfig(config domain.Config) error {
 
 func (a *App) loadStructure() (*domain.FolderStructure, error) {
 	return a.structureRepo.Load()
-}
-
-func (a *App) saveStructure(structure *domain.FolderStructure) error {
-	return a.structureRepo.Save(structure)
 }

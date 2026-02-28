@@ -7,47 +7,62 @@ import (
 	"noti/internal/domain"
 )
 
-// PathResolver handles path resolution for folders and notes
+// PathResolver resolves the absolute filesystem path for any note or folder ID.
 type PathResolver struct {
 	notesPath string
 }
 
-// NewPathResolver creates a new path resolver
+// NewPathResolver creates a PathResolver rooted at notesPath.
 func NewPathResolver(notesPath string) *PathResolver {
-	return &PathResolver{
-		notesPath: notesPath,
-	}
+	return &PathResolver{notesPath: notesPath}
 }
 
-// GetPathFor resolves the full disk path for a given folder or note ID
+// GetPathFor returns the absolute disk path for the given folder or note ID.
+//
+// It walks up the parent chain recursively. A visited set is kept at every
+// call site so that a corrupted structure with circular parent references
+// causes a clear error instead of an infinite recursion / stack overflow.
 func (r *PathResolver) GetPathFor(id string, structure *domain.FolderStructure) (string, error) {
-	// Check if it's a note
+	return r.resolvePath(id, structure, make(map[string]bool))
+}
+
+// resolvePath is the internal recursive implementation. visited tracks every
+// ID seen on the current call stack to detect cycles.
+func (r *PathResolver) resolvePath(id string, structure *domain.FolderStructure, visited map[string]bool) (string, error) {
+	if visited[id] {
+		return "", fmt.Errorf("circular reference detected for ID %q: the parent chain forms a cycle", id)
+	}
+	visited[id] = true
+
+	// Check notes first.
 	for _, note := range structure.Notes {
-		if note.ID == id {
-			if note.FolderID == "" {
-				return filepath.Join(r.notesPath, note.NameOnDisk), nil
-			}
-			parentPath, err := r.GetPathFor(note.FolderID, structure)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(parentPath, note.NameOnDisk), nil
+		if note.ID != id {
+			continue
 		}
+		if note.FolderID == "" {
+			return filepath.Join(r.notesPath, note.NameOnDisk), nil
+		}
+		parentPath, err := r.resolvePath(note.FolderID, structure, visited)
+		if err != nil {
+			return "", fmt.Errorf("could not resolve parent folder %q for note %q: %w", note.FolderID, id, err)
+		}
+		return filepath.Join(parentPath, note.NameOnDisk), nil
 	}
 
-	// Check if it's a folder
+	// Check folders.
 	for _, folder := range structure.Folders {
-		if folder.ID == id {
-			if folder.ParentID == "" {
-				return filepath.Join(r.notesPath, folder.NameOnDisk), nil
-			}
-			parentPath, err := r.GetPathFor(folder.ParentID, structure)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(parentPath, folder.NameOnDisk), nil
+		if folder.ID != id {
+			continue
 		}
+		if folder.ParentID == "" {
+			return filepath.Join(r.notesPath, folder.NameOnDisk), nil
+		}
+		parentPath, err := r.resolvePath(folder.ParentID, structure, visited)
+		if err != nil {
+			return "", fmt.Errorf("could not resolve parent folder %q for folder %q: %w", folder.ParentID, id, err)
+		}
+		return filepath.Join(parentPath, folder.NameOnDisk), nil
 	}
 
-	return "", fmt.Errorf("ID %s not found in structure", id)
+	return "", fmt.Errorf("ID %q not found in structure", id)
 }
