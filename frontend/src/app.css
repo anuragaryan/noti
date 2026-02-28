@@ -457,7 +457,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   transition: background 0.15s;
 }
 .sidebar-row:hover  { background: var(--sidebar-accent); }
-.sidebar-row.active { background: var(--muted); color: var(--sidebar-accent-foreground); }
+.sidebar-row.active { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 
 .folder-chevron {
   color: var(--muted-foreground);
@@ -489,7 +489,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 
 .note-folder-name {
   font-family: var(--font-secondary);
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -510,7 +510,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   transition: background 0.15s;
 }
 .note-row:hover  { background: var(--sidebar-accent); }
-.note-row.active { background: var(--sidebar-accent); border-left: 3px solid var(--primary); }
+.note-row.active { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); }
 
 .note-row-icon          { display: flex; flex-shrink: 0; }
 .note-row-icon.active   { color: var(--primary); }

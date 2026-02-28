@@ -52,6 +52,7 @@ export interface AppState {
 
   // Theme
   theme: Theme
+  sortOrder: 'asc' | 'desc'
 
   // Modals
   activeModal: ModalType
@@ -95,6 +96,7 @@ class StateManager {
     llmAvailable: false,
 
     theme: 'light',
+    sortOrder: 'asc',
 
     activeModal: null,
     deleteContext: null,

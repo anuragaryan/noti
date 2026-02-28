@@ -66,10 +66,14 @@ function renderSearch(): void {
 function renderActions(): void {
   const container = document.getElementById('sidebar-actions')
   if (!container) return
+  container.innerHTML = ''
   // Layout defined in #sidebar-actions CSS class
 
-  const makeActionBtn = (iconName: string, title: string, onClick: () => void) => {
-    const btn = el('button', { title, class: 'action-btn' })
+  const sortOrder = state.get('sortOrder')
+  const sortTitle = sortOrder === 'asc' ? 'Sort: A→Z (click to reverse)' : 'Sort: Z→A (click to reverse)'
+
+  const makeActionBtn = (iconName: string, title: string, onClick: () => void, active = false) => {
+    const btn = el('button', { title, class: `action-btn${active ? ' active' : ''}` })
     btn.innerHTML = icon(iconName, 14)
     btn.addEventListener('click', onClick)
     return btn
@@ -78,11 +82,34 @@ function renderActions(): void {
   container.append(
     makeActionBtn('file-plus', 'New Note', handleNewNote),
     makeActionBtn('folder-plus', 'New Folder', handleNewFolder),
-    makeActionBtn('arrow-up-down', 'Sort', () => { /* TODO: implement sort */ }),
+    makeActionBtn('arrow-up-down', sortTitle, handleSort, true),
   )
 }
 
 // ─── Folder Tree ──────────────────────────────────────────────────────────────
+
+// ─── Sort Helpers ─────────────────────────────────────────────────────────────
+
+function sortByName<T extends { name: string }>(items: T[], order: 'asc' | 'desc'): T[] {
+  return [...items].sort((a, b) => {
+    const cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    return order === 'asc' ? cmp : -cmp
+  })
+}
+
+function sortNotesByTitle(notes: Note[], order: 'asc' | 'desc'): Note[] {
+  return [...notes].sort((a, b) => {
+    const titleA = a.title || 'Untitled'
+    const titleB = b.title || 'Untitled'
+    const cmp = titleA.localeCompare(titleB, undefined, { sensitivity: 'base' })
+    return order === 'asc' ? cmp : -cmp
+  })
+}
+
+function handleSort(): void {
+  const current = state.get('sortOrder')
+  state.setState({ sortOrder: current === 'asc' ? 'desc' : 'asc' })
+}
 
 function buildFolderTree(folders: Folder[]): Map<string, Folder[]> {
   const tree = new Map<string, Folder[]>()
@@ -139,12 +166,12 @@ function renderFolderItem(folder: Folder, tree: Map<string, Folder[]>, depth: nu
     })
 
     // Child folders
-    for (const child of tree.get(folder.id) ?? []) {
+    for (const child of sortByName(tree.get(folder.id) ?? [], state.get('sortOrder'))) {
       subContainer.appendChild(renderFolderItem(child, tree, depth + 1))
     }
 
     // Notes in this folder
-    for (const note of notesInFolder) {
+    for (const note of sortNotesByTitle(notesInFolder, state.get('sortOrder'))) {
       subContainer.appendChild(renderNoteInFolderItem(note))
     }
 
@@ -182,7 +209,7 @@ function renderFolderList(): void {
   const folders = state.get('folders')
 
   const tree = buildFolderTree(folders)
-  const rootFolders = tree.get('') ?? []
+  const rootFolders = sortByName(tree.get('') ?? [], state.get('sortOrder'))
   for (const folder of rootFolders) {
     container.appendChild(renderFolderItem(folder, tree, 0))
   }
@@ -196,7 +223,7 @@ function renderNoteList(): void {
   // Layout defined in #sidebar-notes CSS class
   container.innerHTML = ''
 
-  const notes = state.get('notes').filter(n => !n.folderId)
+  const notes = sortNotesByTitle(state.get('notes').filter(n => !n.folderId), state.get('sortOrder'))
   const currentNote = state.get('currentNote')
 
   for (const note of notes) {
@@ -313,6 +340,11 @@ export function initSidebar(): void {
     renderFolderList()
   })
   state.subscribe('folders', () => renderFolderList())
+  state.subscribe('sortOrder', () => {
+    renderFolderList()
+    renderNoteList()
+    renderActions()
+  })
   state.subscribe('currentNote', () => {
     renderNoteList()
     renderFolderList()
