@@ -163,7 +163,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 
 #sidebar-header {
-  height: 64px;
+  height: 80px;
   display: flex;
   align-items: center;
   padding: 0 24px;
@@ -323,7 +323,6 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   height: 36px;
   padding: 0 16px;
   border-radius: var(--radius-pill);
-  background: var(--primary);
   color: var(--primary-foreground);
   font-family: var(--font-primary);
   font-size: 13px;
@@ -397,10 +396,9 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 
 .sidebar-app-badge {
-  width: 30px;
-  height: 30px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-md);
-  background: var(--primary);
   color: var(--primary-foreground);
   display: flex;
   align-items: center;
@@ -410,8 +408,8 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 
 .sidebar-logo {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
   color: var(--sidebar-accent-foreground);
 }
 
@@ -576,7 +574,6 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 .theme-btn          { width: 24px; height: 24px; border-radius: 12px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: background 0.15s; }
 .theme-btn-inactive { background: transparent; color: var(--muted-foreground); }
-.theme-btn-active   { background: var(--primary); color: var(--primary-foreground); }
 
 
 /* ── Top bar & breadcrumbs ────────────────────────────────── */
@@ -642,7 +639,6 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
 }
-.record-btn-idle   { background: var(--primary); color: var(--primary-foreground); }
 .record-btn-active { background: var(--destructive); color: #ffffff; }
 
 /* Animated dot shared by record button and recording bar */
@@ -727,7 +723,6 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   transition: opacity 0.15s;
 }
 .ai-run-btn:disabled      { background: var(--muted); color: var(--muted-foreground); cursor: not-allowed; }
-.ai-run-btn:not(:disabled){ background: var(--primary); color: var(--primary-foreground); cursor: pointer; }
 
 
 /* ── AI result panel ──────────────────────────────────────── */
@@ -746,7 +741,6 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 
 .ai-small-btn  { display: flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: var(--radius-sm); font-family: var(--font-secondary); font-size: 12px; border: none; cursor: pointer; }
 .ai-copy-btn   { background: var(--secondary); color: var(--secondary-foreground); }
-.ai-accept-btn { background: var(--primary);   color: var(--primary-foreground); }
 .ai-close-btn  { display: flex; align-items: center; justify-content: center; height: 28px; width: 28px; border-radius: var(--radius-sm); background: transparent; color: var(--muted-foreground); border: none; cursor: pointer; }
 
 
@@ -978,7 +972,6 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   height: 36px;
   padding: 0 12px;
   border-radius: var(--radius-md);
-  background: var(--primary);
   color: var(--primary-foreground);
   font-family: var(--font-primary);
   font-size: 13px;

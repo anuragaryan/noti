@@ -10,6 +10,7 @@ import { icon } from '../utils/icons'
 import { NotesAPI, FoldersAPI } from '../api'
 import state from '../state'
 import type { Folder, Note } from '../types'
+import appIcon from '../assets/images/app-icon.png'
 
 // ─── Context Menu ────────────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ function renderHeader(): void {
   if (!container) return
   container.innerHTML = `
     <div class="sidebar-logo-lockup">
-      <div class="sidebar-app-badge">${icon('audio-waveform', 16)}</div>
+      <div class="sidebar-app-badge"><img src="${appIcon}" alt="noti" width="48" height="48" /></div>
       <span class="sidebar-logo">noti</span>
     </div>
   `
