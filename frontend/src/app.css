@@ -323,6 +323,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   height: 36px;
   padding: 0 16px;
   border-radius: var(--radius-pill);
+  background: var(--primary);
   color: var(--primary-foreground);
   font-family: var(--font-primary);
   font-size: 13px;
@@ -348,7 +349,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   cursor: pointer;
   transition: background 0.15s;
 }
-.btn-secondary:hover { background: var(--muted); }
+.btn-secondary:hover { background: var(--secondary); }
 
 .btn-danger {
   display: flex;
@@ -574,6 +575,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 .theme-btn          { width: 24px; height: 24px; border-radius: 12px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: background 0.15s; }
 .theme-btn-inactive { background: transparent; color: var(--muted-foreground); }
+.theme-btn-active   { background: var(--primary); color: var(--primary-foreground); }
 
 
 /* ── Top bar & breadcrumbs ────────────────────────────────── */
@@ -625,25 +627,55 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   width: 100%;
 }
 
+/* ── Record button ────────────────────────────────────────── */
+
 .record-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
   height: 36px;
   padding: 0 16px;
   border-radius: var(--radius-pill);
   font-family: var(--font-primary);
   font-size: 13px;
   font-weight: 600;
-  border: none;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s, outline-color 0.15s;
+  border: none;
 }
-.record-btn-active { background: var(--destructive); color: #ffffff; }
 
-/* Animated dot shared by record button and recording bar */
-.record-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+/* Idle: primary fill, primary-foreground text, gap 8 (mic + "Record") */
+.record-btn-idle {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  gap: 8px;
+}
+.record-btn-idle:hover { opacity: 0.9; }
 
+/* Active: destructive fill, white text, gap 10 (circle + "Recording…"), weight 500.
+   On hover → stop state: square icon + "Stop", weight 600, 85% opacity, 2px outside stroke. */
+.record-btn-active {
+  background: var(--destructive);
+  color: #ffffff;
+  gap: 10px;
+  font-weight: 500;
+}
+.record-btn-active .record-btn-recording-content { display: flex; align-items: center; gap: 10px; }
+.record-btn-active .record-btn-stop-content      { display: none;  align-items: center; gap: 8px; }
+.record-btn-active:hover {
+  opacity: 0.85;
+  outline: 2px solid var(--destructive);
+  outline-offset: 1px;
+  font-weight: 600;
+}
+.record-btn-active:hover .record-btn-recording-content { display: none; }
+.record-btn-active:hover .record-btn-stop-content      { display: flex; }
+
+/* Animated dot — shared by record button active state and recording bar */
+.record-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+/* ── Preview button ───────────────────────────────────────── */
+
+/* Idle (not recording): primary stroke 1.5px inside, primary text, gap 8, weight 600 */
 .preview-btn {
   display: flex;
   align-items: center;
@@ -652,15 +684,24 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   padding: 0 16px;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--primary);
   font-family: var(--font-primary);
   font-size: 13px;
   font-weight: 600;
-  border: 1.5px solid var(--primary);
   cursor: pointer;
   transition: background 0.15s;
 }
-.preview-btn:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.preview-btn-idle {
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+}
+.preview-btn-idle:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+
+/* During recording: border token border 1px, foreground text, weight 500 */
+.preview-btn-recording {
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+.preview-btn-recording:hover { background: var(--secondary); }
 
 .editor-textarea {
   flex: 1;
@@ -754,21 +795,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 
 .recording-waveform { display: flex; align-items: center; gap: 3px; height: 24px; }
 
-.stop-recording-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--color-error-foreground);
-  font-family: var(--font-primary);
-  font-size: 13px;
-  font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  cursor: pointer;
-}
+/* Stop action is on the record-btn in the editor header, not in the bar. */
 
 /* Waveform bars — heights + animation delays via nth-child */
 .waveform-bar {

@@ -71,12 +71,7 @@ function renderRecordingBar(): void {
     </div>
     <div class="recording-spacer"></div>
     <span class="recording-source">Source: ${sourceLabel}</span>
-    <button id="stop-recording-btn" class="stop-recording-btn">■ Stop</button>
   `
-
-  bar.querySelector('#stop-recording-btn')?.addEventListener('click', () => {
-    void stopRecording()
-  })
 }
 
 // ─── Start / Stop ─────────────────────────────────────────────────────────────

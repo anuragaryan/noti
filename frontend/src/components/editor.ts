@@ -104,11 +104,20 @@ function renderEditorHeader(): void {
     </div>
     <div class="editor-header-actions">
       <button id="record-btn" class="record-btn ${isRecording ? 'record-btn-active' : 'record-btn-idle'}">
-        ${isRecording
-          ? `<span class="record-dot pulse-dot"></span> Recording…`
-          : `${icon('mic', 16)} Record`}
+        ${isRecording ? `
+          <span class="record-btn-recording-content">
+            <span class="record-dot pulse-dot"></span>
+            Recording…
+          </span>
+          <span class="record-btn-stop-content">
+            ${icon('square', 14)}
+            Stop
+          </span>
+        ` : `
+          ${icon('mic', 16)} Record
+        `}
       </button>
-      <button id="preview-btn" class="preview-btn">
+      <button id="preview-btn" class="preview-btn ${isRecording ? 'preview-btn-recording' : 'preview-btn-idle'}">
         ${icon(isPreview ? 'eye-off' : 'eye', 16)}
         ${isPreview ? 'Edit' : 'Preview'}
       </button>
@@ -126,11 +135,7 @@ function renderEditorHeader(): void {
     }, 1000))
   }
 
-  // Wire record button
-  container.querySelector('#record-btn')?.addEventListener('click', () => {
-    // Handled by recording component via state
-    state.setState({ isRecording: !isRecording })
-  })
+  // Record button clicks are handled by recording.ts via event delegation on #editor-header
 
   // Wire preview button
   container.querySelector('#preview-btn')?.addEventListener('click', () => {
