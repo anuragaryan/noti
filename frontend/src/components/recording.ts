@@ -37,6 +37,23 @@ function updateTimerDisplay(): void {
   if (el) el.textContent = formatDuration(state.get('recordingDuration'))
 }
 
+// ─── Live transcript in textarea ─────────────────────────────────────────────
+
+// Content that existed in the textarea before recording started.
+// The live transcript is appended after this base, separated by '\n\n'.
+let preRecordingContent = ''
+
+// Write the running transcript into the textarea, always replacing the
+// previous partial so the text doesn't duplicate.
+function setLiveTranscript(text: string): void {
+  const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+  if (!textarea) return
+  const separator = preRecordingContent ? '\n\n' : ''
+  textarea.value = preRecordingContent + separator + text
+  // Trigger auto-save debounce
+  textarea.dispatchEvent(new Event('input'))
+}
+
 // ─── Recording Bar ────────────────────────────────────────────────────────────
 
 function renderRecordingBar(): void {
@@ -51,7 +68,6 @@ function renderRecordingBar(): void {
   }
 
   bar.classList.remove('hidden')
-  // Layout defined in #recording-bar CSS class (app.css)
 
   const source = state.get('recordingSource') || 'microphone'
   const sourceLabel = source === 'microphone' ? 'Microphone' : source === 'system' ? 'System Audio' : 'Mixed'
@@ -80,7 +96,6 @@ export async function startRecording(): Promise<void> {
   const source = state.get('recordingSource') || 'microphone'
 
   try {
-    // Check permissions first
     const perms = await AudioAPI.checkPermissions(source)
     if (perms.status === 'denied') {
       state.showNotification('Microphone permission denied. Please allow in System Settings.', 'error')
@@ -91,6 +106,10 @@ export async function startRecording(): Promise<void> {
       state.showNotification('STT model not available. Please configure in Settings.', 'error')
       return
     }
+
+    // Snapshot what's already in the editor so we can append without clobbering it.
+    const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+    preRecordingContent = textarea?.value ?? ''
 
     await AudioAPI.startRecordingWithSource(source)
     state.setState({ isRecording: true, partialTranscript: '' })
@@ -110,14 +129,13 @@ export async function stopRecording(): Promise<void> {
     renderRecordingBar()
 
     if (result?.text) {
-      // Append transcription to current note content
-      const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-      if (textarea) {
-        const separator = textarea.value ? '\n\n' : ''
-        textarea.value = textarea.value + separator + result.text
-        textarea.dispatchEvent(new Event('input'))
-      }
+      // Replace the live-preview text with the final confirmed transcript.
+      setLiveTranscript(result.text)
       state.showNotification('Transcription complete', 'success')
+    } else {
+      // Nothing transcribed — restore pre-recording content as-is.
+      const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+      if (textarea) textarea.value = preRecordingContent
     }
   } catch (err) {
     console.error('Failed to stop recording:', err)
@@ -133,21 +151,21 @@ export async function stopRecording(): Promise<void> {
 export function initRecording(): void {
   renderRecordingBar()
 
-  // Subscribe to state changes
   state.subscribe('isRecording', () => {
     renderRecordingBar()
     if (!state.get('isRecording')) stopTimer()
   })
 
-  // Wire transcription partial events
+  // Each partial event now carries the full running transcript for this session.
+  // Write it directly into the textarea so the user sees words appear live.
   AppEvents.onTranscriptionPartial((result) => {
-    if (result.isPartial) {
+    if (result.isPartial && state.get('isRecording')) {
       state.setState({ partialTranscript: result.text })
+      setLiveTranscript(result.text)
     }
   })
 
-  // Wire the record button in editor header
-  // The editor header renders a #record-btn — we intercept it via event delegation
+  // Wire the record button in editor header via event delegation.
   document.getElementById('editor-header')?.addEventListener('click', (e) => {
     const target = e.target as HTMLElement
     if (target.closest('#record-btn')) {
@@ -156,7 +174,6 @@ export function initRecording(): void {
       } else {
         void startRecording()
       }
-      // Prevent state.setState from doubling up — recording.ts owns this
       e.stopPropagation()
     }
   })

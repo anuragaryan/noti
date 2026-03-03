@@ -270,12 +270,12 @@ func (m *STTManager) StopRecordingWithTranscription() (*domain.TranscriptionResu
 		return nil, fmt.Errorf("no audio manager or STT service available")
 	}
 
-	// Stop audio capture
+	// Stop audio capture (best-effort — log but don't fail)
 	if err := m.audioManager.StopCapture(); err != nil {
 		fmt.Printf("Warning: error stopping audio capture: %v\n", err)
 	}
 
-	// Stop transcriber and get final result
+	// Stop transcriber and get final result.
 	if m.transcriber != nil {
 		return m.transcriber.StopProcessing()
 	}

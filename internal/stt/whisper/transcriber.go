@@ -1,4 +1,4 @@
-// Package whisper provides speech-to-text functionality using Whisper
+// Package whisper provides speech-to-text functionality using the Whisper model.
 package whisper
 
 import (
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,7 +20,10 @@ const (
 	transcriptionSampleRate = 16000
 )
 
-// Transcriber handles speech-to-text transcription using Whisper
+// Transcriber performs real-time speech-to-text transcription. Audio data is
+// fed via ProcessChunk; it is sliced into fixed-size windows and transcribed
+// sequentially. Each chunk's text is appended to a running transcript so the
+// frontend always receives the complete session text, not just the last chunk.
 type Transcriber struct {
 	model      whisper.Model
 	modelMutex sync.Mutex
@@ -27,22 +31,28 @@ type Transcriber struct {
 	modelPath  string
 	ctx        context.Context
 
-	// Audio buffering for real-time transcription
-	audioBuffer      []float32
-	bufferMutex      sync.Mutex
-	processedSamples int
-	samplesPerChunk  int
-	processingWg     sync.WaitGroup
-	isProcessing     bool
-	stopProcessing   chan struct{}
+	// bufferMutex guards audioBuffer, processedSamples, accumulatedTranscript,
+	// isProcessing, and stopProcessing. Must not be held while waiting on
+	// processingWg to prevent deadlocks.
+	bufferMutex           sync.Mutex
+	audioBuffer           []float32
+	processedSamples      int
+	accumulatedTranscript string
+	samplesPerChunk       int
+	// processingWg tracks in-flight chunk goroutines. Chunk goroutines must
+	// run sequentially (serialised by modelMutex) so transcript order is
+	// preserved; processingWg lets StopProcessing wait for the last one.
+	processingWg   sync.WaitGroup
+	isProcessing   bool
+	stopProcessing chan struct{}
 }
 
-// NewTranscriber creates a new Whisper transcriber
+// NewTranscriber creates a Transcriber for the given model. It only checks
+// that the model file exists; call Initialize to load it into memory.
 func NewTranscriber(basePath string, config *domain.STTConfig) (*Transcriber, error) {
 	modelFileName := fmt.Sprintf("ggml-%s.bin", config.ModelName)
 	modelPath := filepath.Join(basePath, "models", modelFileName)
 
-	// Check if model exists
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("whisper model not found at %s", modelPath)
 	}
@@ -55,136 +65,126 @@ func NewTranscriber(basePath string, config *domain.STTConfig) (*Transcriber, er
 	}, nil
 }
 
-// SetContext sets the Wails runtime context for emitting events
+// SetContext sets the Wails runtime context used for emitting frontend events.
 func (t *Transcriber) SetContext(ctx context.Context) {
 	t.ctx = ctx
 }
 
-// Initialize loads the Whisper model
+// Initialize loads the Whisper model into memory.
 func (t *Transcriber) Initialize() error {
-	fmt.Printf("=== Loading Whisper Model ===\n")
-	fmt.Printf("Model path: %s\n", t.modelPath)
-
 	model, err := whisper.New(t.modelPath)
 	if err != nil {
 		return fmt.Errorf("failed to load whisper model: %w", err)
 	}
-
 	t.model = model
-	fmt.Println("✓ Whisper model loaded successfully!")
-	fmt.Println("✓ Real-time transcription enabled")
-	fmt.Printf("✓ Processing chunks every %d seconds\n\n", t.config.ChunkDurationSecs)
-
 	return nil
 }
 
-// StartProcessing begins real-time audio processing
+// StartProcessing begins the real-time transcription loop. If a previous
+// session is still active it is torn down first; the old goroutine exits via
+// its closed stopProcessing channel.
+//
+// Callers must not call StartProcessing concurrently.
 func (t *Transcriber) StartProcessing() error {
 	t.bufferMutex.Lock()
-	defer t.bufferMutex.Unlock()
 
 	if t.isProcessing {
-		return fmt.Errorf("already processing")
+		close(t.stopProcessing)
+		t.isProcessing = false
 	}
 
-	// Clear previous buffer
+	// Release the lock while draining previous-session goroutines so they can
+	// call processingWg.Done() without contending on bufferMutex.
+	t.bufferMutex.Unlock()
+	t.processingWg.Wait()
+	t.bufferMutex.Lock()
+
 	t.audioBuffer = []float32{}
 	t.processedSamples = 0
+	t.accumulatedTranscript = ""
 	t.stopProcessing = make(chan struct{})
 	t.isProcessing = true
 
-	// Start real-time processing goroutine
-	go t.processAudioRealtime()
+	t.bufferMutex.Unlock()
 
-	fmt.Println("✓ Transcription processing started")
+	go t.processAudioRealtime()
 	return nil
 }
 
-// StopProcessing stops real-time audio processing and returns final transcription
+// StopProcessing halts the real-time loop, waits for in-flight transcription
+// goroutines to finish, transcribes any remaining tail audio, and returns the
+// complete session transcript. It is idempotent when called while not active.
 func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 	t.bufferMutex.Lock()
 
 	if !t.isProcessing {
 		t.bufferMutex.Unlock()
-		return nil, fmt.Errorf("not currently processing")
+		return &domain.TranscriptionResult{
+			Language:  "en",
+			IsPartial: false,
+			Timestamp: time.Now().Format(time.RFC3339),
+		}, nil
 	}
 
-	fmt.Println("\n=== Stopping Transcription Processing ===")
-
-	// Signal to stop processing
 	close(t.stopProcessing)
 	t.isProcessing = false
 
-	// Copy the full buffer for safety
 	fullBuffer := make([]float32, len(t.audioBuffer))
 	copy(fullBuffer, t.audioBuffer)
-
-	totalSamples := len(fullBuffer)
-	remainingSamples := totalSamples - t.processedSamples
-
-	fmt.Printf("Total audio: %.2f seconds (%d samples)\n", float64(totalSamples)/float64(transcriptionSampleRate), totalSamples)
-	fmt.Printf("Already processed: %.2f seconds (%d samples)\n", float64(t.processedSamples)/float64(transcriptionSampleRate), t.processedSamples)
-	fmt.Printf("Remaining: %.2f seconds (%d samples)\n", float64(remainingSamples)/float64(transcriptionSampleRate), remainingSamples)
+	processedAtStop := t.processedSamples
 
 	t.bufferMutex.Unlock()
 
-	// Wait for any ongoing processing to complete
-	fmt.Println("Waiting for ongoing processing to complete...")
+	// Wait for the last in-flight chunk goroutine to finish writing to
+	// accumulatedTranscript before we read it.
 	t.processingWg.Wait()
-	fmt.Println("All ongoing processing complete")
 
-	var finalText string
+	t.bufferMutex.Lock()
+	base := t.accumulatedTranscript
+	t.bufferMutex.Unlock()
 
-	// Process remaining audio even if less than 1 second
-	if remainingSamples > transcriptionSampleRate/2 { // At least 0.5 seconds remaining
-		fmt.Printf("Processing final chunk of %d samples...\n", remainingSamples)
-		finalChunk := make([]float32, remainingSamples)
-		copy(finalChunk, fullBuffer[t.processedSamples:])
+	// Transcribe the tail — audio recorded after the last full chunk boundary.
+	remainingSamples := len(fullBuffer) - processedAtStop
+	if remainingSamples > transcriptionSampleRate/2 {
+		tailChunk := make([]float32, remainingSamples)
+		copy(tailChunk, fullBuffer[processedAtStop:])
 
-		text, err := t.TranscribeThreadSafe(finalChunk)
+		tailText, err := t.TranscribeThreadSafe(tailChunk)
 		if err != nil {
-			fmt.Printf("Final transcription error: %v\n", err)
+			fmt.Printf("[stt] tail transcription error: %v\n", err)
 		} else {
-			text = cleanTranscription(text)
-			if text != "" {
-				finalText = text
-				fmt.Printf("Final chunk transcribed: '%s'\n", text)
-			} else {
-				fmt.Println("Final chunk: no text (silence)")
+			tailText = cleanTranscription(tailText)
+			if tailText != "" {
+				if base != "" {
+					base = base + " " + tailText
+				} else {
+					base = tailText
+				}
 			}
 		}
-	} else {
-		fmt.Println("No significant audio remaining, skipping final chunk")
 	}
 
-	// If nothing was ever transcribed, process the whole recording
-	if t.processedSamples == 0 && totalSamples > transcriptionSampleRate {
-		fmt.Println("WARNING: No chunks were processed!")
-		fmt.Println("Processing entire audio as single chunk...")
-
+	// If nothing was transcribed during the whole session (no chunks fired and
+	// the tail was too short), fall back to the full buffer.
+	if base == "" && processedAtStop == 0 && len(fullBuffer) > transcriptionSampleRate {
 		text, err := t.TranscribeThreadSafe(fullBuffer)
 		if err != nil {
-			fmt.Printf("Full transcription error: %v\n", err)
+			fmt.Printf("[stt] full-buffer transcription error: %v\n", err)
 		} else {
-			text = cleanTranscription(text)
-			if text != "" {
-				finalText = text
-				fmt.Printf("Full audio transcribed: '%s'\n", text)
-			}
+			base = cleanTranscription(text)
 		}
 	}
 
-	fmt.Println("✓ Transcription processing stopped")
-
 	return &domain.TranscriptionResult{
-		Text:      finalText,
+		Text:      base,
 		Language:  "en",
 		IsPartial: false,
 		Timestamp: time.Now().Format(time.RFC3339),
 	}, nil
 }
 
-// ProcessChunk adds an audio chunk to the buffer for processing
+// ProcessChunk appends an incoming audio chunk to the internal buffer. It is a
+// no-op when processing has not been started.
 func (t *Transcriber) ProcessChunk(chunk domain.AudioChunk) {
 	t.bufferMutex.Lock()
 	defer t.bufferMutex.Unlock()
@@ -192,19 +192,24 @@ func (t *Transcriber) ProcessChunk(chunk domain.AudioChunk) {
 	if !t.isProcessing {
 		return
 	}
-
-	// Append audio data to buffer
 	t.audioBuffer = append(t.audioBuffer, chunk.Data...)
 }
 
-// processAudioRealtime processes audio chunks in real-time
+// processAudioRealtime fires a transcription pass every ChunkDurationSecs
+// seconds until stopProcessing is closed.
 func (t *Transcriber) processAudioRealtime() {
+	// Capture the channel once so reads never race with StartProcessing
+	// overwriting t.stopProcessing when resetting for a new session.
+	t.bufferMutex.Lock()
+	stop := t.stopProcessing
+	t.bufferMutex.Unlock()
+
 	ticker := time.NewTicker(time.Duration(t.config.ChunkDurationSecs) * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-t.stopProcessing:
+		case <-stop:
 			return
 		case <-ticker.C:
 			t.processNextChunk()
@@ -212,19 +217,22 @@ func (t *Transcriber) processAudioRealtime() {
 	}
 }
 
-// processNextChunk transcribes the next audio chunk
+// processNextChunk extracts the next unseen chunk from the audio buffer,
+// transcribes it, appends the result to accumulatedTranscript, and emits the
+// full running transcript as a partial event. It is a no-op when fewer than
+// samplesPerChunk new samples are available.
+//
+// Chunk goroutines are serialised through modelMutex so that transcript order
+// is always preserved regardless of scheduling.
 func (t *Transcriber) processNextChunk() {
 	t.bufferMutex.Lock()
 
-	// Check if we have enough samples for a chunk
 	totalSamples := len(t.audioBuffer)
 	if totalSamples < t.processedSamples+t.samplesPerChunk {
 		t.bufferMutex.Unlock()
-		fmt.Println("[Real-time] Not enough samples yet for next chunk")
 		return
 	}
 
-	// Extract chunk to process
 	chunkStart := t.processedSamples
 	chunkEnd := chunkStart + t.samplesPerChunk
 	if chunkEnd > totalSamples {
@@ -233,114 +241,98 @@ func (t *Transcriber) processNextChunk() {
 
 	chunk := make([]float32, chunkEnd-chunkStart)
 	copy(chunk, t.audioBuffer[chunkStart:chunkEnd])
-
 	t.processedSamples = chunkEnd
 
 	t.bufferMutex.Unlock()
 
-	// Increment wait group for this processing task
 	t.processingWg.Add(1)
-
-	// Process this chunk in background
-	go func(audioChunk []float32, start, end int) {
+	go func(audioChunk []float32) {
 		defer t.processingWg.Done()
 
-		fmt.Printf("\n[Real-time] Processing chunk: %.1f-%.1f seconds (samples: %d-%d)\n",
-			float64(start)/float64(transcriptionSampleRate),
-			float64(end)/float64(transcriptionSampleRate),
-			start, end)
-
+		// modelMutex serialises both inference and transcript accumulation so
+		// chunks are always appended in the order they were recorded.
 		text, err := t.TranscribeThreadSafe(audioChunk)
 		if err != nil {
-			fmt.Printf("[Real-time] Transcription error: %v\n", err)
+			fmt.Printf("[stt] chunk transcription error: %v\n", err)
 			return
 		}
 
-		// Clean and check if we have meaningful text
 		text = cleanTranscription(text)
-
-		if text != "" {
-			fmt.Printf("[Real-time] Transcribed: '%s'\n", text)
-
-			// Emit real-time transcription event to frontend
-			if t.ctx != nil {
-				result := domain.TranscriptionResult{
-					Text:      text,
-					Language:  "en",
-					IsPartial: true,
-					Timestamp: time.Now().Format(time.RFC3339),
-				}
-
-				fmt.Printf("[Real-time] Emitting event: transcription:partial with text: '%s'\n", result.Text)
-				runtime.EventsEmit(t.ctx, "transcription:partial", result)
-				fmt.Println("[Real-time] Event emitted successfully")
-			} else {
-				fmt.Println("[Real-time] WARNING: Context is nil, cannot emit event!")
-			}
-		} else {
-			fmt.Println("[Real-time] No text transcribed (silence or noise)")
+		if text == "" {
+			return
 		}
-	}(chunk, chunkStart, chunkEnd)
+
+		t.bufferMutex.Lock()
+		if t.accumulatedTranscript != "" {
+			t.accumulatedTranscript += " " + text
+		} else {
+			t.accumulatedTranscript = text
+		}
+		fullTranscript := t.accumulatedTranscript
+		t.bufferMutex.Unlock()
+
+		if t.ctx != nil {
+			result := domain.TranscriptionResult{
+				Text:      fullTranscript,
+				Language:  "en",
+				IsPartial: true,
+				Timestamp: time.Now().Format(time.RFC3339),
+			}
+			runtime.EventsEmit(t.ctx, "transcription:partial", result)
+		}
+	}(chunk)
 }
 
-// TranscribeThreadSafe is a thread-safe wrapper for transcription
+// TranscribeThreadSafe serialises access to the Whisper model, which is not
+// safe for concurrent use, and delegates to transcribe.
 func (t *Transcriber) TranscribeThreadSafe(audioData []float32) (string, error) {
-	// CRITICAL: Lock the model mutex to prevent concurrent access
 	t.modelMutex.Lock()
 	defer t.modelMutex.Unlock()
-
 	return t.transcribe(audioData)
 }
 
-// transcribe processes audio data and returns text (MUST be called with modelMutex locked)
+// transcribe runs Whisper inference on audioData. Callers must hold modelMutex.
 func (t *Transcriber) transcribe(audioData []float32) (string, error) {
 	if t.model == nil {
 		return "", fmt.Errorf("model not initialized")
 	}
 
-	// Create context for transcription
-	context, err := t.model.NewContext()
+	ctx, err := t.model.NewContext()
 	if err != nil {
-		return "", fmt.Errorf("failed to create context: %w", err)
+		return "", fmt.Errorf("failed to create whisper context: %w", err)
 	}
 
-	// Set context parameters
-	context.SetLanguage("en")
-	context.SetTranslate(false)
-	context.SetThreads(2) // Reduced from 4 to avoid overloading
+	ctx.SetLanguage("en")
+	ctx.SetTranslate(false)
+	ctx.SetThreads(2)
 
-	// Process the audio
-	if err := context.Process(audioData, nil, nil, nil); err != nil {
+	if err := ctx.Process(audioData, nil, nil, nil); err != nil {
 		return "", fmt.Errorf("failed to process audio: %w", err)
 	}
 
-	// Extract text from all segments
-	text := ""
+	var sb strings.Builder
 	for {
-		segment, err := context.NextSegment()
+		segment, err := ctx.NextSegment()
 		if err != nil {
 			break
 		}
-		text += segment.Text
+		sb.WriteString(segment.Text)
 	}
 
-	return text, nil
+	return sb.String(), nil
 }
 
-// IsProcessing returns whether transcription is in progress
+// IsProcessing returns whether the real-time transcription loop is active.
 func (t *Transcriber) IsProcessing() bool {
 	t.bufferMutex.Lock()
 	defer t.bufferMutex.Unlock()
 	return t.isProcessing
 }
 
-// Cleanup releases resources
+// Cleanup waits for in-flight transcription goroutines to finish and closes
+// the Whisper model.
 func (t *Transcriber) Cleanup() {
-	fmt.Println("Cleaning up transcriber...")
-
-	// Wait for all processing to complete
 	t.processingWg.Wait()
-
 	if t.model != nil {
 		t.model.Close()
 	}
