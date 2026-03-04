@@ -17,7 +17,6 @@ import (
 type STTManager struct {
 	basePath       string
 	ctx            context.Context
-	sttService     STTService
 	transcriber    *whisper.Transcriber
 	audioManager   *AudioManager
 	downloadScript []byte
@@ -64,15 +63,6 @@ func (m *STTManager) Initialize(config *domain.STTConfig) error {
 		// Success
 		transcriber.SetContext(m.ctx)
 		m.transcriber = transcriber
-
-		// Also create legacy service for backward compatibility
-		sttService, err := whisper.NewService(m.basePath, config)
-		if err == nil {
-			if err := sttService.Initialize(); err == nil {
-				sttService.SetContext(m.ctx)
-				m.sttService = sttService
-			}
-		}
 
 		fmt.Println("STT service initialized successfully.")
 		if m.ctx != nil {
@@ -151,19 +141,19 @@ func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
 
 	// After a successful download, re-initialize the STT service
 	fmt.Println("Re-initializing STT service after model download...")
-	sttService, err := whisper.NewService(m.basePath, config)
+	transcriber, err := whisper.NewTranscriber(m.basePath, config)
 	if err != nil {
 		fmt.Printf("Warning: STT service initialization failed after download: %v\n", err)
 		return err
 	}
 
-	if err := sttService.Initialize(); err != nil {
+	if err := transcriber.Initialize(); err != nil {
 		fmt.Printf("Warning: Failed to load STT model after download: %v\n", err)
 		return err
 	}
 
-	sttService.SetContext(m.ctx)
-	m.sttService = sttService
+	transcriber.SetContext(m.ctx)
+	m.transcriber = transcriber
 	fmt.Println("STT service initialized successfully after download.")
 
 	// Notify the frontend that the service is now ready
@@ -175,8 +165,8 @@ func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
 }
 
 // GetService returns the underlying STT service
-func (m *STTManager) GetService() STTService {
-	return m.sttService
+func (m *STTManager) GetService() *whisper.Transcriber {
+	return m.transcriber
 }
 
 // GetTranscriber returns the transcriber
@@ -186,7 +176,7 @@ func (m *STTManager) GetTranscriber() *whisper.Transcriber {
 
 // IsAvailable returns whether the STT service is available
 func (m *STTManager) IsAvailable() bool {
-	return m.transcriber != nil || m.sttService != nil
+	return m.transcriber != nil
 }
 
 // SetAudioSource sets the audio source for recording
@@ -217,11 +207,7 @@ func (m *STTManager) GetAvailableAudioSources() []domain.AudioSource {
 // StartRecordingWithSource starts recording with the specified audio source
 func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
 	if m.audioManager == nil {
-		// Fall back to legacy service
-		if m.sttService != nil {
-			return m.sttService.StartRecording()
-		}
-		return fmt.Errorf("no audio manager or STT service available")
+		return fmt.Errorf("audio manager not set")
 	}
 
 	if m.transcriber == nil {
@@ -252,7 +238,9 @@ func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
 		m.transcriber.ProcessChunk(chunk)
 	})
 	if err != nil {
-		m.transcriber.StopProcessing()
+		// Cancel without emitting a transcription:done event — recording never
+		// actually started so the frontend should not receive a result.
+		m.transcriber.CancelProcessing()
 		return fmt.Errorf("failed to start audio capture: %w", err)
 	}
 
@@ -263,11 +251,7 @@ func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
 // StopRecordingWithTranscription stops recording and returns the transcription
 func (m *STTManager) StopRecordingWithTranscription() (*domain.TranscriptionResult, error) {
 	if m.audioManager == nil {
-		// Fall back to legacy service
-		if m.sttService != nil {
-			return m.sttService.StopRecording()
-		}
-		return nil, fmt.Errorf("no audio manager or STT service available")
+		return nil, fmt.Errorf("audio manager not set")
 	}
 
 	// Stop audio capture (best-effort — log but don't fail)
@@ -287,8 +271,5 @@ func (m *STTManager) StopRecordingWithTranscription() (*domain.TranscriptionResu
 func (m *STTManager) Cleanup() {
 	if m.transcriber != nil {
 		m.transcriber.Cleanup()
-	}
-	if m.sttService != nil {
-		m.sttService.Cleanup()
 	}
 }

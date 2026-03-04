@@ -123,20 +123,16 @@ export async function startRecording(): Promise<void> {
 
 export async function stopRecording(): Promise<void> {
   try {
-    const result = await AudioAPI.stopRecording()
+    // Stop recording - returns immediately, transcription happens async
+    await AudioAPI.stopRecording()
+    
+    // Update UI immediately - no more lag!
     stopTimer()
     state.setState({ isRecording: false, partialTranscript: '' })
     renderRecordingBar()
-
-    if (result?.text) {
-      // Replace the live-preview text with the final confirmed transcript.
-      setLiveTranscript(result.text)
-      state.showNotification('Transcription complete', 'success')
-    } else {
-      // Nothing transcribed — restore pre-recording content as-is.
-      const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-      if (textarea) textarea.value = preRecordingContent
-    }
+    
+    // Clear the partial transcript display but keep preRecordingContent
+    // The actual final text will come via transcription:done event
   } catch (err) {
     console.error('Failed to stop recording:', err)
     stopTimer()
@@ -162,6 +158,18 @@ export function initRecording(): void {
     if (result.isPartial && state.get('isRecording')) {
       state.setState({ partialTranscript: result.text })
       setLiveTranscript(result.text)
+    }
+  })
+
+  // Handle final transcription result from async background processing
+  AppEvents.onTranscriptionDone((result) => {
+    if (result.text) {
+      setLiveTranscript(result.text)
+      state.showNotification('Transcription complete', 'success')
+    } else {
+      // Nothing transcribed — restore pre-recording content as-is.
+      const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+      if (textarea) textarea.value = preRecordingContent
     }
   })
 

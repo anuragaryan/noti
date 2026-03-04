@@ -107,8 +107,8 @@ func (m *ServerManager) Start(modelPath string) error {
 		"-m", modelPath,
 		"--port", fmt.Sprintf("%d", m.port),
 		"--host", "127.0.0.1",
-		"-c", "2048", // context size
-		"-n", "512", // max tokens to predict
+		"-c", "16384", // context size
+		"-n", "2048", // max tokens to predict
 		"--log-disable", // disable logging to reduce noise
 	}
 

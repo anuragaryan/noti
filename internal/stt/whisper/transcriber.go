@@ -16,9 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const (
-	transcriptionSampleRate = 16000
-)
+const sampleRate = 16000
 
 // Transcriber performs real-time speech-to-text transcription. Audio data is
 // fed via ProcessChunk; it is sliced into fixed-size windows and transcribed
@@ -42,7 +40,16 @@ type Transcriber struct {
 	// processingWg tracks in-flight chunk goroutines. Chunk goroutines must
 	// run sequentially (serialised by modelMutex) so transcript order is
 	// preserved; processingWg lets StopProcessing wait for the last one.
-	processingWg   sync.WaitGroup
+	processingWg sync.WaitGroup
+	// backgroundWg tracks the single background goroutine spawned by
+	// StopProcessing for final tail/fallback transcription. Tests can call
+	// backgroundWg.Wait() instead of time.Sleep to avoid flakiness.
+	backgroundWg sync.WaitGroup
+	// lastFinalText holds the text computed by the most recent background
+	// goroutine. It is set just before the "transcription:done" event is
+	// emitted, so tests that cannot intercept Wails events can read it after
+	// backgroundWg.Wait().
+	lastFinalText  string
 	isProcessing   bool
 	stopProcessing chan struct{}
 }
@@ -61,7 +68,7 @@ func NewTranscriber(basePath string, config *domain.STTConfig) (*Transcriber, er
 		config:          config,
 		modelPath:       modelPath,
 		audioBuffer:     []float32{},
-		samplesPerChunk: transcriptionSampleRate * config.ChunkDurationSecs,
+		samplesPerChunk: sampleRate * config.ChunkDurationSecs,
 	}, nil
 }
 
@@ -111,9 +118,9 @@ func (t *Transcriber) StartProcessing() error {
 	return nil
 }
 
-// StopProcessing halts the real-time loop, waits for in-flight transcription
-// goroutines to finish, transcribes any remaining tail audio, and returns the
-// complete session transcript. It is idempotent when called while not active.
+// StopProcessing halts the real-time loop immediately and returns without waiting
+// for final transcription. The transcription runs asynchronously in the background
+// and emits a "transcription:done" event when complete.
 func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 	t.bufferMutex.Lock()
 
@@ -135,48 +142,69 @@ func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 
 	t.bufferMutex.Unlock()
 
-	// Wait for the last in-flight chunk goroutine to finish writing to
-	// accumulatedTranscript before we read it.
-	t.processingWg.Wait()
+	// Spawn background goroutine for final transcription; return immediately.
+	t.backgroundWg.Add(1)
+	go func(buffer []float32, processed int) {
+		defer t.backgroundWg.Done()
+		// Wait for the last in-flight chunk goroutine to finish
+		t.processingWg.Wait()
 
-	t.bufferMutex.Lock()
-	base := t.accumulatedTranscript
-	t.bufferMutex.Unlock()
+		t.bufferMutex.Lock()
+		base := t.accumulatedTranscript
+		t.bufferMutex.Unlock()
 
-	// Transcribe the tail — audio recorded after the last full chunk boundary.
-	remainingSamples := len(fullBuffer) - processedAtStop
-	if remainingSamples > transcriptionSampleRate/2 {
-		tailChunk := make([]float32, remainingSamples)
-		copy(tailChunk, fullBuffer[processedAtStop:])
+		// Transcribe the tail — audio recorded after the last full chunk boundary.
+		remain := len(buffer) - processed
+		if remain > sampleRate/2 {
+			tailChunk := make([]float32, remain)
+			copy(tailChunk, buffer[processed:])
 
-		tailText, err := t.TranscribeThreadSafe(tailChunk)
-		if err != nil {
-			fmt.Printf("[stt] tail transcription error: %v\n", err)
-		} else {
-			tailText = cleanTranscription(tailText)
-			if tailText != "" {
-				if base != "" {
-					base = base + " " + tailText
-				} else {
-					base = tailText
+			tailText, err := t.TranscribeThreadSafe(tailChunk)
+			if err != nil {
+				fmt.Printf("[stt] tail transcription error: %v\n", err)
+			} else {
+				tailText = cleanTranscription(tailText)
+				if tailText != "" {
+					if base != "" {
+						base = base + " " + tailText
+					} else {
+						base = tailText
+					}
 				}
 			}
 		}
-	}
 
-	// If nothing was transcribed during the whole session (no chunks fired and
-	// the tail was too short), fall back to the full buffer.
-	if base == "" && processedAtStop == 0 && len(fullBuffer) > transcriptionSampleRate {
-		text, err := t.TranscribeThreadSafe(fullBuffer)
-		if err != nil {
-			fmt.Printf("[stt] full-buffer transcription error: %v\n", err)
-		} else {
-			base = cleanTranscription(text)
+		// Fallback: if nothing was transcribed during the whole session
+		if base == "" && processed == 0 && len(buffer) > sampleRate {
+			text, err := t.TranscribeThreadSafe(buffer)
+			if err != nil {
+				fmt.Printf("[stt] full-buffer transcription error: %v\n", err)
+			} else {
+				base = cleanTranscription(text)
+			}
 		}
-	}
+
+		// Record the final text so tests (which have no Wails context) can
+		// inspect it after backgroundWg.Wait().
+		t.bufferMutex.Lock()
+		t.lastFinalText = base
+		t.bufferMutex.Unlock()
+
+		// Emit final transcription event to the frontend.
+		if t.ctx != nil {
+			evt := domain.TranscriptionResult{
+				Text:      base,
+				Language:  "en",
+				IsPartial: false,
+				Timestamp: time.Now().Format(time.RFC3339),
+			}
+			runtime.EventsEmit(t.ctx, "transcription:done", evt)
+		} else {
+			fmt.Printf("[stt] transcription:done skipped: context not set (text=%q)\n", base)
+		}
+	}(fullBuffer, processedAtStop)
 
 	return &domain.TranscriptionResult{
-		Text:      base,
 		Language:  "en",
 		IsPartial: false,
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -322,6 +350,26 @@ func (t *Transcriber) transcribe(audioData []float32) (string, error) {
 	return sb.String(), nil
 }
 
+// cleanTranscription removes known Whisper output artifacts (e.g. silence
+// tokens) and trims surrounding whitespace.
+func cleanTranscription(text string) string {
+	text = strings.ReplaceAll(text, "[BLANK_AUDIO]", "")
+	return strings.TrimSpace(text)
+}
+
+// CancelProcessing halts the real-time loop without emitting a
+// "transcription:done" event. Use this when tearing down a session that should
+// not produce a final result (e.g. when audio capture fails to start).
+func (t *Transcriber) CancelProcessing() {
+	t.bufferMutex.Lock()
+	if t.isProcessing {
+		close(t.stopProcessing)
+		t.isProcessing = false
+	}
+	t.bufferMutex.Unlock()
+	t.processingWg.Wait()
+}
+
 // IsProcessing returns whether the real-time transcription loop is active.
 func (t *Transcriber) IsProcessing() bool {
 	t.bufferMutex.Lock()
@@ -333,6 +381,7 @@ func (t *Transcriber) IsProcessing() bool {
 // the Whisper model.
 func (t *Transcriber) Cleanup() {
 	t.processingWg.Wait()
+	t.backgroundWg.Wait()
 	if t.model != nil {
 		t.model.Close()
 	}

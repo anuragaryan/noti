@@ -8,14 +8,29 @@ GGML_METAL_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src/ggml-metal"
 GGML_BLAS_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src/ggml-blas"
 
 export CGO_LDFLAGS="-L${WHISPER_LIB_DIR} -L${GGML_LIB_DIR} -L${GGML_METAL_LIB_DIR} -L${GGML_BLAS_LIB_DIR} \
-  -lwhisper -lggml -lggml-metal -lggml-blas -lportaudio \
+  -lwhisper -lggml -lggml-metal -lggml-blas \
   -framework Accelerate -framework Foundation -framework Metal"
 
 export CGO_CFLAGS="-I${WHISPER_PATH}/include -I${WHISPER_PATH}/ggml/include"
 # ─────────────────────────────────────────────────────────────────────────────
 
-PACKAGE="${1:-./...}"
+NO_CACHE=""
+PACKAGE="./..."
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --no-cache) NO_CACHE="-count=1"; shift ;;
+        -h|--help)
+            echo "Usage: ./test.sh [OPTIONS] [PACKAGE]"
+            echo "Options:"
+            echo "  --no-cache    Run tests without cache (adds -count=1)"
+            echo "  -h, --help    Show this help message"
+            exit 0
+            ;;
+        *) PACKAGE="$1"; shift ;;
+    esac
+done
 
 echo "🧪 Running tests: $PACKAGE"
 echo "=========================="
-go test -v -race "$PACKAGE"
+go test -v -race $NO_CACHE "$PACKAGE"

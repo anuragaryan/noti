@@ -44,6 +44,10 @@ export const AppEvents = {
     on<TranscriptionResult>('transcription:partial', cb)
   },
 
+  onTranscriptionDone(cb: (result: TranscriptionResult) => void): void {
+    on<TranscriptionResult>('transcription:done', cb)
+  },
+
   // ─── Model Downloads ─────────────────────────────────────────────────────
   onDownloadStart(cb: (payload: DownloadPayload) => void): void {
     on<DownloadPayload>('download:start', cb)

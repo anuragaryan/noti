@@ -12,6 +12,94 @@ import (
 	gowhisper "github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 )
 
+// ── Mock types ────────────────────────────────────────────────────────────────
+
+// mockModel implements whisper.Model for testing.
+type mockModel struct {
+	newContextFn func() (gowhisper.Context, error)
+	closed       bool
+}
+
+func (m *mockModel) NewContext() (gowhisper.Context, error) {
+	if m.newContextFn != nil {
+		return m.newContextFn()
+	}
+	return &mockContext{}, nil
+}
+
+func (m *mockModel) Close() error {
+	m.closed = true
+	return nil
+}
+func (m *mockModel) IsMultilingual() bool { return false }
+func (m *mockModel) Language() string     { return "en" }
+func (m *mockModel) Languages() []string  { return []string{"en"} }
+
+// mockContext implements whisper.Context for testing.
+type mockContext struct {
+	segments []gowhisper.Segment
+	idx      int
+}
+
+func (c *mockContext) SetLanguage(lang string) error { return nil }
+func (c *mockContext) SetTranslate(translate bool)   {}
+func (c *mockContext) SetThreads(threads uint)       {}
+func (c *mockContext) Process(data []float32, encCb gowhisper.EncoderBeginCallback, cb gowhisper.SegmentCallback, progressCb gowhisper.ProgressCallback) error {
+	return nil
+}
+func (c *mockContext) NextSegment() (gowhisper.Segment, error) {
+	if c.idx >= len(c.segments) {
+		return gowhisper.Segment{}, os.ErrNotExist // any error stops iteration
+	}
+	seg := c.segments[c.idx]
+	c.idx++
+	return seg, nil
+}
+func (c *mockContext) ResetTimings()                       {}
+func (c *mockContext) PrintTimings()                       {}
+func (c *mockContext) Free()                               {}
+func (c *mockContext) IsMultilingual() bool                { return false }
+func (c *mockContext) Language() string                    { return "en" }
+func (c *mockContext) DetectedLanguage() string            { return "en" }
+func (c *mockContext) SetOffset(time.Duration)             {}
+func (c *mockContext) SetDuration(time.Duration)           {}
+func (c *mockContext) SetSplitOnWord(bool)                 {}
+func (c *mockContext) SetTokenThreshold(float32)           {}
+func (c *mockContext) SetTokenSumThreshold(float32)        {}
+func (c *mockContext) SetMaxSegmentLength(uint)            {}
+func (c *mockContext) SetTokenTimestamps(bool)             {}
+func (c *mockContext) SetMaxTokensPerSegment(uint)         {}
+func (c *mockContext) SetAudioCtx(uint)                    {}
+func (c *mockContext) SetMaxContext(n int)                 {}
+func (c *mockContext) SetBeamSize(n int)                   {}
+func (c *mockContext) SetEntropyThold(t float32)           {}
+func (c *mockContext) SetInitialPrompt(prompt string)      {}
+func (c *mockContext) SetTemperature(t float32)            {}
+func (c *mockContext) SetTemperatureFallback(t float32)    {}
+func (c *mockContext) IsBEG(gowhisper.Token) bool          { return false }
+func (c *mockContext) IsSOT(gowhisper.Token) bool          { return false }
+func (c *mockContext) IsEOT(gowhisper.Token) bool          { return false }
+func (c *mockContext) IsPREV(gowhisper.Token) bool         { return false }
+func (c *mockContext) IsSOLM(gowhisper.Token) bool         { return false }
+func (c *mockContext) IsNOT(gowhisper.Token) bool          { return false }
+func (c *mockContext) IsLANG(gowhisper.Token, string) bool { return false }
+func (c *mockContext) IsText(gowhisper.Token) bool         { return false }
+func (c *mockContext) SystemInfo() string                  { return "" }
+
+// ── Test helpers ──────────────────────────────────────────────────────────────
+
+// modelWithSegments returns a mockModel whose NewContext always yields the
+// given text segments.
+func modelWithSegments(texts ...string) *mockModel {
+	segs := make([]gowhisper.Segment, len(texts))
+	for i, t := range texts {
+		segs[i] = gowhisper.Segment{Text: t}
+	}
+	return &mockModel{newContextFn: func() (gowhisper.Context, error) {
+		return &mockContext{segments: segs}, nil
+	}}
+}
+
 // buildTranscriber returns a Transcriber backed by m, bypassing the
 // constructor to avoid needing a real model file.
 func buildTranscriber(t *testing.T, m *mockModel) *Transcriber {
@@ -20,12 +108,68 @@ func buildTranscriber(t *testing.T, m *mockModel) *Transcriber {
 	tr := &Transcriber{
 		config:          cfg,
 		audioBuffer:     []float32{},
-		samplesPerChunk: transcriptionSampleRate * cfg.ChunkDurationSecs,
+		samplesPerChunk: sampleRate * cfg.ChunkDurationSecs,
 	}
 	if m != nil {
 		tr.model = m
 	}
 	return tr
+}
+
+// startProcessingTranscriber returns a Transcriber that has isProcessing=true
+// and a live stopProcessing channel, simulating a mid-session state without
+// launching the real-time goroutine.
+func startProcessingTranscriber(t *testing.T, m *mockModel) *Transcriber {
+	t.Helper()
+	tr := buildTranscriber(t, m)
+	tr.isProcessing = true
+	tr.stopProcessing = make(chan struct{})
+	return tr
+}
+
+// stopAndWait calls StopProcessing and waits for the background goroutine to
+// finish, then returns lastFinalText under the buffer lock.
+func stopAndWait(t *testing.T, tr *Transcriber) (string, error) {
+	t.Helper()
+	_, err := tr.StopProcessing()
+	if err != nil {
+		return "", err
+	}
+	tr.backgroundWg.Wait()
+	tr.bufferMutex.Lock()
+	got := tr.lastFinalText
+	tr.bufferMutex.Unlock()
+	return got, nil
+}
+
+// cleanupStartProcessing registers a t.Cleanup that tears down an active
+// processing session, preventing goroutine leaks in StartProcessing tests.
+func cleanupStartProcessing(t *testing.T, tr *Transcriber) {
+	t.Helper()
+	t.Cleanup(func() {
+		tr.bufferMutex.Lock()
+		if tr.isProcessing {
+			close(tr.stopProcessing)
+			tr.isProcessing = false
+		}
+		tr.bufferMutex.Unlock()
+		tr.processingWg.Wait()
+	})
+}
+
+// writeDummyModel creates the models directory under base and writes a dummy
+// model file for modelName, returning the full path.
+func writeDummyModel(t *testing.T, base, modelName string) string {
+	t.Helper()
+	dir := filepath.Join(base, "models")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "ggml-"+modelName+".bin")
+	if err := os.WriteFile(path, []byte("dummy"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // ── NewTranscriber ────────────────────────────────────────────────────────────
@@ -40,13 +184,7 @@ func TestNewTranscriber_ModelNotFound(t *testing.T) {
 
 func TestNewTranscriber_Success(t *testing.T) {
 	base := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(base, "models"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	modelPath := filepath.Join(base, "models", "ggml-tiny.bin")
-	if err := os.WriteFile(modelPath, []byte("dummy"), 0644); err != nil {
-		t.Fatal(err)
-	}
+	writeDummyModel(t, base, "tiny")
 
 	cfg := &domain.STTConfig{ModelName: "tiny", ChunkDurationSecs: 3}
 	tr, err := NewTranscriber(base, cfg)
@@ -56,8 +194,8 @@ func TestNewTranscriber_Success(t *testing.T) {
 	if tr == nil {
 		t.Fatal("expected non-nil Transcriber")
 	}
-	if tr.samplesPerChunk != transcriptionSampleRate*3 {
-		t.Errorf("samplesPerChunk = %d, want %d", tr.samplesPerChunk, transcriptionSampleRate*3)
+	if tr.samplesPerChunk != sampleRate*3 {
+		t.Errorf("samplesPerChunk = %d, want %d", tr.samplesPerChunk, sampleRate*3)
 	}
 }
 
@@ -82,9 +220,7 @@ func TestProcessChunk_DropsWhenNotProcessing(t *testing.T) {
 }
 
 func TestProcessChunk_AppendsWhenProcessing(t *testing.T) {
-	tr := buildTranscriber(t, &mockModel{})
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
+	tr := startProcessingTranscriber(t, &mockModel{})
 
 	tr.ProcessChunk(domain.AudioChunk{Data: []float32{0.1, 0.2, 0.3}})
 
@@ -94,9 +230,7 @@ func TestProcessChunk_AppendsWhenProcessing(t *testing.T) {
 }
 
 func TestProcessChunk_AppendsConcurrently(t *testing.T) {
-	tr := buildTranscriber(t, &mockModel{})
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
+	tr := startProcessingTranscriber(t, &mockModel{})
 
 	const goroutines = 20
 	const samplesEach = 50
@@ -124,7 +258,6 @@ func TestProcessChunk_AppendsConcurrently(t *testing.T) {
 
 func TestTranscriberTranscribe_ModelNil(t *testing.T) {
 	tr := buildTranscriber(t, nil)
-	tr.model = nil
 
 	_, err := tr.transcribe([]float32{0.1})
 	if err == nil {
@@ -133,12 +266,7 @@ func TestTranscriberTranscribe_ModelNil(t *testing.T) {
 }
 
 func TestTranscriberTranscribe_ConcatenatesSegments(t *testing.T) {
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{
-			{Text: "foo "},
-			{Text: "bar"},
-	}}, nil }}
-	tr := buildTranscriber(t, m)
+	tr := buildTranscriber(t, modelWithSegments("foo ", "bar"))
 
 	got, err := tr.transcribe(make([]float32, 100))
 	if err != nil {
@@ -150,10 +278,7 @@ func TestTranscriberTranscribe_ConcatenatesSegments(t *testing.T) {
 }
 
 func TestTranscribeThreadSafe_SerializesConcurrentAccess(t *testing.T) {
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{{Text: "ok"}}}, nil
-	}}
-	tr := buildTranscriber(t, m)
+	tr := buildTranscriber(t, modelWithSegments("ok"))
 
 	var wg sync.WaitGroup
 	for range 10 {
@@ -193,81 +318,61 @@ func TestStopProcessing_Idempotent(t *testing.T) {
 }
 
 func TestStopProcessing_ReturnsEmptyWhenBufferEmpty(t *testing.T) {
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{}, nil
-	}}
-	tr := buildTranscriber(t, m)
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
+	tr := startProcessingTranscriber(t, &mockModel{})
 
-	result, err := tr.StopProcessing()
+	got, err := stopAndWait(t, tr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Text != "" {
-		t.Errorf("Text = %q, want empty", result.Text)
+	if got != "" {
+		t.Errorf("lastFinalText = %q, want empty", got)
 	}
 }
 
 func TestStopProcessing_ProcessesTailBuffer(t *testing.T) {
 	// 1.8 s in buffer, 1 s already processed → 0.8 s tail (> 0.5 s threshold).
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{{Text: "tail"}}}, nil
-	}}
-	tr := buildTranscriber(t, m)
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
-	tr.audioBuffer = make([]float32, int(1.8*float64(transcriptionSampleRate)))
-	tr.processedSamples = transcriptionSampleRate
+	tr := startProcessingTranscriber(t, modelWithSegments("tail"))
+	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
+	tr.processedSamples = sampleRate
 
-	result, err := tr.StopProcessing()
+	got, err := stopAndWait(t, tr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Text != "tail" {
-		t.Errorf("Text = %q, want %q", result.Text, "tail")
+	if got != "tail" {
+		t.Errorf("lastFinalText = %q, want %q", got, "tail")
 	}
 }
 
 func TestStopProcessing_FallbackFullBuffer(t *testing.T) {
 	// Nothing processed yet and buffer > 1 s → full-buffer fallback.
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{{Text: "full"}}}, nil
-	}}
-	tr := buildTranscriber(t, m)
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
-	tr.audioBuffer = make([]float32, transcriptionSampleRate*2)
+	tr := startProcessingTranscriber(t, modelWithSegments("full"))
+	tr.audioBuffer = make([]float32, sampleRate*2)
 	tr.processedSamples = 0
 
-	result, err := tr.StopProcessing()
+	got, err := stopAndWait(t, tr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Text != "full" {
-		t.Errorf("Text = %q, want %q", result.Text, "full")
+	if got != "full" {
+		t.Errorf("lastFinalText = %q, want %q", got, "full")
 	}
 }
 
 func TestStopProcessing_ShortTailSkipped(t *testing.T) {
 	// Tail is exactly 0.5 s — not strictly greater — so it is skipped.
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{{Text: "should not appear"}}}, nil
-	}}
-	tr := buildTranscriber(t, m)
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
+	tr := startProcessingTranscriber(t, modelWithSegments("should not appear"))
 	// 1 s processed; total = 1.5 s → tail = 0.5 s (not > 0.5 s)
-	tr.audioBuffer = make([]float32, int(1.5*float64(transcriptionSampleRate)))
-	tr.processedSamples = transcriptionSampleRate
+	tr.audioBuffer = make([]float32, int(1.5*float64(sampleRate)))
+	tr.processedSamples = sampleRate
 
-	result, err := tr.StopProcessing()
+	got, err := stopAndWait(t, tr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// processedSamples != 0 so the full-buffer fallback is also skipped.
-	if result.Text != "" {
-		t.Errorf("Text = %q, want empty (tail too short)", result.Text)
+	if got != "" {
+		t.Errorf("lastFinalText = %q, want empty (tail too short)", got)
 	}
 }
 
@@ -279,15 +384,7 @@ func TestStartProcessing_SetsIsProcessing(t *testing.T) {
 	if err := tr.StartProcessing(); err != nil {
 		t.Fatalf("StartProcessing() error: %v", err)
 	}
-	t.Cleanup(func() {
-		tr.bufferMutex.Lock()
-		if tr.isProcessing {
-			close(tr.stopProcessing)
-			tr.isProcessing = false
-		}
-		tr.bufferMutex.Unlock()
-		tr.processingWg.Wait()
-	})
+	cleanupStartProcessing(t, tr)
 
 	if !tr.IsProcessing() {
 		t.Error("IsProcessing() should be true after StartProcessing()")
@@ -303,15 +400,7 @@ func TestStartProcessing_ResetsBuffer(t *testing.T) {
 	if err := tr.StartProcessing(); err != nil {
 		t.Fatalf("StartProcessing() error: %v", err)
 	}
-	t.Cleanup(func() {
-		tr.bufferMutex.Lock()
-		if tr.isProcessing {
-			close(tr.stopProcessing)
-			tr.isProcessing = false
-		}
-		tr.bufferMutex.Unlock()
-		tr.processingWg.Wait()
-	})
+	cleanupStartProcessing(t, tr)
 
 	tr.bufferMutex.Lock()
 	bufLen := len(tr.audioBuffer)
@@ -373,7 +462,6 @@ func TestTranscriberCleanup_ClosesModel(t *testing.T) {
 
 func TestTranscriberCleanup_NilModel(t *testing.T) {
 	tr := buildTranscriber(t, nil)
-	tr.model = nil
 	// Should not panic.
 	tr.Cleanup()
 }
@@ -395,8 +483,8 @@ func TestTranscriberSetContext(t *testing.T) {
 
 func TestTranscriberProcessNextChunk_SkipsWhenInsufficient(t *testing.T) {
 	tr := buildTranscriber(t, &mockModel{})
-	tr.audioBuffer = make([]float32, transcriptionSampleRate/2)
-	tr.samplesPerChunk = transcriptionSampleRate
+	tr.audioBuffer = make([]float32, sampleRate/2)
+	tr.samplesPerChunk = sampleRate
 
 	tr.processNextChunk()
 	tr.processingWg.Wait()
@@ -407,18 +495,15 @@ func TestTranscriberProcessNextChunk_SkipsWhenInsufficient(t *testing.T) {
 }
 
 func TestTranscriberProcessNextChunk_AdvancesPointer(t *testing.T) {
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{{Text: "chunk"}}}, nil
-	}}
-	tr := buildTranscriber(t, m)
-	tr.audioBuffer = make([]float32, transcriptionSampleRate*2)
-	tr.samplesPerChunk = transcriptionSampleRate
+	tr := buildTranscriber(t, modelWithSegments("chunk"))
+	tr.audioBuffer = make([]float32, sampleRate*2)
+	tr.samplesPerChunk = sampleRate
 
 	tr.processNextChunk()
 	tr.processingWg.Wait()
 
-	if tr.processedSamples != transcriptionSampleRate {
-		t.Errorf("processedSamples = %d, want %d", tr.processedSamples, transcriptionSampleRate)
+	if tr.processedSamples != sampleRate {
+		t.Errorf("processedSamples = %d, want %d", tr.processedSamples, sampleRate)
 	}
 }
 
@@ -437,8 +522,8 @@ func TestProcessNextChunk_AccumulatesTranscript(t *testing.T) {
 		return &mockContext{segments: []gowhisper.Segment{{Text: text}}}, nil
 	}}
 	tr := buildTranscriber(t, m)
-	tr.audioBuffer = make([]float32, transcriptionSampleRate*3)
-	tr.samplesPerChunk = transcriptionSampleRate
+	tr.audioBuffer = make([]float32, sampleRate*3)
+	tr.samplesPerChunk = sampleRate
 
 	tr.processNextChunk() // chunk 1 → "hello"
 	tr.processingWg.Wait()
@@ -462,16 +547,14 @@ func TestStopProcessing_ReturnsCumulativeText(t *testing.T) {
 		tailCalled = true
 		return &mockContext{segments: []gowhisper.Segment{{Text: "tail"}}}, nil
 	}}
-	tr := buildTranscriber(t, m)
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
+	tr := startProcessingTranscriber(t, m)
 
 	// Pre-populate as if one chunk was already transcribed.
 	tr.accumulatedTranscript = "first chunk"
-	tr.audioBuffer = make([]float32, int(1.8*float64(transcriptionSampleRate)))
-	tr.processedSamples = transcriptionSampleRate // 1 s processed, 0.8 s tail
+	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
+	tr.processedSamples = sampleRate // 1 s processed, 0.8 s tail
 
-	result, err := tr.StopProcessing()
+	got, err := stopAndWait(t, tr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -480,29 +563,24 @@ func TestStopProcessing_ReturnsCumulativeText(t *testing.T) {
 	}
 	// Final text should be accumulated + tail joined by a space.
 	want := "first chunk tail"
-	if result.Text != want {
-		t.Errorf("Text = %q, want %q", result.Text, want)
+	if got != want {
+		t.Errorf("lastFinalText = %q, want %q", got, want)
 	}
 }
 
 func TestStopProcessing_AccumulatedOnlyNoTail(t *testing.T) {
 	// Tail is too short to transcribe; result should be accumulated text only.
-	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		return &mockContext{segments: []gowhisper.Segment{{Text: "should not appear"}}}, nil
-	}}
-	tr := buildTranscriber(t, m)
-	tr.isProcessing = true
-	tr.stopProcessing = make(chan struct{})
+	tr := startProcessingTranscriber(t, modelWithSegments("should not appear"))
 	tr.accumulatedTranscript = "only this"
 	// Tail = 0.5 s exactly, which is not > 0.5 s so it is skipped.
-	tr.audioBuffer = make([]float32, int(1.5*float64(transcriptionSampleRate)))
-	tr.processedSamples = transcriptionSampleRate
+	tr.audioBuffer = make([]float32, int(1.5*float64(sampleRate)))
+	tr.processedSamples = sampleRate
 
-	result, err := tr.StopProcessing()
+	got, err := stopAndWait(t, tr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Text != "only this" {
-		t.Errorf("Text = %q, want %q", result.Text, "only this")
+	if got != "only this" {
+		t.Errorf("lastFinalText = %q, want %q", got, "only this")
 	}
 }
