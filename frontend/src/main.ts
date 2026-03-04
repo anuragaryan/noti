@@ -187,6 +187,8 @@ async function loadInitialData(): Promise<void> {
       folders,
       config,
       sttAvailable: Boolean(sttStatus.available),
+      // Sync recording source from config so the UI reflects the actual configured source
+      recordingSource: config?.audio?.defaultSource ?? 'microphone',
     })
 
     await loadPrompts()

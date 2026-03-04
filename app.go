@@ -116,6 +116,15 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Println("Audio capture features may be limited.")
 	}
 
+	// Apply audio source from config after audio manager is initialized
+	audioSource := domain.AudioSourceFromString(a.config.Audio.DefaultSource)
+	if err := a.audioManager.SetAudioSource(audioSource); err != nil {
+		fmt.Printf("Warning: Failed to set audio source from config: %v\n", err)
+	} else {
+		a.sttManager.SetAudioSource(audioSource)
+		fmt.Printf("Audio source set to: %s\n", a.config.Audio.DefaultSource)
+	}
+
 	// Initialize STT service with self-healing
 	a.sttManager.SetContext(ctx)
 	sttConfig := &domain.STTConfig{
