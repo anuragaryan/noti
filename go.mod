@@ -5,6 +5,7 @@ go 1.24.0
 toolchain go1.24.10
 
 require (
+	github.com/getsentry/sentry-go v0.43.0
 	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20251120123511-19ceec8eac98
 	github.com/google/uuid v1.6.0
 	github.com/gordonklaus/portaudio v0.0.0-20250206071425-98a94950218b
