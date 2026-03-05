@@ -1,6 +1,5 @@
 /**
  * Editor component — top bar, editor header, content area.
- * Injects into: #top-bar, #editor-header, #editor-area
  */
 
 import state from '../state'
@@ -9,8 +8,6 @@ import { NotesAPI, FoldersAPI } from '../api'
 import { renderMarkdownPreview } from '../utils/markdown'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
-
-// ─── Lucide icons — see utils/icons.ts ──────────────────────────────────────────────────────────
 
 // ─── Debounce utility ────────────────────────────────────────────────────────
 
@@ -37,7 +34,6 @@ async function renderTopBar(): Promise<void> {
   }
 
   container.classList.remove('hidden')
-  // Layout defined in #top-bar CSS class
 
   let breadcrumbHtml = `<span class="breadcrumb-text">All Notes</span>`
 
@@ -81,8 +77,6 @@ function renderEditorHeader(): void {
   const container = document.getElementById('editor-header')
   if (!container) return
 
-  // Layout defined in #editor-header CSS class
-
   const note = state.get('currentNote')
   if (!note) {
     container.innerHTML = ''
@@ -124,22 +118,58 @@ function renderEditorHeader(): void {
     </div>
   `
 
-  // Wire title input
+  // Title Input
   const titleInput = container.querySelector<HTMLInputElement>('#note-title-input')
   if (titleInput) {
     titleInput.addEventListener('input', debounce(() => {
-      if (note) {
+      // Re-read from state to avoid stale closure if note was switched
+      const latestNote = state.get('currentNote')
+      if (latestNote) {
+        const currentTitle = titleInput.value
+        // If we're in preview mode, getEditorContent() will return '' because textarea is missing.
+        // In that case, fallback to the existing note content.
+        const contentEl = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+        const currentContent = contentEl ? contentEl.value : latestNote.content || ''
+        
         state.setState({ isDirty: true })
-        void autoSave(note.id, titleInput.value, getEditorContent())
+        void autoSave(latestNote.id, currentTitle, currentContent)
       }
     }, 1000))
   }
 
-  // Record button clicks are handled by recording.ts via event delegation on #editor-header
-
-  // Wire preview button
-  container.querySelector('#preview-btn')?.addEventListener('click', () => {
-    state.setState({ isPreviewMode: !isPreview })
+  // Preview Button
+  container.querySelector('#preview-btn')?.addEventListener('click', async () => {
+    const isCurrentlyPreview = state.get('isPreviewMode')
+    
+    // If switching TO preview mode, save first
+    if (!isCurrentlyPreview) {
+      const currentNote = state.get('currentNote')
+      if (currentNote) {
+        // Cancel any pending auto-save to avoid race condition
+        cancelPendingSave()
+        
+        const previewTitleInput = document.querySelector<HTMLInputElement>('#note-title-input')
+        const contentInput = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+        const title = previewTitleInput?.value ?? currentNote.title ?? ''
+        const content = contentInput?.value ?? currentNote.content ?? ''
+        
+        // Save immediately before switching to preview
+        try {
+          await NotesAPI.update(currentNote.id, title, content)
+          state.setState({
+            isDirty: false,
+            lastSaved: new Date(),
+            currentNote: { ...currentNote, title, content } as Note
+          })
+        } catch (err) {
+          console.error('Preview save failed:', err)
+          state.showNotification('Failed to save before preview', 'error')
+          return // Don't switch to preview if save failed
+        }
+      }
+    }
+    
+    state.setState({ isPreviewMode: !isCurrentlyPreview })
   })
 }
 
@@ -179,9 +209,15 @@ function renderEditorArea(): void {
     const textarea = editorArea.querySelector<HTMLTextAreaElement>('#note-content-textarea')
     if (textarea) {
       textarea.addEventListener('input', debounce(() => {
-        state.setState({ isDirty: true })
+        // Re-read from state to avoid stale closure if note was switched
+        const latestNote = state.get('currentNote')
+        if (!latestNote) return
         const titleInput = document.querySelector<HTMLInputElement>('#note-title-input')
-        void autoSave(note.id, titleInput?.value ?? note.title, textarea.value)
+        const currentTitle = titleInput?.value ?? latestNote.title ?? ''
+        const currentContent = textarea.value
+        
+        state.setState({ isDirty: true })
+        void autoSave(latestNote.id, currentTitle, currentContent)
       }, 1000))
     }
   }
@@ -191,13 +227,28 @@ function renderEditorArea(): void {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
+function cancelPendingSave(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+}
+
 async function autoSave(noteId: string, title: string, content: string): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
+    saveTimer = null
     try {
       state.setState({ isSaving: true })
       await NotesAPI.update(noteId, title, content)
-      state.setState({ isSaving: false, isDirty: false, lastSaved: new Date() })
+      
+      const currentNote = state.get('currentNote')
+      state.setState({
+        isSaving: false,
+        isDirty: false,
+        lastSaved: new Date(),
+        ...(currentNote?.id === noteId ? { currentNote: { ...currentNote, title, content } as Note } : {})
+      })
       void renderTopBar()
     } catch (err) {
       console.error('Auto-save failed:', err)
@@ -224,7 +275,14 @@ export async function saveCurrentNote(): Promise<void> {
   try {
     state.setState({ isSaving: true })
     await NotesAPI.update(note.id, title, content)
-    state.setState({ isSaving: false, isDirty: false, lastSaved: new Date() })
+    
+    const currentNote = state.get('currentNote')
+    state.setState({
+      isSaving: false,
+      isDirty: false,
+      lastSaved: new Date(),
+      ...(currentNote?.id === note.id ? { currentNote: { ...currentNote, title, content } as Note } : {})
+    })
     void renderTopBar()
   } catch (err) {
     console.error('Save failed:', err)
@@ -233,16 +291,12 @@ export async function saveCurrentNote(): Promise<void> {
   }
 }
 
-// ─── Utility — escapeHtml imported from utils/html.ts ───────────────────────
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function initEditor(): void {
   void renderTopBar()
   renderEditorHeader()
   renderEditorArea()
-
-  // Main content layout defined in #main-content CSS class (app.css)
 
   // Subscribe to state changes
   state.subscribe('currentNote', () => {
@@ -259,3 +313,4 @@ export function initEditor(): void {
   state.subscribe('isSaving', () => void renderTopBar())
   state.subscribe('theme', () => void renderTopBar())
 }
+
