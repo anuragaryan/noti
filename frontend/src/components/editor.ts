@@ -130,7 +130,7 @@ function renderEditorHeader(): void {
         // In that case, fallback to the existing note content.
         const contentEl = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
         const currentContent = contentEl ? contentEl.value : latestNote.content || ''
-        
+
         state.setState({ isDirty: true })
         void autoSave(latestNote.id, currentTitle, currentContent)
       }
@@ -140,25 +140,33 @@ function renderEditorHeader(): void {
   // Preview Button
   container.querySelector('#preview-btn')?.addEventListener('click', async () => {
     const isCurrentlyPreview = state.get('isPreviewMode')
-    
+
     // If switching TO preview mode, save first
     if (!isCurrentlyPreview) {
       const currentNote = state.get('currentNote')
       if (currentNote) {
         // Cancel any pending auto-save to avoid race condition
         cancelPendingSave()
-        
+
         const previewTitleInput = document.querySelector<HTMLInputElement>('#note-title-input')
         const contentInput = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
         const title = previewTitleInput?.value ?? currentNote.title ?? ''
         const content = contentInput?.value ?? currentNote.content ?? ''
-        
+
         // Save immediately before switching to preview
         try {
           await NotesAPI.update(currentNote.id, title, content)
+
+          // Update both currentNote AND the notes array so sidebar sees the change
+          const notes = state.get('notes')
+          const updatedNotes = notes.map(n =>
+            n.id === currentNote.id ? { ...n, title, content } : n
+          ) as Note[]
+
           state.setState({
             isDirty: false,
             lastSaved: new Date(),
+            notes: updatedNotes,
             currentNote: { ...currentNote, title, content } as Note
           })
         } catch (err) {
@@ -168,7 +176,7 @@ function renderEditorHeader(): void {
         }
       }
     }
-    
+
     state.setState({ isPreviewMode: !isCurrentlyPreview })
   })
 }
@@ -215,7 +223,7 @@ function renderEditorArea(): void {
         const titleInput = document.querySelector<HTMLInputElement>('#note-title-input')
         const currentTitle = titleInput?.value ?? latestNote.title ?? ''
         const currentContent = textarea.value
-        
+
         state.setState({ isDirty: true })
         void autoSave(latestNote.id, currentTitle, currentContent)
       }, 1000))
@@ -241,12 +249,20 @@ async function autoSave(noteId: string, title: string, content: string): Promise
     try {
       state.setState({ isSaving: true })
       await NotesAPI.update(noteId, title, content)
-      
+
       const currentNote = state.get('currentNote')
+      const notes = state.get('notes')
+
+      // Update both currentNote AND the notes array so sidebar sees the change
+      const updatedNotes = notes.map(n =>
+        n.id === noteId ? { ...n, title, content } : n
+      ) as Note[]
+
       state.setState({
         isSaving: false,
         isDirty: false,
         lastSaved: new Date(),
+        notes: updatedNotes,
         ...(currentNote?.id === noteId ? { currentNote: { ...currentNote, title, content } as Note } : {})
       })
       void renderTopBar()
@@ -275,12 +291,20 @@ export async function saveCurrentNote(): Promise<void> {
   try {
     state.setState({ isSaving: true })
     await NotesAPI.update(note.id, title, content)
-    
+
     const currentNote = state.get('currentNote')
+    const notes = state.get('notes')
+
+    // Update both currentNote AND the notes array so sidebar sees the change
+    const updatedNotes = notes.map(n =>
+      n.id === note.id ? { ...n, title, content } : n
+    ) as Note[]
+
     state.setState({
       isSaving: false,
       isDirty: false,
       lastSaved: new Date(),
+      notes: updatedNotes,
       ...(currentNote?.id === note.id ? { currentNote: { ...currentNote, title, content } as Note } : {})
     })
     void renderTopBar()
