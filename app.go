@@ -50,8 +50,8 @@ func NewApp() *App {
 	folderService := service.NewFolderService(structureRepo, pathResolver, notesPath)
 	noteService := service.NewNoteService(structureRepo, pathResolver, fileSystem, notesPath)
 	configService := service.NewConfigService(basePath, defaultConfig)
-	sttManager := service.NewSTTManager(basePath, downloadScript)
-	llmManager := service.NewLLMManager(basePath, downloadScriptLLM, downloadScriptLlamaServer)
+	sttManager := service.NewSTTManager(basePath)
+	llmManager := service.NewLLMManager(basePath)
 	promptService := service.NewPromptService(basePath)
 	audioManager := service.NewAudioManager()
 

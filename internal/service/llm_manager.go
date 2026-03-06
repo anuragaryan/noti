@@ -13,20 +13,16 @@ import (
 
 // LLMManager handles LLM service lifecycle and provider management
 type LLMManager struct {
-	basePath            string
-	ctx                 context.Context
-	provider            LLMProvider
-	config              *domain.LLMConfig
-	downloadScriptLLM   []byte
-	downloadScriptLlama []byte
+	basePath string
+	ctx      context.Context
+	provider LLMProvider
+	config   *domain.LLMConfig
 }
 
 // NewLLMManager creates a new LLM manager
-func NewLLMManager(basePath string, downloadScriptLLM, downloadScriptLlama []byte) *LLMManager {
+func NewLLMManager(basePath string) *LLMManager {
 	return &LLMManager{
-		basePath:            basePath,
-		downloadScriptLLM:   downloadScriptLLM,
-		downloadScriptLlama: downloadScriptLlama,
+		basePath: basePath,
 	}
 }
 
@@ -56,12 +52,12 @@ func (m *LLMManager) Initialize(config *domain.LLMConfig) error {
 			provider = apiProvider
 		}
 	case "local":
-		localProvider, localErr := local.NewProvider(m.basePath, config, m.downloadScriptLLM)
+		localProvider, localErr := local.NewProvider(m.basePath, config)
 		if localErr != nil {
 			err = localErr
 		} else {
 			// Set up server manager for local provider
-			serverManager := local.NewServerManager(m.basePath, m.downloadScriptLlama)
+			serverManager := local.NewServerManager(m.basePath)
 			localProvider.SetServerManager(serverManager)
 			provider = localProvider
 		}

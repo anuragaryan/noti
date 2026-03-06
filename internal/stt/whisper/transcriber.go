@@ -58,7 +58,7 @@ type Transcriber struct {
 // that the model file exists; call Initialize to load it into memory.
 func NewTranscriber(basePath string, config *domain.STTConfig) (*Transcriber, error) {
 	modelFileName := fmt.Sprintf("ggml-%s.bin", config.ModelName)
-	modelPath := filepath.Join(basePath, "models", modelFileName)
+	modelPath := filepath.Join(basePath, "models", "stt", modelFileName)
 
 	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("whisper model not found at %s", modelPath)

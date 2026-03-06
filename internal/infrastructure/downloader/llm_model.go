@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,7 +100,7 @@ func DownloadLLM(ctx context.Context, modelName string, opts *DownloadOptions) (
 	}
 	opts.applyDefaults()
 
-	entry, err := Lookup(modelName)
+	entry, err := Lookup(ctx, modelName)
 	if err != nil {
 		return nil, err
 	}
@@ -162,22 +163,23 @@ func DownloadLLM(ctx context.Context, modelName string, opts *DownloadOptions) (
 
 // Lookup finds a ModelEntry by alias (case-insensitive).
 // Returns ErrUnknownModel (with a helpful list) when not found.
-func Lookup(modelName string) (*ModelEntry, error) {
+func Lookup(ctx context.Context, modelName string) (*ModelEntry, error) {
 	lower := strings.ToLower(modelName)
 	for i := range Registry {
 		for _, alias := range Registry[i].Aliases {
+			log.Printf("Alias: %s/n", strings.ToLower(alias))
 			if strings.ToLower(alias) == lower {
 				return &Registry[i], nil
 			}
 		}
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("  %q\n\nSupported models:\n", modelName))
+	availableModels := make([]string, 0, len(Registry)+1)
+	availableModels = append(availableModels, fmt.Sprintf("%q\n\nSupported models:", modelName))
 	for _, e := range Registry {
-		sb.WriteString(fmt.Sprintf("  %-36s  %s\n", e.Aliases[0], e.Description))
+		availableModels = append(availableModels, fmt.Sprintf("  %-36s  %s", e.Aliases[0], e.Description))
 	}
-	return nil, fmt.Errorf("%w: %s", ErrUnknownModel, strings.TrimRight(sb.String(), "\n"))
+	return nil, fmt.Errorf("%w: %s", ErrUnknownModel, strings.Join(availableModels, "\n"))
 }
 
 // ListModels returns a copy of the model registry for display purposes.

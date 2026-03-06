@@ -18,7 +18,6 @@ import (
 // ServerManager manages the llama-server lifecycle
 type ServerManager struct {
 	processManager *process.Manager
-	downloader     *downloader.Downloader
 	basePath       string
 	binaryPath     string
 	modelPath      string
@@ -27,10 +26,9 @@ type ServerManager struct {
 }
 
 // NewServerManager creates a new server manager
-func NewServerManager(basePath string, downloadScript []byte) *ServerManager {
+func NewServerManager(basePath string) *ServerManager {
 	return &ServerManager{
 		processManager: process.NewManager(),
-		downloader:     downloader.NewDownloader(downloadScript),
 		basePath:       basePath,
 		port:           51337, // Hardcoded port for llama-server
 	}
@@ -63,18 +61,27 @@ func (m *ServerManager) EnsureBinary() error {
 		return fmt.Errorf("failed to create bin directory: %w", err)
 	}
 
-	// Download using the downloader
-	if err := m.downloader.Download(binDir); err != nil {
+	// Download and extract using the downloader package
+	opts := &downloader.LlamaDownloadOptions{
+		DownloadOptions: downloader.DownloadOptions{
+			DestDir: binDir,
+		},
+		Extract: true,
+	}
+	info, err := downloader.DownloadLlama(context.Background(), opts)
+	if err != nil {
 		return fmt.Errorf("failed to download llama-server: %w", err)
 	}
 
-	// Verify binary exists
+	fmt.Printf("llama-server downloaded and extracted to: %s (tag: %s)\n", info.DestPath, info.Tag)
+
+	// Verify binary exists at expected path
 	if _, err := os.Stat(binPath); err != nil {
-		return fmt.Errorf("binary not found after download: %w", err)
+		return fmt.Errorf("binary not found after download at %s: %w", binPath, err)
 	}
 
 	m.binaryPath = binPath
-	fmt.Printf("✓ llama-server binary downloaded to: %s\n", binPath)
+	fmt.Printf("✓ llama-server binary ready at: %s\n", binPath)
 	return nil
 }
 

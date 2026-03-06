@@ -4,8 +4,10 @@
 package downloader
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -58,17 +60,17 @@ type LlamaDownloadOptions struct {
 	// Platform overrides auto-detection.  Leave zero to use the host platform.
 	Platform Platform
 
-	// ExtractZip, when true, extracts the zip archive after downloading and
-	// removes the zip file.  Defaults to false (zip is kept as-is).
-	ExtractZip bool
+	// Extract, when true, extracts the archive (zip or tar.gz) after downloading
+	// and removes the archive file.  Defaults to false (archive is kept as-is).
+	Extract bool
 }
 
 // ReleaseInfo contains metadata about the release that was downloaded.
 type ReleaseInfo struct {
 	Tag       string // e.g. "b8198"
-	AssetName string // zip filename
+	AssetName string // archive filename (zip or tar.gz)
 	AssetURL  string // direct download URL
-	DestPath  string // path to the downloaded zip (or extract dir if ExtractZip)
+	DestPath  string // path to the downloaded archive (or extract dir if Extract=true)
 }
 
 // ---------------------------------------------------------------------------
@@ -106,35 +108,52 @@ func DownloadLlama(ctx context.Context, opts *LlamaDownloadOptions) (*ReleaseInf
 			err, release.TagName, strings.Join(available, "\n  "))
 	}
 
-	destZip := filepath.Join(opts.DestDir, assetName)
+	destArchive := filepath.Join(opts.DestDir, assetName)
 
-	// Skip download if the zip already exists.
-	zipExists := false
-	if _, statErr := os.Stat(destZip); statErr == nil {
-		zipExists = true
-		if !opts.ExtractZip {
-			// Caller only wants the zip — return immediately.
+	// Determine the extract directory by stripping the archive suffix.
+	extractDir := archiveExtractDir(destArchive)
+
+	// Skip download if the archive already exists.
+	archiveExists := false
+	if _, statErr := os.Stat(destArchive); statErr == nil {
+		archiveExists = true
+		if !opts.Extract {
+			// Caller only wants the archive — return immediately.
 			return &ReleaseInfo{
 				Tag:       release.TagName,
 				AssetName: assetName,
 				AssetURL:  assetURL,
-				DestPath:  destZip,
+				DestPath:  destArchive,
 			}, nil
 		}
-		// ExtractZip=true: check whether the extract dir already exists too.
-		extractDir := strings.TrimSuffix(destZip, ".zip")
-		if _, err2 := os.Stat(extractDir); err2 == nil {
+		// Extract=true: check whether opts.DestDir already has content beyond
+		// the archive file itself (i.e. a previous extraction was flattened in).
+		if entries, err := os.ReadDir(opts.DestDir); err == nil && len(entries) > 1 {
 			return &ReleaseInfo{
 				Tag:       release.TagName,
 				AssetName: assetName,
 				AssetURL:  assetURL,
-				DestPath:  extractDir,
+				DestPath:  opts.DestDir,
 			}, nil
 		}
-		// Zip exists but extract dir does not — skip download, go straight to extraction.
+		// Archive exists but dest dir has no extracted content — skip download,
+		// go straight to extraction.
 	}
 
-	if !zipExists {
+	if !archiveExists {
+		// If Extract=true and the dest dir already has content (archive was
+		// previously deleted after extraction), skip the download entirely.
+		if opts.Extract {
+			if entries, err := os.ReadDir(opts.DestDir); err == nil && len(entries) > 0 {
+				return &ReleaseInfo{
+					Tag:       release.TagName,
+					AssetName: assetName,
+					AssetURL:  assetURL,
+					DestPath:  opts.DestDir,
+				}, nil
+			}
+		}
+
 		if err := os.MkdirAll(opts.DestDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create dest dir: %w", err)
 		}
@@ -142,7 +161,7 @@ func DownloadLlama(ctx context.Context, opts *LlamaDownloadOptions) (*ReleaseInf
 		// Download with retries.
 		var lastErr error
 		for attempt := 1; attempt <= opts.MaxRetries; attempt++ {
-			lastErr = downloadFile(ctx, opts.HTTPClient, assetURL, destZip, opts.ProgressFunc, nil)
+			lastErr = downloadFile(ctx, opts.HTTPClient, assetURL, destArchive, opts.ProgressFunc, nil)
 			if lastErr == nil {
 				break
 			}
@@ -166,17 +185,24 @@ func DownloadLlama(ctx context.Context, opts *LlamaDownloadOptions) (*ReleaseInf
 		Tag:       release.TagName,
 		AssetName: assetName,
 		AssetURL:  assetURL,
-		DestPath:  destZip,
+		DestPath:  destArchive,
 	}
 
-	// Optionally extract the zip.
-	if opts.ExtractZip {
-		extractDir := strings.TrimSuffix(destZip, ".zip")
-		if err := extractZip(destZip, extractDir); err != nil {
-			return nil, fmt.Errorf("extract zip: %w", err)
+	// Optionally extract the archive.
+	if opts.Extract {
+		if err := extractArchive(destArchive, extractDir); err != nil {
+			return nil, fmt.Errorf("extract archive: %w", err)
 		}
-		_ = os.Remove(destZip)
-		info.DestPath = extractDir
+		_ = os.Remove(destArchive)
+
+		// If the extracted directory contains a single subdirectory (the
+		// top-level folder bundled inside the archive), promote its children
+		// directly into opts.DestDir and remove the now-empty wrapper.
+		if err := flattenSingleSubdir(extractDir, opts.DestDir); err != nil {
+			return nil, fmt.Errorf("flatten extracted directory: %w", err)
+		}
+
+		info.DestPath = opts.DestDir
 	}
 
 	return info, nil
@@ -189,6 +215,65 @@ func DetectPlatform() Platform {
 		Arch:    runtime.GOARCH,
 		Backend: BackendCPU,
 	}
+}
+
+// archiveExtractDir returns the destination directory for extraction by
+// stripping the archive suffix (.zip or .tar.gz) from the archive path.
+func archiveExtractDir(archivePath string) string {
+	if strings.HasSuffix(archivePath, ".tar.gz") {
+		return strings.TrimSuffix(archivePath, ".tar.gz")
+	}
+	return strings.TrimSuffix(archivePath, ".zip")
+}
+
+// flattenSingleSubdir checks whether dir contains exactly one entry and that
+// entry is a directory.  If so, it moves all children of that subdirectory
+// into destDir and removes the (now-empty) subdirectory and dir itself.
+// If dir does not contain exactly one subdirectory the function is a no-op.
+func flattenSingleSubdir(dir, destDir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	if len(entries) != 1 || !entries[0].IsDir() {
+		// Nothing to flatten — content is already at the right level.
+		return nil
+	}
+
+	subdir := filepath.Join(dir, entries[0].Name())
+	children, err := os.ReadDir(subdir)
+	if err != nil {
+		return err
+	}
+
+	for _, child := range children {
+		src := filepath.Join(subdir, child.Name())
+		dst := filepath.Join(destDir, child.Name())
+		if err := os.Rename(src, dst); err != nil {
+			return fmt.Errorf("move %s → %s: %w", src, dst, err)
+		}
+	}
+
+	// Remove the now-empty subdirectory and the wrapper directory.
+	_ = os.Remove(subdir)
+	_ = os.Remove(dir)
+	return nil
+}
+
+// isSupportedArchive reports whether the name ends with a supported archive suffix.
+func isSupportedArchive(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, ".zip") || strings.HasSuffix(lower, ".tar.gz")
+}
+
+// extractArchive dispatches to the correct extraction function based on the
+// archive file extension (.zip or .tar.gz).
+func extractArchive(archivePath, destDir string) error {
+	lower := strings.ToLower(archivePath)
+	if strings.HasSuffix(lower, ".tar.gz") {
+		return extractTarGz(archivePath, destDir)
+	}
+	return extractZip(archivePath, destDir)
 }
 
 // ---------------------------------------------------------------------------
@@ -235,14 +320,17 @@ func fetchLatestRelease(ctx context.Context, client *http.Client) (*ghRelease, e
 	return &rel, nil
 }
 
-// matchAsset finds the best-matching asset zip for the given platform.
+// matchAsset finds the best-matching asset archive (zip or tar.gz) for the
+// given platform.
 //
 // Asset name patterns (from actual releases):
 //
 //	llama-<tag>-bin-macos-arm64.zip
 //	llama-<tag>-bin-macos-x64.zip
 //	llama-<tag>-bin-ubuntu-x64.zip
+//	llama-<tag>-bin-ubuntu-x64.tar.gz
 //	llama-<tag>-bin-ubuntu-x64-vulkan.zip
+//	llama-<tag>-bin-ubuntu-x64-vulkan.tar.gz
 //	llama-<tag>-bin-ubuntu-x64-rocm-7.2.zip  (version suffix varies)
 //	llama-<tag>-bin-ubuntu-s390x.zip
 //	llama-<tag>-bin-win-arm64-msvc.zip
@@ -287,7 +375,7 @@ func matchAsset(assets []ghAsset, p Platform) (name, url string, err error) {
 		case BackendROCm:
 			must = append(must, "rocm")
 		case BackendCPU, "":
-			// no extra keyword — the plain ubuntu-x64.zip has no suffix
+			// no extra keyword — the plain ubuntu-x64 archive has no suffix
 		default:
 			return "", "", fmt.Errorf("unsupported Linux backend %q", p.Backend)
 		}
@@ -328,10 +416,12 @@ func matchAsset(assets []ghAsset, p Platform) (name, url string, err error) {
 		return "", "", fmt.Errorf("unsupported OS %q", p.OS)
 	}
 
-	// Find the first asset whose lowercase name contains all required keywords.
-	for _, a := range assets {
+	// Find matching assets. Prefer .zip over .tar.gz when both are available.
+	var zipMatch, tarGzMatch *ghAsset
+	for i := range assets {
+		a := &assets[i]
 		lower := strings.ToLower(a.Name)
-		if !strings.HasSuffix(lower, ".zip") {
+		if !isSupportedArchive(lower) {
 			continue
 		}
 		match := true
@@ -341,15 +431,27 @@ func matchAsset(assets []ghAsset, p Platform) (name, url string, err error) {
 				break
 			}
 		}
-		if match {
-			// Extra guard: for plain Linux CPU builds, reject vulkan/rocm assets.
-			if p.OS == "linux" && (p.Backend == BackendCPU || p.Backend == "") {
-				if strings.Contains(lower, "vulkan") || strings.Contains(lower, "rocm") {
-					continue
-				}
-			}
-			return a.Name, a.BrowserDownloadURL, nil
+		if !match {
+			continue
 		}
+		// Extra guard: for plain Linux CPU builds, reject vulkan/rocm assets.
+		if p.OS == "linux" && (p.Backend == BackendCPU || p.Backend == "") {
+			if strings.Contains(lower, "vulkan") || strings.Contains(lower, "rocm") {
+				continue
+			}
+		}
+		if strings.HasSuffix(lower, ".zip") && zipMatch == nil {
+			zipMatch = a
+		} else if strings.HasSuffix(lower, ".tar.gz") && tarGzMatch == nil {
+			tarGzMatch = a
+		}
+	}
+
+	if zipMatch != nil {
+		return zipMatch.Name, zipMatch.BrowserDownloadURL, nil
+	}
+	if tarGzMatch != nil {
+		return tarGzMatch.Name, tarGzMatch.BrowserDownloadURL, nil
 	}
 
 	return "", "", fmt.Errorf("no asset found for platform %s/%s backend=%s",
@@ -359,11 +461,86 @@ func matchAsset(assets []ghAsset, p Platform) (name, url string, err error) {
 func assetNames(assets []ghAsset) []string {
 	var names []string
 	for _, a := range assets {
-		if strings.HasSuffix(a.Name, ".zip") {
+		if isSupportedArchive(a.Name) {
 			names = append(names, a.Name)
 		}
 	}
 	return names
+}
+
+// extractTarGz extracts all files from a .tar.gz archive into destDir.
+func extractTarGz(archivePath, destDir string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("open gzip stream: %w", err)
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("read tar entry: %w", err)
+		}
+
+		// Sanitise path to prevent tar-slip.
+		target := filepath.Join(destDir, hdr.Name)
+		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator),
+			filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("illegal path in tar: %s", hdr.Name)
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, hdr.FileInfo().Mode()); err != nil {
+				return err
+			}
+		case tar.TypeReg, tar.TypeRegA:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, hdr.FileInfo().Mode())
+			if err != nil {
+				return err
+			}
+			_, copyErr := io.Copy(out, tr)
+			out.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+		case tar.TypeSymlink:
+			// Sanitise symlink target to prevent escaping destDir.
+			linkTarget := hdr.Linkname
+			if filepath.IsAbs(linkTarget) {
+				return fmt.Errorf("illegal absolute symlink target in tar: %s", linkTarget)
+			}
+			resolved := filepath.Join(filepath.Dir(target), linkTarget)
+			if !strings.HasPrefix(filepath.Clean(resolved)+string(os.PathSeparator),
+				filepath.Clean(destDir)+string(os.PathSeparator)) {
+				return fmt.Errorf("illegal symlink target escapes destDir: %s -> %s", hdr.Name, linkTarget)
+			}
+			if err := os.Symlink(linkTarget, target); err != nil && !os.IsExist(err) {
+				return err
+			}
+		default:
+			// Skip unsupported entry types (hard links, devices, etc.).
+		}
+	}
+	return nil
 }
 
 // extractZip extracts all files from zipPath into destDir.

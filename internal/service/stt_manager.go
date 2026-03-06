@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"noti/internal/domain"
+	"noti/internal/infrastructure/downloader"
 	"noti/internal/stt/whisper"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -15,20 +15,18 @@ import (
 
 // STTManager handles STT service lifecycle and model management
 type STTManager struct {
-	basePath       string
-	ctx            context.Context
-	transcriber    *whisper.Transcriber
-	audioManager   *AudioManager
-	downloadScript []byte
-	activeSource   domain.AudioSource
+	basePath     string
+	ctx          context.Context
+	transcriber  *whisper.Transcriber
+	audioManager *AudioManager
+	activeSource domain.AudioSource
 }
 
 // NewSTTManager creates a new STT manager
-func NewSTTManager(basePath string, downloadScript []byte) *STTManager {
+func NewSTTManager(basePath string) *STTManager {
 	return &STTManager{
-		basePath:       basePath,
-		downloadScript: downloadScript,
-		activeSource:   domain.AudioSourceMicrophone,
+		basePath:     basePath,
+		activeSource: domain.AudioSourceMicrophone,
 	}
 }
 
@@ -100,41 +98,27 @@ func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
 		runtime.EventsEmit(m.ctx, "download:start", config.ModelName)
 	}
 
-	// Get the models directory
-	modelsPath := filepath.Join(m.basePath, "models")
-	if err := os.MkdirAll(modelsPath, 0755); err != nil {
-		if m.ctx != nil {
-			runtime.EventsEmit(m.ctx, "download:error", "Failed to create models directory")
-		}
-		return fmt.Errorf("failed to create models directory: %w", err)
+	modelsPath := filepath.Join(m.basePath, "models", "stt")
+
+	ctx := m.ctx
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
-	// Define the script path inside the models directory
-	scriptPath := filepath.Join(modelsPath, ".download-ggml-model.sh")
-
-	// Write the embedded script to the destination and make it executable
-	if err := os.WriteFile(scriptPath, m.downloadScript, 0755); err != nil {
-		if m.ctx != nil {
-			runtime.EventsEmit(m.ctx, "download:error", "Failed to write download script")
-		}
-		return fmt.Errorf("failed to write download script: %w", err)
+	opts := &downloader.DownloadOptions{
+		DestDir: modelsPath,
 	}
-	// Ensure the script is cleaned up
-	defer os.Remove(scriptPath)
 
-	// Run the script from within the models directory
-	cmd := exec.Command(scriptPath, config.ModelName)
-	cmd.Dir = modelsPath // Set the working directory
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("Model download script failed:\n%s\n", string(output))
+	fmt.Printf("Downloading Whisper model: %s\n", config.ModelName)
+	if err := downloader.DownloadModel(ctx, config.ModelName, opts); err != nil {
+		fmt.Printf("Model download failed: %v\n", err)
 		if m.ctx != nil {
 			runtime.EventsEmit(m.ctx, "download:error", "Model download failed. Check logs.")
 		}
-		return fmt.Errorf("model download script failed: %w", err)
+		return fmt.Errorf("model download failed: %w", err)
 	}
 
-	fmt.Printf("Model download script output:\n%s\n", string(output))
+	fmt.Printf("Model download complete: %s\n", config.ModelName)
 	if m.ctx != nil {
 		runtime.EventsEmit(m.ctx, "download:finish", config.ModelName)
 	}

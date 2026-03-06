@@ -43,13 +43,6 @@ else
   :
 fi
 
-# Step 1.5: Download the Whisper model download script
-echo ""
-echo "📜 Step 1.5: Downloading model script..."
-mkdir -p scripts
-curl -o scripts/download-ggml-model.sh https://raw.githubusercontent.com/ggml-org/whisper.cpp/master/models/download-ggml-model.sh
-chmod +x scripts/download-ggml-model.sh
-
 # Step 2: Install frontend dependencies
 echo ""
 echo "📦 Step 2: Installing frontend dependencies..."

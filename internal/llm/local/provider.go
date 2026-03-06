@@ -23,22 +23,20 @@ type Provider struct {
 	serverManager   *ServerManager
 	modelPath       string
 	basePath        string
-	downloader      *downloader.Downloader
 	available       bool
 	mutex           sync.Mutex
 }
 
 // NewProvider creates a new local LLM provider
-func NewProvider(basePath string, config *domain.LLMConfig, downloadScript []byte) (*Provider, error) {
+func NewProvider(basePath string, config *domain.LLMConfig) (*Provider, error) {
 	if config.ModelName == "" {
 		return nil, fmt.Errorf("model name is required for local provider")
 	}
 
 	return &Provider{
-		config:     config,
-		basePath:   basePath,
-		downloader: downloader.NewDownloader(downloadScript),
-		available:  false,
+		config:    config,
+		basePath:  basePath,
+		available: false,
 	}, nil
 }
 
@@ -318,17 +316,26 @@ func (p *Provider) GetModelInfo() map[string]interface{} {
 	return info
 }
 
-// downloadModel downloads the LLM model using the embedded script
+// downloadModel downloads the LLM model using the downloader package
 func (p *Provider) downloadModel() error {
 	modelsDir := filepath.Join(p.basePath, "models", "llm")
 	if err := os.MkdirAll(modelsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create models directory: %w", err)
 	}
 
-	// Download using the downloader
-	fmt.Printf("Running model download script for: %s\n", p.config.ModelName)
-	if err := p.downloader.Download(modelsDir, p.config.ModelName); err != nil {
+	fmt.Printf("Downloading LLM model: %s\n", p.config.ModelName)
+	opts := &downloader.DownloadOptions{
+		DestDir: modelsDir,
+	}
+	result, err := downloader.DownloadLLM(context.Background(), p.config.ModelName, opts)
+	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
+	}
+
+	if result.Skipped {
+		fmt.Printf("Model already present at: %s\n", result.DestPath)
+	} else {
+		fmt.Printf("Model downloaded to: %s (%.2f MB)\n", result.DestPath, float64(result.SizeBytes)/(1024*1024))
 	}
 
 	return nil
