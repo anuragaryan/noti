@@ -3,7 +3,7 @@
   "modelName": "large-v3-turbo-q5_0",
   "llm": {
     "provider": "local",
-    "modelName": "Qwen3.5-4B-UD",
+    "modelName": "Qwen3.5-4B-UD-Q4_K_XL",
     "apiEndpoint": "",
     "apiKey": "",
     "temperature": 0.2,
