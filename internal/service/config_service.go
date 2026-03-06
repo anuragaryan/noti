@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -34,7 +35,7 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 		}
 
 		// Config file does not exist, so create it from the embedded template
-		fmt.Printf("config.json not found. Creating from embedded template at %s\n", configFilePath)
+		slog.Info("config.json not found. Creating from embedded template", "path", configFilePath)
 		// Ensure the directory for config.json exists
 		dir := filepath.Dir(configFilePath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -51,7 +52,7 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 	var config domain.Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		// If unmarshalling fails, it could be a corrupt file. Try to restore it
-		fmt.Printf("WARNING: Failed to unmarshal config.json: %v. Restoring from template.\n", err)
+		slog.Warn("Failed to unmarshal config.json. Restoring from template.", "error", err)
 		if err := os.WriteFile(configFilePath, s.defaultConfig, 0644); err != nil {
 			return nil, fmt.Errorf("failed to restore default config file: %w", err)
 		}
@@ -98,7 +99,7 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 		config.Audio.Mixer.MixMode = "sum"
 	}
 
-	fmt.Printf("Loaded config from: %s\n", configFilePath)
+	slog.Info("Loaded config", "path", configFilePath)
 	return &config, nil
 }
 
@@ -115,6 +116,6 @@ func (s *ConfigService) Save(config *domain.Config) error {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
-	fmt.Printf("Saved config to: %s\n", configFilePath)
+	slog.Info("Saved config", "path", configFilePath)
 	return nil
 }

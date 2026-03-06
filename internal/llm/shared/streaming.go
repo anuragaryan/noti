@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -147,7 +148,7 @@ func (c *StreamingClient) StreamChatCompletion(
 			var streamResp StreamResponse
 			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
 				// Skip malformed JSON lines
-				fmt.Printf("[StreamingClient] Warning: failed to parse SSE data: %v\n", err)
+				slog.Warn("[StreamingClient] failed to parse SSE data", "error", err)
 				continue
 			}
 

@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -112,7 +113,7 @@ func (m *AudioManager) Initialize() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	fmt.Println("=== Initializing Audio Manager ===")
+	slog.Info("Initializing Audio Manager")
 
 	// Initialize microphone capturer - available on all platforms via PortAudio
 	micCapturer := audio.NewMicrophoneCapturer()
@@ -127,16 +128,16 @@ func (m *AudioManager) Initialize() error {
 	if systemCapturer != nil {
 		if err := systemCapturer.Initialize(); err != nil {
 			// System audio not available, but mic still works
-			fmt.Printf("System audio capture not available: %v\n", err)
+			slog.Warn("System audio capture not available", "error", err)
 		} else {
 			m.systemCapturer = systemCapturer
-			fmt.Println("✓ System audio capture available")
+			slog.Info("System audio capture available")
 		}
 	} else {
-		fmt.Println("System audio capture not supported on this platform")
+		slog.Info("System audio capture not supported on this platform")
 	}
 
-	fmt.Println("✓ Audio Manager initialized")
+	slog.Info("Audio Manager initialized")
 
 	return nil
 }
@@ -218,7 +219,7 @@ func (m *AudioManager) SetAudioSource(source domain.AudioSource) error {
 	}
 
 	m.activeSource = source
-	fmt.Printf("Audio source set to: %s\n", source.String())
+	slog.Info("Audio source set", "source", source.String())
 	return nil
 }
 
@@ -234,8 +235,7 @@ func (m *AudioManager) SetMixerConfig(config domain.AudioMixerConfig) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.mixerConfig = config
-	fmt.Printf("Mixer config updated: mic gain=%.2f, system gain=%.2f, mode=%s\n",
-		config.MicrophoneGain, config.SystemGain, config.MixMode)
+	slog.Info("Mixer config updated", "micGain", config.MicrophoneGain, "systemGain", config.SystemGain, "mode", config.MixMode)
 }
 
 // GetMixerConfig returns the current mixer configuration
@@ -335,7 +335,7 @@ func (m *AudioManager) StartCapture(config domain.AudioCaptureConfig, callback d
 
 // startMixedCapture starts capturing from both mic and system audio
 func (m *AudioManager) startMixedCapture(config domain.AudioCaptureConfig, callback domain.AudioCallback) error {
-	fmt.Println("\n=== Starting Mixed Audio Capture ===")
+	slog.Info("Starting Mixed Audio Capture")
 
 	// Initialize ring buffers for mixing (2 seconds of audio)
 	bufferSize := config.SampleRate * 2
@@ -384,7 +384,7 @@ func (m *AudioManager) startMixedCapture(config domain.AudioCaptureConfig, callb
 	m.mixerWg.Add(1)
 	go m.runMixer(config, callback)
 
-	fmt.Println("✓ Mixed audio capture started")
+	slog.Info("Mixed audio capture started")
 
 	return nil
 }
@@ -480,7 +480,7 @@ func (m *AudioManager) StopCapture() error {
 
 // stopMixedCapture stops the mixed audio capture
 func (m *AudioManager) stopMixedCapture() error {
-	fmt.Println("\n=== Stopping Mixed Audio Capture ===")
+	slog.Info("Stopping Mixed Audio Capture")
 
 	if m.mixerRunning {
 		close(m.mixerStop)
@@ -512,7 +512,7 @@ func (m *AudioManager) stopMixedCapture() error {
 		return fmt.Errorf("errors stopping capture: %v", errs)
 	}
 
-	fmt.Println("✓ Mixed audio capture stopped")
+	slog.Info("Mixed audio capture stopped")
 	return nil
 }
 
@@ -537,7 +537,7 @@ func (m *AudioManager) Cleanup() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	fmt.Println("Cleaning up Audio Manager...")
+	slog.Info("Cleaning up Audio Manager...")
 
 	// Stop any active capture
 	if m.mixerRunning {
@@ -553,5 +553,5 @@ func (m *AudioManager) Cleanup() {
 		m.systemCapturer.Cleanup()
 	}
 
-	fmt.Println("✓ Audio Manager cleanup complete")
+	slog.Info("Audio Manager cleanup complete")
 }

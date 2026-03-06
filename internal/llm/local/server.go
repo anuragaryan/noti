@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,11 +50,11 @@ func (m *ServerManager) EnsureBinary() error {
 	binPath := filepath.Join(m.basePath, "bin", binaryName)
 	if _, err := os.Stat(binPath); err == nil {
 		m.binaryPath = binPath
-		fmt.Printf("✓ Found llama-server binary at: %s\n", binPath)
+		slog.Info("✓ Found llama-server binary", "path", binPath)
 		return nil
 	}
 
-	fmt.Println("llama-server binary not found, downloading...")
+	slog.Info("llama-server binary not found, downloading...")
 
 	// Create bin directory
 	binDir := filepath.Join(m.basePath, "bin")
@@ -73,7 +74,7 @@ func (m *ServerManager) EnsureBinary() error {
 		return fmt.Errorf("failed to download llama-server: %w", err)
 	}
 
-	fmt.Printf("llama-server downloaded and extracted to: %s (tag: %s)\n", info.DestPath, info.Tag)
+	slog.Info("llama-server downloaded and extracted", "path", info.DestPath, "tag", info.Tag)
 
 	// Verify binary exists at expected path
 	if _, err := os.Stat(binPath); err != nil {
@@ -81,7 +82,7 @@ func (m *ServerManager) EnsureBinary() error {
 	}
 
 	m.binaryPath = binPath
-	fmt.Printf("✓ llama-server binary ready at: %s\n", binPath)
+	slog.Info("✓ llama-server binary ready", "path", binPath)
 	return nil
 }
 
@@ -119,15 +120,15 @@ func (m *ServerManager) Start(modelPath string) error {
 		"--log-disable", // disable logging to reduce noise
 	}
 
-	fmt.Printf("Starting llama-server with model: %s\n", modelPath)
-	fmt.Printf("Command: %s %v\n", m.binaryPath, args)
+	slog.Info("Starting llama-server", "model", modelPath)
+	slog.Info("Command", "binary", m.binaryPath, "args", args)
 
 	// Start the process
 	if err := m.processManager.StartWithOutput(m.binaryPath, args...); err != nil {
 		return fmt.Errorf("failed to start llama-server: %w", err)
 	}
 
-	fmt.Printf("✓ llama-server started (PID: %d)\n", m.processManager.GetPID())
+	slog.Info("✓ llama-server started", "pid", m.processManager.GetPID())
 
 	// Wait for server to be ready
 	if err := m.WaitForReady(30 * time.Second); err != nil {
@@ -135,7 +136,7 @@ func (m *ServerManager) Start(modelPath string) error {
 		return fmt.Errorf("llama-server failed to become ready: %w", err)
 	}
 
-	fmt.Println("✓ llama-server is ready!")
+	slog.Info("✓ llama-server is ready!")
 	return nil
 }
 
@@ -166,7 +167,7 @@ func (m *ServerManager) WaitForReady(timeout time.Duration) error {
 
 // Stop stops the llama-server process
 func (m *ServerManager) Stop() error {
-	fmt.Println("Stopping llama-server...")
+	slog.Info("Stopping llama-server...")
 	return m.processManager.Stop(5 * time.Second)
 }
 

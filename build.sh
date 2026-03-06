@@ -69,7 +69,7 @@ if [[ "$MODE" == "debug" ]]; then
   # The -debug flag enables the inspector (DevTools)
   wails build -platform darwin/arm64 -clean -debug
 else
-  wails build -platform darwin/arm64 -clean -ldflags "-s -w -X main.env=production"
+  wails build -platform darwin/arm64 -clean -ldflags "-s -w -X main.env=production -X main.sentryDSN=https://cf7b9fda532355b2262930ddbb4d85b6@o4510992653877248.ingest.de.sentry.io/4510992659447888"
 fi
 
 # Step 6: Verify the build

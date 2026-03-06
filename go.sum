@@ -4,6 +4,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/getsentry/sentry-go v0.43.0 h1:XbXLpFicpo8HmBDaInk7dum18G9KSLcjZiyUKS+hLW4=
 github.com/getsentry/sentry-go v0.43.0/go.mod h1:XDotiNZbgf5U8bPDUAfvcFmOnMQQceESxyKaObSssW0=
+github.com/getsentry/sentry-go/slog v0.43.0 h1:BYGiM4VFu4//S0vrTSf52MmZSmjhOikHIkBeZZw9P4Q=
+github.com/getsentry/sentry-go/slog v0.43.0/go.mod h1:EAq/2dhW43dV7fwy4OjTWSsvhZjTM9jjsck0kYt9MYE=
 github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20251120123511-19ceec8eac98 h1:EignaGn280bVtA9AQq0tTgBYF6H4nYbwq3wPpWbun3U=
 github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20251120123511-19ceec8eac98/go.mod h1:qyHjS/50ORo01H0NsuEEGsQR9VCtOcEye0gUl2sx1s8=
 github.com/go-audio/audio v1.0.0 h1:zS9vebldgbQqktK4H0lUqWrG8P0NxCJVqcj7ZpNnwd4=

@@ -3,6 +3,7 @@ package logging
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -18,9 +19,9 @@ type SentryLogger struct{}
 // NewSentryLogger returns a logger.Logger that forwards Error/Fatal to Sentry.
 func NewSentryLogger() logger.Logger { return &SentryLogger{} }
 
-// Print writes the message to stderr only (no Sentry event).
+// Print writes the message via slog at Info level (no Sentry event).
 func (s *SentryLogger) Print(msg string) {
-	fmt.Fprintln(os.Stderr, "[PRINT]", msg)
+	slog.Info(msg)
 }
 
 // Trace records a debug-level breadcrumb.
@@ -63,7 +64,7 @@ func (s *SentryLogger) Fatal(msg string) {
 	sentry.Flush(2 * time.Second)
 }
 
-// breadcrumb adds a Sentry breadcrumb and writes the message to stderr.
+// breadcrumb adds a Sentry breadcrumb and logs the message via slog.
 func (s *SentryLogger) breadcrumb(level, msg string) {
 	fmt.Fprintln(os.Stderr, "["+level+"]", msg)
 	sentry.AddBreadcrumb(&sentry.Breadcrumb{

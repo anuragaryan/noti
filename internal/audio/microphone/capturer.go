@@ -4,6 +4,7 @@ package microphone
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -38,8 +39,8 @@ func (c *Capturer) Initialize() error {
 		return nil
 	}
 
-	fmt.Println("=== Initializing Microphone Capturer ===")
-	fmt.Println("Initializing PortAudio...")
+	slog.Info("=== Initializing Microphone Capturer ===")
+	slog.Info("Initializing PortAudio...")
 
 	if err := portaudio.Initialize(); err != nil {
 		return fmt.Errorf("failed to initialize portaudio: %w", err)
@@ -71,10 +72,10 @@ func (c *Capturer) Initialize() error {
 		portaudio.Terminate()
 		return fmt.Errorf("no default input device: %w - please set a default microphone in system settings", err)
 	}
-	fmt.Printf("Default Input Device: %s\n", defaultInput.Name)
+	slog.Info("Default Input Device", "name", defaultInput.Name)
 
 	c.initialized = true
-	fmt.Println("✓ Microphone capturer initialized successfully!")
+	slog.Info("✓ Microphone capturer initialized successfully!")
 
 	return nil
 }
@@ -174,7 +175,7 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 		return fmt.Errorf("already capturing")
 	}
 
-	fmt.Println("\n=== Starting Microphone Capture ===")
+	slog.Info("\n=== Starting Microphone Capture ===")
 
 	// Get the input device
 	var inputDevice *portaudio.DeviceInfo
@@ -203,8 +204,8 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 		}
 	}
 
-	fmt.Printf("Using microphone: %s\n", inputDevice.Name)
-	fmt.Printf("Sample rate: %d Hz, Channels: %d\n", config.SampleRate, config.Channels)
+	slog.Info("Using microphone", "name", inputDevice.Name)
+	slog.Info("Audio config", "sampleRate", config.SampleRate, "channels", config.Channels)
 
 	// Create buffer
 	bufferSize := config.BufferSize
@@ -227,7 +228,7 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 	}
 
 	// Open audio stream
-	fmt.Println("Opening audio stream...")
+	slog.Info("Opening audio stream...")
 	stream, err := portaudio.OpenStream(streamParams, c.framesPerBuffer)
 	if err != nil {
 		return fmt.Errorf("failed to open audio stream: %w", err)
@@ -236,7 +237,7 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 	c.stream = stream
 
 	// Start the stream
-	fmt.Println("Starting audio capture...")
+	slog.Info("Starting audio capture...")
 	if err := stream.Start(); err != nil {
 		stream.Close()
 		return fmt.Errorf("failed to start audio stream: %w", err)
@@ -245,7 +246,7 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 	c.isCapturing = true
 	c.stopCapture = make(chan struct{})
 
-	fmt.Println("✓ Microphone capture started successfully!")
+	slog.Info("✓ Microphone capture started successfully!")
 
 	// Start capture goroutine
 	go c.captureLoop(ctx)
@@ -265,7 +266,7 @@ func (c *Capturer) captureLoop(ctx context.Context) {
 		default:
 			// Read from stream
 			if err := c.stream.Read(); err != nil {
-				fmt.Printf("Error reading from stream: %v\n", err)
+				slog.Error("Error reading from stream", "error", err)
 				return
 			}
 
@@ -296,7 +297,7 @@ func (c *Capturer) StopCapture() error {
 		return nil
 	}
 
-	fmt.Println("\n=== Stopping Microphone Capture ===")
+	slog.Info("\n=== Stopping Microphone Capture ===")
 
 	// Signal to stop capture
 	close(c.stopCapture)
@@ -314,7 +315,7 @@ func (c *Capturer) StopCapture() error {
 	c.isCapturing = false
 	c.callback = nil
 
-	fmt.Println("✓ Microphone capture stopped")
+	slog.Info("✓ Microphone capture stopped")
 
 	return nil
 }
@@ -343,7 +344,7 @@ func (c *Capturer) Cleanup() {
 	}
 
 	if c.initialized {
-		fmt.Println("Cleaning up microphone capturer...")
+		slog.Info("Cleaning up microphone capturer...")
 		portaudio.Terminate()
 		c.initialized = false
 	}

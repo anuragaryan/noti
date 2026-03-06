@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"noti/internal/logging"
+	"os"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	sentryslog "github.com/getsentry/sentry-go/slog"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -21,17 +25,20 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-var env string
+var (
+	env       string
+	sentryDSN string
+)
 
-// sentryEnabled reports whether Sentry should be active in this binary.
-func sentryEnabled() bool { return env == "production" }
+// isProduction reports whether Sentry should be active in this binary.
+func isProduction() bool { return env == "production" }
 
 // fatalWithSentry captures msg to Sentry (flushing immediately) then calls
 // log.Fatal so the process exits with a non-zero status code.
 // Use this instead of log.Fatal / log.Fatalf anywhere after sentry.Init.
 func fatalWithSentry(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
-	if sentryEnabled() {
+	if isProduction() {
 		sentry.WithScope(func(scope *sentry.Scope) {
 			scope.SetLevel(sentry.LevelFatal)
 			sentry.CaptureException(errors.New(msg))
@@ -42,10 +49,10 @@ func fatalWithSentry(format string, args ...any) {
 }
 
 func main() {
-	if sentryEnabled() {
+	if isProduction() {
 		// Initialize Sentry SDK early in application setup (production only).
 		err := sentry.Init(sentry.ClientOptions{
-			Dsn: "https://cf7b9fda532355b2262930ddbb4d85b6@o4510992653877248.ingest.de.sentry.io/4510992659447888",
+			Dsn: sentryDSN,
 		})
 		if err != nil {
 			// Sentry is not yet available, so we can only log locally.
@@ -65,8 +72,23 @@ func main() {
 		}()
 
 		log.Println("Sentry initialized successfully")
+
+		// Set up slog with the Sentry handler so all slog.* calls route to Sentry.
+		// Error and Fatal levels become Sentry events; Debug/Info/Warn become breadcrumbs.
+		sentryHandler := sentryslog.Option{
+			EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal},
+			LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn},
+		}.NewSentryHandler(context.Background())
+
+		// Fan-out: write to both Sentry and stderr so local dev still sees output.
+		textHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+		slog.SetDefault(slog.New(logging.NewMultiHandler(sentryHandler, textHandler)))
 	} else {
 		log.Println("Sentry disabled (debug build)")
+
+		// In debug mode, just log to stderr with text format.
+		textHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+		slog.SetDefault(slog.New(textHandler))
 	}
 
 	// Create an instance of the app structure
@@ -89,7 +111,7 @@ func main() {
 	// In production, route Error/Fatal to Sentry; in debug, pass nil so Wails
 	// uses its built-in logger and errors appear only in the terminal/DevTools.
 	var wailsLogger logger.Logger
-	if sentryEnabled() {
+	if isProduction() {
 		wailsLogger = logging.NewSentryLogger()
 	}
 

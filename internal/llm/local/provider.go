@@ -4,6 +4,7 @@ package local
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,9 +43,9 @@ func NewProvider(basePath string, config *domain.LLMConfig) (*Provider, error) {
 
 // Initialize loads the LLM model and starts llama-server
 func (p *Provider) Initialize() error {
-	fmt.Println("=== Initializing Local LLM Provider ===")
-	fmt.Printf("Model: %s\n", p.config.ModelName)
-	fmt.Printf("Base path: %s\n", p.basePath)
+	slog.Info("=== Initializing Local LLM Provider ===")
+	slog.Info("Model", "name", p.config.ModelName)
+	slog.Info("Base path", "path", p.basePath)
 
 	// Determine model file path
 	modelFileName := p.config.ModelName
@@ -59,17 +60,17 @@ func (p *Provider) Initialize() error {
 	needsDownload := false
 	fileInfo, err := os.Stat(modelPath)
 	if err != nil {
-		fmt.Printf("✗ Model file not found: %s\n", modelPath)
+		slog.Info("✗ Model file not found", "path", modelPath)
 		needsDownload = true
 	} else {
 		// Validate model file size (GGUF files should be at least 1MB)
 		if fileInfo.Size() < 1024*1024 {
-			fmt.Printf("✗ Model file appears to be corrupt or incomplete (size: %d bytes)\n", fileInfo.Size())
-			fmt.Printf("Removing corrupt model file: %s\n", modelPath)
+			slog.Warn("✗ Model file appears to be corrupt or incomplete", "size", fileInfo.Size())
+			slog.Info("Removing corrupt model file", "path", modelPath)
 
 			// Remove corrupt file
 			if err := os.Remove(modelPath); err != nil {
-				fmt.Printf("Warning: Could not remove corrupt file: %v\n", err)
+				slog.Warn("Could not remove corrupt file", "error", err)
 			}
 			needsDownload = true
 		}
@@ -77,7 +78,7 @@ func (p *Provider) Initialize() error {
 
 	// Auto-download model if needed
 	if needsDownload {
-		fmt.Printf("Attempting to download model: %s\n", p.config.ModelName)
+		slog.Info("Attempting to download model", "model", p.config.ModelName)
 		if err := p.downloadModel(); err != nil {
 			return fmt.Errorf("failed to download model: %w", err)
 		}
@@ -93,32 +94,32 @@ func (p *Provider) Initialize() error {
 	}
 
 	p.modelPath = modelPath
-	fmt.Printf("✓ Found valid model at: %s (size: %.2f MB)\n", modelPath, float64(fileInfo.Size())/(1024*1024))
+	slog.Info("✓ Found valid model", "path", modelPath, "sizeMB", float64(fileInfo.Size())/(1024*1024))
 
 	// Initialize server manager (will be created with download script in main.go)
 	if p.serverManager == nil {
-		fmt.Println("✗ Server manager not set")
+		slog.Info("✗ Server manager not set")
 		return fmt.Errorf("server manager not set - this is a bug in the initialization code")
 	}
 
 	// Ensure llama-server binary is available
-	fmt.Println("Ensuring llama-server binary is available...")
+	slog.Info("Ensuring llama-server binary is available...")
 	if err := p.serverManager.EnsureBinary(); err != nil {
-		fmt.Printf("✗ Failed to ensure binary: %v\n", err)
+		slog.Error("Failed to ensure binary", "error", err)
 		return fmt.Errorf("failed to ensure llama-server binary: %w", err)
 	}
 
 	// Start llama-server
-	fmt.Println("Starting llama-server...")
+	slog.Info("Starting llama-server...")
 	if err := p.serverManager.Start(modelPath); err != nil {
-		fmt.Printf("✗ Failed to start server: %v\n", err)
+		slog.Error("Failed to start server", "error", err)
 		return fmt.Errorf("failed to start llama-server: %w", err)
 	}
 
 	// Verify server is healthy
-	fmt.Println("Performing health check...")
+	slog.Info("Performing health check...")
 	if err := p.serverManager.HealthCheck(); err != nil {
-		fmt.Printf("✗ Health check failed: %v\n", err)
+		slog.Error("Health check failed", "error", err)
 		p.serverManager.Stop()
 		return fmt.Errorf("llama-server health check failed: %w", err)
 	}
@@ -132,12 +133,12 @@ func (p *Provider) Initialize() error {
 	p.available = true
 	p.mutex.Unlock()
 
-	fmt.Println("✓ Local LLM provider initialized successfully!")
-	fmt.Printf("✓ Model: %s\n", p.config.ModelName)
-	fmt.Printf("✓ Server endpoint: %s\n", p.serverManager.GetEndpoint())
-	fmt.Printf("✓ Temperature: %.2f\n", p.config.Temperature)
-	fmt.Printf("✓ Max tokens: %d\n", p.config.MaxTokens)
-	fmt.Printf("✓ Provider available: %v\n\n", p.available)
+	slog.Info("✓ Local LLM provider initialized successfully!")
+	slog.Info("✓ Model", "name", p.config.ModelName)
+	slog.Info("✓ Server endpoint", "endpoint", p.serverManager.GetEndpoint())
+	slog.Info("✓ Temperature", "temperature", p.config.Temperature)
+	slog.Info("✓ Max tokens", "tokens", p.config.MaxTokens)
+	slog.Info("✓ Provider available", "available", p.available)
 
 	return nil
 }
@@ -175,8 +176,8 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 		MaxTokens:   maxTokens,
 	}
 
-	fmt.Printf("[Local LLM] Generating response for prompt (length: %d chars)\n", len(request.Prompt))
-	fmt.Printf("[Local LLM] Temperature: %.2f, Max tokens: %d\n", temperature, maxTokens)
+	slog.Debug("[Local LLM] Generating response for prompt", "length", len(request.Prompt))
+	slog.Debug("[Local LLM] Generation params", "temperature", temperature, "maxTokens", maxTokens)
 
 	// Send request using shared client
 	apiResp, err := p.client.ChatCompletion(ctx, apiReq)
@@ -192,7 +193,7 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 	choice := apiResp.Choices[0]
 	text := strings.TrimSpace(choice.Message.Content)
 
-	fmt.Printf("[Local LLM] Generated %d characters, used %d tokens\n", len(text), apiResp.Usage.TotalTokens)
+	slog.Info("[Local LLM] Generated response", "chars", len(text), "tokens", apiResp.Usage.TotalTokens)
 
 	return &domain.LLMResponse{
 		Text:         text,
@@ -231,8 +232,8 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 		Stream:      true,
 	}
 
-	fmt.Printf("[Local LLM] Starting streaming response for prompt (length: %d chars)\n", len(request.Prompt))
-	fmt.Printf("[Local LLM] Temperature: %.2f, Max tokens: %d\n", temperature, maxTokens)
+	slog.Info("[Local LLM] Starting streaming response for prompt", "length", len(request.Prompt))
+	slog.Info("[Local LLM] Generation params", "temperature", temperature, "maxTokens", maxTokens)
 
 	// Track chunk index
 	chunkIndex := 0
@@ -254,7 +255,7 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 		return fmt.Errorf("streaming failed: %w", err)
 	}
 
-	fmt.Printf("[Local LLM] Streaming completed, sent %d chunks\n", chunkIndex)
+	slog.Info("[Local LLM] Streaming completed", "chunks", chunkIndex)
 	return nil
 }
 
@@ -274,7 +275,7 @@ func (p *Provider) SupportsStreaming() bool {
 
 // Cleanup releases resources
 func (p *Provider) Cleanup() {
-	fmt.Println("Cleaning up local LLM provider...")
+	slog.Info("Cleaning up local LLM provider...")
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
@@ -291,7 +292,7 @@ func (p *Provider) Cleanup() {
 	}
 
 	p.available = false
-	fmt.Println("✓ Local LLM provider cleanup complete")
+	slog.Info("✓ Local LLM provider cleanup complete")
 }
 
 // GetModelInfo returns information about the current model
@@ -323,7 +324,7 @@ func (p *Provider) downloadModel() error {
 		return fmt.Errorf("failed to create models directory: %w", err)
 	}
 
-	fmt.Printf("Downloading LLM model: %s\n", p.config.ModelName)
+	slog.Info("Downloading LLM model", "model", p.config.ModelName)
 	opts := &downloader.DownloadOptions{
 		DestDir: modelsDir,
 	}
@@ -333,9 +334,9 @@ func (p *Provider) downloadModel() error {
 	}
 
 	if result.Skipped {
-		fmt.Printf("Model already present at: %s\n", result.DestPath)
+		slog.Info("Model already present", "path", result.DestPath)
 	} else {
-		fmt.Printf("Model downloaded to: %s (%.2f MB)\n", result.DestPath, float64(result.SizeBytes)/(1024*1024))
+		slog.Info("Model downloaded", "path", result.DestPath, "sizeMB", float64(result.SizeBytes)/(1024*1024))
 	}
 
 	return nil

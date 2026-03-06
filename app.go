@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,12 +39,14 @@ type App struct {
 func NewApp() *App {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		log.Fatalf("could not determine user config directory: %v", err)
+		slog.Error("could not determine user config directory", "err", err)
+		os.Exit(1)
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatalf("could not determine user config directory: %v", err)
+		slog.Error("could not determine user home directory", "err", err)
+		os.Exit(1)
 	}
 
 	basePath := filepath.Join(configDir, "Noti")
@@ -91,30 +93,28 @@ func (a *App) startup(ctx context.Context) {
 
 	// Create notes directory if it doesn't exist
 	if err := os.MkdirAll(a.notesPath, 0755); err != nil {
-		fmt.Printf("ERROR: Cannot create notes directory: %v\n", err)
-		fmt.Printf("Path: %s\n", a.notesPath)
-		fmt.Println("Please check that the application has permission to write to the Documents folder.")
+		slog.Error("Cannot create notes directory", "error", err, "path", a.notesPath)
+		slog.Error("Please check that the application has permission to write to the Documents folder.")
 		return
 	}
 
 	// Test write permissions by creating a test file
 	testFile := filepath.Join(a.notesPath, ".permission_test")
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
-		fmt.Printf("ERROR: Cannot write to notes directory: %v\n", err)
-		fmt.Printf("Path: %s\n", a.notesPath)
-		fmt.Println("The application does not have write permissions.")
+		slog.Error("Cannot write to notes directory", "error", err, "path", a.notesPath)
+		slog.Error("The application does not have write permissions.")
 		return
 	}
 	os.Remove(testFile)
-	fmt.Printf("Successfully initialized notes directory at: %s\n", a.notesPath)
+	slog.Info("Successfully initialized notes directory", "path", a.notesPath)
 
 	// Load config
 	config, err := a.configService.Load()
 	if err != nil {
-		fmt.Printf("ERROR: Cannot load config: %v\n", err)
+		slog.Error("Cannot load config", "error", err)
 		// Use a default config if loading fails
 		a.config = &domain.Config{RealtimeTranscriptionChunkSeconds: 3, ModelName: "base.en"}
-		fmt.Println("Using default STT config.")
+		slog.Warn("Using default STT config.")
 	} else {
 		a.config = config
 	}
@@ -122,17 +122,17 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize Audio Manager
 	a.audioManager.SetContext(ctx)
 	if err := a.audioManager.Initialize(); err != nil {
-		fmt.Printf("Audio Manager initialization failed: %v\n", err)
-		fmt.Println("Audio capture features may be limited.")
+		slog.Error("Audio Manager initialization failed", "error", err)
+		slog.Warn("Audio capture features may be limited.")
 	}
 
 	// Apply audio source from config after audio manager is initialized
 	audioSource := domain.AudioSourceFromString(a.config.Audio.DefaultSource)
 	if err := a.audioManager.SetAudioSource(audioSource); err != nil {
-		fmt.Printf("Warning: Failed to set audio source from config: %v\n", err)
+		slog.Warn("Failed to set audio source from config", "error", err)
 	} else {
 		a.sttManager.SetAudioSource(audioSource)
-		fmt.Printf("Audio source set to: %s\n", a.config.Audio.DefaultSource)
+		slog.Info("Audio source set", "source", a.config.Audio.DefaultSource)
 	}
 
 	// Initialize STT service with self-healing
@@ -142,23 +142,23 @@ func (a *App) startup(ctx context.Context) {
 		ChunkDurationSecs: a.config.RealtimeTranscriptionChunkSeconds,
 	}
 	if err := a.sttManager.Initialize(sttConfig); err != nil {
-		fmt.Printf("STT initialization failed: %v\n", err)
+		slog.Error("STT initialization failed", "error", err)
 	}
 
 	// Initialize LLM service if configured
 	a.llmManager.SetContext(ctx)
 	if a.config.LLM.Provider != "" {
 		if err := a.llmManager.Initialize(&a.config.LLM); err != nil {
-			fmt.Printf("LLM initialization failed: %v\n", err)
-			fmt.Println("LLM features will be disabled. You can configure LLM settings later.")
+			slog.Error("LLM initialization failed", "error", err)
+			slog.Warn("LLM features will be disabled. You can configure LLM settings later.")
 		}
 	} else {
-		fmt.Println("LLM not configured. You can enable it in settings.")
+		slog.Info("LLM not configured. You can enable it in settings.")
 	}
 
 	// Initialize prompt service
 	if err := a.promptService.Initialize(); err != nil {
-		fmt.Printf("Prompt service initialization failed: %v\n", err)
+		slog.Error("Prompt service initialization failed", "error", err)
 	}
 
 	// Create structure.json if it doesn't exist
@@ -167,7 +167,7 @@ func (a *App) startup(ctx context.Context) {
 			Folders: []domain.Folder{},
 			Notes:   []domain.Note{},
 		}); err != nil {
-			fmt.Printf("ERROR: Cannot create structure.json: %v\n", err)
+			slog.Error("Cannot create structure.json", "error", err)
 			return
 		}
 	}
@@ -362,13 +362,11 @@ func (a *App) GetAudioStatus() map[string]interface{} {
 
 // GenerateText generates text using the configured LLM
 func (a *App) GenerateText(prompt string, systemPrompt string) (*domain.LLMResponse, error) {
-	fmt.Printf("[App.GenerateText] Called with prompt length: %d\n", len(prompt))
-	fmt.Printf("[App.GenerateText] LLM Manager available: %v\n", a.llmManager.IsAvailable())
+	slog.Debug("GenerateText called", "promptLength", len(prompt), "llmAvailable", a.llmManager.IsAvailable())
 
 	if !a.llmManager.IsAvailable() {
-		fmt.Println("[App.GenerateText] LLM service not available")
 		status := a.llmManager.GetStatus()
-		fmt.Printf("[App.GenerateText] Status: %+v\n", status)
+		slog.Warn("GenerateText: LLM service not available", "status", status)
 		return nil, fmt.Errorf("LLM service not available. Please configure LLM settings")
 	}
 
@@ -377,7 +375,7 @@ func (a *App) GenerateText(prompt string, systemPrompt string) (*domain.LLMRespo
 		SystemPrompt: systemPrompt,
 	}
 
-	fmt.Println("[App.GenerateText] Calling llmManager.Generate...")
+	slog.Debug("GenerateText: calling llmManager.Generate")
 	return a.llmManager.Generate(a.ctx, request)
 }
 
@@ -410,7 +408,7 @@ func (a *App) GetLLMStatus() map[string]interface{} {
 		status["providerInfo"] = nil
 	}
 
-	fmt.Printf("[DEBUG] LLM Status: %+v\n", status)
+	slog.Debug("LLM Status", "status", status)
 	return status
 }
 
@@ -539,13 +537,11 @@ func (a *App) ExecutePromptOnContentStream(promptID, content string) error {
 // GetStreamingSupport returns whether streaming is available
 func (a *App) GetStreamingSupport() bool {
 	supported := a.llmManager.SupportsStreaming()
-	fmt.Printf("[App.GetStreamingSupport] Streaming supported: %v\n", supported)
-	fmt.Printf("[App.GetStreamingSupport] LLM available: %v\n", a.llmManager.IsAvailable())
+	slog.Debug("GetStreamingSupport", "supported", supported, "llmAvailable", a.llmManager.IsAvailable())
 	if provider := a.llmManager.GetProvider(); provider != nil {
-		fmt.Printf("[App.GetStreamingSupport] Provider available: %v\n", provider.IsAvailable())
-		fmt.Printf("[App.GetStreamingSupport] Provider supports streaming: %v\n", provider.SupportsStreaming())
+		slog.Debug("GetStreamingSupport provider", "providerAvailable", provider.IsAvailable(), "providerSupportsStreaming", provider.SupportsStreaming())
 	} else {
-		fmt.Printf("[App.GetStreamingSupport] No provider configured\n")
+		slog.Debug("GetStreamingSupport: no provider configured")
 	}
 	return supported
 }
@@ -764,7 +760,7 @@ func (a *App) SaveConfig(config domain.Config) error {
 			ChunkDurationSecs: config.RealtimeTranscriptionChunkSeconds,
 		}
 		if err := a.sttManager.Initialize(sttConfig); err != nil {
-			fmt.Printf("Warning: STT reinitialization failed: %v\n", err)
+			slog.Warn("STT reinitialization failed", "error", err)
 		}
 	}
 
@@ -774,7 +770,7 @@ func (a *App) SaveConfig(config domain.Config) error {
 		oldConfig.LLM.APIEndpoint != config.LLM.APIEndpoint ||
 		oldConfig.LLM.APIKey != config.LLM.APIKey {
 		if err := a.llmManager.SwitchProvider(&config.LLM); err != nil {
-			fmt.Printf("Warning: LLM reinitialization failed: %v\n", err)
+			slog.Warn("LLM reinitialization failed", "error", err)
 		}
 	}
 
@@ -782,7 +778,7 @@ func (a *App) SaveConfig(config domain.Config) error {
 	if oldConfig.Audio.DefaultSource != config.Audio.DefaultSource {
 		audioSource := domain.AudioSourceFromString(config.Audio.DefaultSource)
 		if err := a.sttManager.SetAudioSource(audioSource); err != nil {
-			fmt.Printf("Warning: Failed to set audio source: %v\n", err)
+			slog.Warn("Failed to set audio source", "error", err)
 		}
 	}
 
@@ -791,7 +787,7 @@ func (a *App) SaveConfig(config domain.Config) error {
 		a.audioManager.SetMixerConfig(config.Audio.Mixer)
 	}
 
-	fmt.Println("Configuration saved and services reinitialized successfully")
+	slog.Info("Configuration saved and services reinitialized successfully")
 	runtime.EventsEmit(a.ctx, "config:saved")
 	return nil
 }

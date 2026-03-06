@@ -28,6 +28,7 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 	"unsafe"
@@ -103,7 +104,7 @@ func (c *SystemAudioCapturer) Initialize() error {
 	}
 
 	c.initialized = true
-	fmt.Println("✓ System audio capturer initialized (ScreenCaptureKit)")
+	slog.Info("✓ System audio capturer initialized (ScreenCaptureKit)")
 
 	return nil
 }
@@ -172,8 +173,8 @@ func (c *SystemAudioCapturer) StartCapture(ctx context.Context, config domain.Au
 		return fmt.Errorf("screen recording permission not granted - required for system audio capture. Please grant permission in System Settings > Privacy & Security > Screen Recording")
 	}
 
-	fmt.Println("\n=== Starting System Audio Capture ===")
-	fmt.Printf("Sample rate: %d Hz, Channels: %d\n", config.SampleRate, config.Channels)
+	slog.Info("\n=== Starting System Audio Capture ===")
+	slog.Info("Audio config", "sampleRate", config.SampleRate, "channels", config.Channels)
 
 	// Set global callback
 	callbackMutex.Lock()
@@ -210,7 +211,7 @@ func (c *SystemAudioCapturer) StartCapture(ctx context.Context, config domain.Au
 	c.isCapturing = true
 	c.ctx, c.cancel = context.WithCancel(ctx)
 
-	fmt.Println("✓ System audio capture started successfully!")
+	slog.Info("✓ System audio capture started successfully!")
 
 	// Monitor context cancellation
 	go func() {
@@ -230,7 +231,7 @@ func (c *SystemAudioCapturer) StopCapture() error {
 		return nil
 	}
 
-	fmt.Println("\n=== Stopping System Audio Capture ===")
+	slog.Info("\n=== Stopping System Audio Capture ===")
 
 	C.SystemAudioCapturer_Stop()
 
@@ -243,7 +244,7 @@ func (c *SystemAudioCapturer) StopCapture() error {
 		c.cancel()
 	}
 
-	fmt.Println("✓ System audio capture stopped")
+	slog.Info("✓ System audio capture stopped")
 
 	return nil
 }
@@ -270,7 +271,7 @@ func (c *SystemAudioCapturer) Cleanup() {
 	}
 
 	if c.initialized {
-		fmt.Println("Cleaning up system audio capturer...")
+		slog.Info("Cleaning up system audio capturer...")
 		C.SystemAudioCapturer_Cleanup()
 		c.initialized = false
 	}

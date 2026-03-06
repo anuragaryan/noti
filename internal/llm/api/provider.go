@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -53,9 +54,9 @@ func NewProvider(config *domain.LLMConfig) (*Provider, error) {
 
 // Initialize validates the API connection
 func (p *Provider) Initialize() error {
-	fmt.Printf("=== Initializing API LLM ===\n")
-	fmt.Printf("Endpoint: %s\n", p.endpoint)
-	fmt.Printf("Model: %s\n", p.config.ModelName)
+	slog.Info("=== Initializing API LLM ===\n")
+	slog.Info("Endpoint", "endpoint", p.endpoint)
+	slog.Info("Model", "name", p.config.ModelName)
 
 	// Set available to true temporarily for the test
 	p.mutex.Lock()
@@ -79,11 +80,11 @@ func (p *Provider) Initialize() error {
 		return fmt.Errorf("API connection test failed: %w", err)
 	}
 
-	fmt.Println("✓ API LLM provider initialized successfully!")
-	fmt.Printf("✓ Endpoint: %s\n", p.endpoint)
-	fmt.Printf("✓ Model: %s\n", p.config.ModelName)
-	fmt.Printf("✓ Temperature: %.2f\n", p.config.Temperature)
-	fmt.Printf("✓ Max tokens: %d\n\n", p.config.MaxTokens)
+	slog.Info("✓ API LLM provider initialized successfully!")
+	slog.Info("✓ Endpoint", "endpoint", p.endpoint)
+	slog.Info("✓ Model", "name", p.config.ModelName)
+	slog.Info("✓ Temperature: %.2f\n", p.config.Temperature)
+	slog.Info("✓ Max tokens", "tokens", p.config.MaxTokens)
 
 	return nil
 }
@@ -112,8 +113,8 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 		MaxTokens:   maxTokens,
 	}
 
-	fmt.Printf("[LLM API] Generating response for prompt (length: %d chars)\n", len(request.Prompt))
-	fmt.Printf("[LLM API] Temperature: %.2f, Max tokens: %d\n", temperature, maxTokens)
+	slog.Info("[LLM API] Generating response for prompt", "length", len(request.Prompt))
+	slog.Info("[LLM API] Generation params", "temperature", temperature, "maxTokens", maxTokens)
 
 	// Send request using shared client
 	apiResp, err := p.client.ChatCompletion(ctx, apiReq)
@@ -129,7 +130,7 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 	choice := apiResp.Choices[0]
 	text := strings.TrimSpace(choice.Message.Content)
 
-	fmt.Printf("[LLM API] Generated %d characters, used %d tokens\n", len(text), apiResp.Usage.TotalTokens)
+	slog.Info("[LLM API] Generated response", "chars", len(text), "tokens", apiResp.Usage.TotalTokens)
 
 	return &domain.LLMResponse{
 		Text:         text,
@@ -164,8 +165,8 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 		Stream:      true,
 	}
 
-	fmt.Printf("[LLM API] Starting streaming response for prompt (length: %d chars)\n", len(request.Prompt))
-	fmt.Printf("[LLM API] Temperature: %.2f, Max tokens: %d\n", temperature, maxTokens)
+	slog.Info("[LLM API] Starting streaming response for prompt", "length", len(request.Prompt))
+	slog.Info("[LLM API] Generation params", "temperature", temperature, "maxTokens", maxTokens)
 
 	// Track chunk index
 	chunkIndex := 0
@@ -187,7 +188,7 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 		return fmt.Errorf("streaming failed: %w", err)
 	}
 
-	fmt.Printf("[LLM API] Streaming completed, sent %d chunks\n", chunkIndex)
+	slog.Info("[LLM API] Streaming completed", "chunks", chunkIndex)
 	return nil
 }
 
@@ -208,7 +209,7 @@ func (p *Provider) SupportsStreaming() bool {
 
 // Cleanup releases resources
 func (p *Provider) Cleanup() {
-	fmt.Println("Cleaning up API LLM provider...")
+	slog.Info("Cleaning up API LLM provider...")
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 

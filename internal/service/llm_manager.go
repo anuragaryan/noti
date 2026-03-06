@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"noti/internal/domain"
 	"noti/internal/llm/api"
@@ -75,7 +76,7 @@ func (m *LLMManager) Initialize(config *domain.LLMConfig) error {
 	}
 
 	m.provider = provider
-	fmt.Printf("LLM provider initialized successfully (%s)\n", config.Provider)
+	slog.Info("LLM provider initialized successfully", "provider", config.Provider)
 
 	// Notify frontend
 	if m.ctx != nil {

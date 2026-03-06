@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -55,14 +56,14 @@ func (m *STTManager) Initialize(config *domain.STTConfig) error {
 		}
 		if err := transcriber.Initialize(); err != nil {
 			// This handles model loading/corruption errors
-			fmt.Printf("Failed to initialize STT model: %v\n", err)
+			slog.Error("Failed to initialize STT model", "error", err)
 			return false
 		}
 		// Success
 		transcriber.SetContext(m.ctx)
 		m.transcriber = transcriber
 
-		fmt.Println("STT service initialized successfully.")
+		slog.Info("STT service initialized successfully.")
 		if m.ctx != nil {
 			runtime.EventsEmit(m.ctx, "stt:ready")
 		}
@@ -71,20 +72,20 @@ func (m *STTManager) Initialize(config *domain.STTConfig) error {
 
 	if !tryInitialize() {
 		// Initialization failed, likely because the model is missing or corrupt
-		fmt.Println("STT initialization failed. Attempting to download or re-download model...")
+		slog.Warn("STT initialization failed. Attempting to download or re-download model...")
 
 		// Delete the potentially corrupt model file before downloading
 		modelFileName := fmt.Sprintf("ggml-%s.bin", config.ModelName)
 		modelPath := filepath.Join(m.basePath, "models", modelFileName)
 		if _, err := os.Stat(modelPath); err == nil {
-			fmt.Printf("Deleting existing model file at %s to ensure a clean download.\n", modelPath)
+			slog.Info("Deleting existing model file to ensure a clean download", "path", modelPath)
 			os.Remove(modelPath)
 		}
 
 		// Download model and try to initialize again
 		if err := m.DownloadModel(config); err != nil {
-			fmt.Printf("ERROR: Model download and initialization failed: %v\n", err)
-			fmt.Println("Speech-to-text features will be disabled.")
+			slog.Error("Model download and initialization failed", "error", err)
+			slog.Warn("Speech-to-text features will be disabled.")
 			return err
 		}
 	}
@@ -109,36 +110,36 @@ func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
 		DestDir: modelsPath,
 	}
 
-	fmt.Printf("Downloading Whisper model: %s\n", config.ModelName)
+	slog.Info("Downloading Whisper model", "model", config.ModelName)
 	if err := downloader.DownloadModel(ctx, config.ModelName, opts); err != nil {
-		fmt.Printf("Model download failed: %v\n", err)
+		slog.Error("Model download failed", "error", err)
 		if m.ctx != nil {
 			runtime.EventsEmit(m.ctx, "download:error", "Model download failed. Check logs.")
 		}
 		return fmt.Errorf("model download failed: %w", err)
 	}
 
-	fmt.Printf("Model download complete: %s\n", config.ModelName)
+	slog.Info("Model download complete", "model", config.ModelName)
 	if m.ctx != nil {
 		runtime.EventsEmit(m.ctx, "download:finish", config.ModelName)
 	}
 
 	// After a successful download, re-initialize the STT service
-	fmt.Println("Re-initializing STT service after model download...")
+	slog.Info("Re-initializing STT service after model download...")
 	transcriber, err := whisper.NewTranscriber(m.basePath, config)
 	if err != nil {
-		fmt.Printf("Warning: STT service initialization failed after download: %v\n", err)
+		slog.Warn("STT service initialization failed after download", "error", err)
 		return err
 	}
 
 	if err := transcriber.Initialize(); err != nil {
-		fmt.Printf("Warning: Failed to load STT model after download: %v\n", err)
+		slog.Warn("Failed to load STT model after download", "error", err)
 		return err
 	}
 
 	transcriber.SetContext(m.ctx)
 	m.transcriber = transcriber
-	fmt.Println("STT service initialized successfully after download.")
+	slog.Info("STT service initialized successfully after download.")
 
 	// Notify the frontend that the service is now ready
 	if m.ctx != nil {
@@ -228,7 +229,7 @@ func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
 		return fmt.Errorf("failed to start audio capture: %w", err)
 	}
 
-	fmt.Printf("Recording started with source: %s\n", source.String())
+	slog.Info("Recording started", "source", source.String())
 	return nil
 }
 
@@ -240,7 +241,7 @@ func (m *STTManager) StopRecordingWithTranscription() (*domain.TranscriptionResu
 
 	// Stop audio capture (best-effort — log but don't fail)
 	if err := m.audioManager.StopCapture(); err != nil {
-		fmt.Printf("Warning: error stopping audio capture: %v\n", err)
+		slog.Warn("Error stopping audio capture", "error", err)
 	}
 
 	// Stop transcriber and get final result.

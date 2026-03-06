@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,7 +66,7 @@ func (s *PromptService) GetAll() ([]domain.Prompt, error) {
 
 		prompt, err := s.loadPromptFromFile(filepath.Join(s.promptsPath, file.Name()))
 		if err != nil {
-			fmt.Printf("Warning: failed to load prompt %s: %v\n", file.Name(), err)
+			slog.Warn("failed to load prompt", "file", file.Name(), "error", err)
 			continue
 		}
 

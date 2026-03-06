@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func (s *NoteService) Get(id string) (*domain.Note, error) {
 		if err != nil {
 			// File missing is non-fatal; return the note with empty content so
 			// the UI can still display metadata.
-			fmt.Printf("warning: could not load content for note %q: %v\n", id, err)
+			slog.Warn("could not load content for note", "id", id, "error", err)
 			structure.Notes[i].Content = ""
 		} else {
 			structure.Notes[i].Content = content

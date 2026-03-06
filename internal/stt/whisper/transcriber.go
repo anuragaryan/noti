@@ -4,6 +4,7 @@ package whisper
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -161,7 +162,7 @@ func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 
 			tailText, err := t.TranscribeThreadSafe(tailChunk)
 			if err != nil {
-				fmt.Printf("[stt] tail transcription error: %v\n", err)
+				slog.Error("[stt] tail transcription error", "error", err)
 			} else {
 				tailText = cleanTranscription(tailText)
 				if tailText != "" {
@@ -178,7 +179,7 @@ func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 		if base == "" && processed == 0 && len(buffer) > sampleRate {
 			text, err := t.TranscribeThreadSafe(buffer)
 			if err != nil {
-				fmt.Printf("[stt] full-buffer transcription error: %v\n", err)
+				slog.Error("[stt] full-buffer transcription error", "error", err)
 			} else {
 				base = cleanTranscription(text)
 			}
@@ -200,7 +201,7 @@ func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 			}
 			runtime.EventsEmit(t.ctx, "transcription:done", evt)
 		} else {
-			fmt.Printf("[stt] transcription:done skipped: context not set (text=%q)\n", base)
+			slog.Info("[stt] transcription:done skipped: context not set", "text", base)
 		}
 	}(fullBuffer, processedAtStop)
 
@@ -281,7 +282,7 @@ func (t *Transcriber) processNextChunk() {
 		// chunks are always appended in the order they were recorded.
 		text, err := t.TranscribeThreadSafe(audioChunk)
 		if err != nil {
-			fmt.Printf("[stt] chunk transcription error: %v\n", err)
+			slog.Error("[stt] chunk transcription error", "error", err)
 			return
 		}
 

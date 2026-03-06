@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,7 +166,6 @@ func Lookup(ctx context.Context, modelName string) (*ModelEntry, error) {
 	lower := strings.ToLower(modelName)
 	for i := range Registry {
 		for _, alias := range Registry[i].Aliases {
-			log.Printf("Alias: %s/n", strings.ToLower(alias))
 			if strings.ToLower(alias) == lower {
 				return &Registry[i], nil
 			}
