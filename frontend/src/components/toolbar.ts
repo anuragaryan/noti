@@ -9,10 +9,6 @@ import { AppEvents } from '../events'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
 
-// ─── Lucide icons — see utils/icons.ts ─────────────────────────────────────────────────────────
-
-// escapeHtml imported from utils/html.ts
-
 // ─── Render toolbar ──────────────────────────────────────────────────────────
 
 function renderToolbar(): void {

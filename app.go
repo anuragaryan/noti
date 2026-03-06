@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,9 +37,18 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
-	homeDir, _ := os.UserHomeDir()
-	basePath := filepath.Join(homeDir, "Documents", "Noti")
-	notesPath := filepath.Join(basePath, "notes")
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("could not determine user config directory: %v", err)
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("could not determine user config directory: %v", err)
+	}
+
+	basePath := filepath.Join(configDir, "Noti")
+	notesPath := filepath.Join(homeDir, "Documents", "noti", "notes")
 	structurePath := filepath.Join(notesPath, "structure.json")
 
 	// Initialize repositories

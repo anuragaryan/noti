@@ -1,16 +1,16 @@
 {
-  "realtimeTranscriptionChunkSeconds": 3,
-  "modelName": "medium.en",
+  "realtimeTranscriptionChunkSeconds": 5,
+  "modelName": "large-v3-turbo-q5_0",
   "llm": {
-    "provider": "api",
-    "modelName": "gemini-2-5-flash",
+    "provider": "local",
+    "modelName": "Qwen3.5-4B-UD",
     "apiEndpoint": "",
     "apiKey": "",
-    "temperature": 0.7,
-    "maxTokens": 2048
+    "temperature": 0.2,
+    "maxTokens": 250000
   },
   "audio": {
-    "defaultSource": "microphone",
+    "defaultSource": "mixed",
     "sampleRate": 16000,
     "mixer": {
       "microphoneGain": 1.0,

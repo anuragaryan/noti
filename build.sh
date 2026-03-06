@@ -84,7 +84,7 @@ if [[ "$MODE" == "debug" ]]; then
   echo "Or run from terminal to see logs:"
   echo "  ./build/bin/noti.app/Contents/MacOS/noti"
 else
-  echo "📍 Data will be stored in: ~/Documents/Noti/"
+  echo "📍 Data will be stored in: ~/Documents/noti/"
   echo ""
   echo "To test, run:"
   echo "  ./build/bin/noti.app/Contents/MacOS/noti"
