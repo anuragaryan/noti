@@ -98,6 +98,10 @@ export function GetFolderPath(arg1) {
   return window['go']['main']['App']['GetFolderPath'](arg1);
 }
 
+export function GetLLMModels() {
+  return window['go']['main']['App']['GetLLMModels']();
+}
+
 export function GetLLMStatus() {
   return window['go']['main']['App']['GetLLMStatus']();
 }
@@ -112,6 +116,10 @@ export function GetNote(arg1) {
 
 export function GetPrompt(arg1) {
   return window['go']['main']['App']['GetPrompt'](arg1);
+}
+
+export function GetSTTModels() {
+  return window['go']['main']['App']['GetSTTModels']();
 }
 
 export function GetSTTStatus() {

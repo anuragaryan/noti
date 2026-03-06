@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"noti/internal/domain"
+	"noti/internal/infrastructure/downloader"
 	"noti/internal/repository"
 	"noti/internal/service"
 
@@ -245,6 +246,11 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 	}
 }
 
+// GetSTTModels returns the list of supported STT model names
+func (a *App) GetSTTModels() []string {
+	return downloader.ListGGMLModels()
+}
+
 // ============================================================================
 // AUDIO SOURCE OPERATIONS
 // ============================================================================
@@ -410,6 +416,19 @@ func (a *App) GetLLMStatus() map[string]interface{} {
 
 	slog.Debug("LLM Status", "status", status)
 	return status
+}
+
+// GetLLMModels returns the list of supported local LLM model names with descriptions
+func (a *App) GetLLMModels() []map[string]string {
+	entries := downloader.ListModels()
+	result := make([]map[string]string, len(entries))
+	for i, e := range entries {
+		result[i] = map[string]string{
+			"name":        e.Aliases[0],
+			"description": e.Description,
+		}
+	}
+	return result
 }
 
 // UpdateLLMConfig updates LLM configuration and switches provider

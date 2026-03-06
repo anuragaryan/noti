@@ -3,7 +3,7 @@
  */
 
 import state from '../../state'
-import { ConfigAPI } from '../../api'
+import { ConfigAPI, AudioAPI, LLMAPI } from '../../api'
 import { domain } from '../../../wailsjs/go/models'
 import { escapeHtml } from '../../utils/html'
 import { icon } from '../../utils/icons'
@@ -22,6 +22,35 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     }
   }
 
+  // Fetch model lists in parallel
+  let sttModels: string[] = []
+  let llmModels: Array<Record<string, string>> = []
+  try {
+    ;[sttModels, llmModels] = await Promise.all([
+      AudioAPI.getSTTModels(),
+      LLMAPI.getLLMModels(),
+    ])
+  } catch {
+    // Fall back to empty lists — inputs will still render
+  }
+
+  const currentProvider = config.llm?.provider || 'local'
+  const isLocal = currentProvider === 'local'
+
+  // Build STT model options
+  const sttModelOptions = sttModels.length > 0
+    ? sttModels.map(m =>
+        `<option value="${escapeHtml(m)}" ${config?.modelName === m ? 'selected' : ''}>${escapeHtml(m)}</option>`
+      ).join('')
+    : `<option value="${escapeHtml(config.modelName || 'base.en')}" selected>${escapeHtml(config.modelName || 'base.en')}</option>`
+
+  // Build LLM local model options
+  const llmLocalModelOptions = llmModels.length > 0
+    ? llmModels.map(m =>
+        `<option value="${escapeHtml(m.name)}" ${config?.llm?.modelName === m.name ? 'selected' : ''}>${escapeHtml(m.name)} — ${escapeHtml(m.description)}</option>`
+      ).join('')
+    : `<option value="${escapeHtml(config.llm?.modelName || '')}" selected>${escapeHtml(config.llm?.modelName || '')}</option>`
+
   container.innerHTML = `
     <div class="modal-card modal-card-settings">
       <div class="modal-header">
@@ -35,7 +64,9 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
           <div class="settings-section">
             <label class="form-label">
               <span class="form-label-text">Model</span>
-              <input id="stt-model" type="text" class="form-input" value="${escapeHtml(config.modelName || 'base.en')}" />
+              <select id="stt-model" class="form-select">
+                ${sttModelOptions}
+              </select>
             </label>
             <label class="form-label">
               <span class="form-label-text">Realtime chunk (seconds): <span id="chunk-val">${config.realtimeTranscriptionChunkSeconds || 5}</span></span>
@@ -50,19 +81,24 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
             <label class="form-label">
               <span class="form-label-text">Provider</span>
               <select id="llm-provider" class="form-select">
-                <option value="local" ${config.llm?.provider === 'local' ? 'selected' : ''}>Local (llama.cpp)</option>
-                <option value="api" ${config.llm?.provider === 'api' ? 'selected' : ''}>API (OpenAI / compatible)</option>
+                <option value="local" ${currentProvider === 'local' ? 'selected' : ''}>Local (llama.cpp)</option>
+                <option value="api" ${currentProvider === 'api' ? 'selected' : ''}>API (OpenAI / compatible)</option>
               </select>
             </label>
-            <label class="form-label">
+            <label class="form-label" id="llm-model-label">
               <span class="form-label-text">Model Name</span>
-              <input id="llm-model" type="text" class="form-input" value="${escapeHtml(config.llm?.modelName || '')}" />
+              <div id="llm-model-container">
+                ${isLocal
+                  ? `<select id="llm-model" class="form-select">${llmLocalModelOptions}</select>`
+                  : `<input id="llm-model" type="text" class="form-input" value="${escapeHtml(config.llm?.modelName || '')}" />`
+                }
+              </div>
             </label>
-            <label id="llm-api-endpoint-label" class="form-label">
+            <label id="llm-api-endpoint-label" class="form-label${isLocal ? ' hidden' : ''}">
               <span class="form-label-text">API Endpoint</span>
               <input id="llm-endpoint" type="text" class="form-input" value="${escapeHtml(config.llm?.apiEndpoint || '')}" placeholder="http://localhost:8080" />
             </label>
-            <label id="llm-api-key-label" class="form-label">
+            <label id="llm-api-key-label" class="form-label${isLocal ? ' hidden' : ''}">
               <span class="form-label-text">API Key</span>
               <input id="llm-apikey" type="password" class="form-input" value="${escapeHtml(config.llm?.apiKey || '')}" placeholder="sk-…" />
             </label>
@@ -116,6 +152,46 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
   const tempVal = container.querySelector<HTMLElement>('#temp-val')
   tempSlider?.addEventListener('input', () => { if (tempVal && tempSlider) tempVal.textContent = tempSlider.value })
 
+  // Provider change — toggle model input type and API field visibility
+  const providerSelect = container.querySelector<HTMLSelectElement>('#llm-provider')
+  const endpointLabel = container.querySelector<HTMLElement>('#llm-api-endpoint-label')
+  const apiKeyLabel = container.querySelector<HTMLElement>('#llm-api-key-label')
+  const modelContainer = container.querySelector<HTMLElement>('#llm-model-container')
+
+  function updateProviderUI(provider: string): void {
+    const local = provider === 'local'
+
+    // Toggle API fields visibility
+    if (local) {
+      endpointLabel?.classList.add('hidden')
+      apiKeyLabel?.classList.add('hidden')
+    } else {
+      endpointLabel?.classList.remove('hidden')
+      apiKeyLabel?.classList.remove('hidden')
+    }
+
+    // Swap model input between select (local) and text input (api)
+    if (modelContainer) {
+      const currentValue = modelContainer.querySelector<HTMLInputElement | HTMLSelectElement>('#llm-model')?.value ?? ''
+      if (local) {
+        // Find the best matching option or fall back to first
+        const matchedOption = llmModels.find(m => m.name === currentValue)
+        const selectedValue = matchedOption ? currentValue : (llmModels[0]?.name ?? '')
+        modelContainer.innerHTML = `<select id="llm-model" class="form-select">
+          ${llmModels.map(m =>
+            `<option value="${escapeHtml(m.name)}" ${m.name === selectedValue ? 'selected' : ''}>${escapeHtml(m.name)} — ${escapeHtml(m.description)}</option>`
+          ).join('')}
+        </select>`
+      } else {
+        modelContainer.innerHTML = `<input id="llm-model" type="text" class="form-input" value="${escapeHtml(currentValue)}" />`
+      }
+    }
+  }
+
+  providerSelect?.addEventListener('change', (e) => {
+    updateProviderUI((e.target as HTMLSelectElement).value)
+  })
+
   // Close buttons
   const close = () => state.closeModal()
   container.querySelector('#settings-close')?.addEventListener('click', close)
@@ -127,12 +203,12 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
 
     const newConfig = domain.Config.createFrom({
       ...config,
-      modelName: (container.querySelector<HTMLInputElement>('#stt-model')?.value ?? config.modelName),
+      modelName: (container.querySelector<HTMLSelectElement>('#stt-model')?.value ?? config.modelName),
       realtimeTranscriptionChunkSeconds: parseInt(container.querySelector<HTMLInputElement>('#stt-chunk')?.value ?? '5'),
       llm: {
         ...config.llm,
         provider: (container.querySelector<HTMLSelectElement>('#llm-provider')?.value ?? config.llm?.provider) as string,
-        modelName: (container.querySelector<HTMLInputElement>('#llm-model')?.value ?? config.llm?.modelName),
+        modelName: (container.querySelector<HTMLInputElement | HTMLSelectElement>('#llm-model')?.value ?? config.llm?.modelName),
         apiEndpoint: (container.querySelector<HTMLInputElement>('#llm-endpoint')?.value ?? config.llm?.apiEndpoint),
         apiKey: (container.querySelector<HTMLInputElement>('#llm-apikey')?.value ?? config.llm?.apiKey),
         temperature: parseFloat(container.querySelector<HTMLInputElement>('#llm-temp')?.value ?? '0.7'),

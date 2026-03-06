@@ -66,6 +66,10 @@ export const AudioAPI = {
     return App.GetSTTStatus()
   },
 
+  getSTTModels(): Promise<string[]> {
+    return App.GetSTTModels()
+  },
+
   startRecording(): Promise<void> {
     return App.StartVoiceRecording()
   },
@@ -124,6 +128,10 @@ export const AudioAPI = {
 export const LLMAPI = {
   getStatus(): Promise<Record<string, unknown>> {
     return App.GetLLMStatus()
+  },
+
+  getLLMModels(): Promise<Array<Record<string, string>>> {
+    return App.GetLLMModels()
   },
 
   getStreamingSupport(): Promise<boolean> {
