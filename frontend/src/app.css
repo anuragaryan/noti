@@ -183,12 +183,15 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   flex-shrink: 0;
 }
 
-#sidebar-folders { padding: 2px 12px; flex-shrink: 0; }
+#sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+#sidebar-folders { padding: 2px 12px; }
 
 #sidebar-notes {
   padding: 2px 12px;
-  flex: 1;
-  overflow-y: auto;
 }
 
 #sidebar-footer {
