@@ -9,6 +9,8 @@ import { AppEvents } from '../events'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
 
+const MANAGE_PROMPTS_VALUE = '__manage_prompts__'
+
 // ─── Render toolbar ──────────────────────────────────────────────────────────
 
 function renderToolbar(): void {
@@ -55,7 +57,12 @@ function renderToolbar(): void {
     ${isPresetMode ? `
       <select id="prompt-select" class="ai-prompt-select">
         <option value="">Select prompt…</option>
-        ${promptOptions}
+        <optgroup label="Presets">
+          ${promptOptions}
+        </optgroup>
+        <optgroup label="Actions">
+          <option value="${MANAGE_PROMPTS_VALUE}">⚙ Manage prompts…</option>
+        </optgroup>
       </select>
     ` : `
       <input
@@ -74,6 +81,13 @@ function renderToolbar(): void {
 
   container.querySelector<HTMLSelectElement>('#prompt-select')?.addEventListener('change', (e) => {
     const val = (e.target as HTMLSelectElement).value
+
+    if (val === MANAGE_PROMPTS_VALUE) {
+      state.openModal('prompts')
+      renderToolbar()
+      return
+    }
+
     state.setState({ selectedPromptId: val || null })
     renderToolbar()
   })
