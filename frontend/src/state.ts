@@ -47,6 +47,8 @@ export interface AppState {
   streamingContent: string
   selectedPromptId: string | null
   showAIPanel: boolean
+  aiMode: 'preset' | 'custom'
+  customPromptText: string
 
   // Availability
   sttAvailable: boolean
@@ -95,6 +97,8 @@ class StateManager {
     streamingContent: '',
     selectedPromptId: null,
     showAIPanel: false,
+    aiMode: 'preset',
+    customPromptText: '',
 
     sttAvailable: false,
     llmAvailable: false,

@@ -4,7 +4,7 @@
  */
 
 import state from '../state'
-import { PromptsAPI } from '../api'
+import { PromptsAPI, LLMAPI } from '../api'
 import { AppEvents } from '../events'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
@@ -23,26 +23,50 @@ function renderToolbar(): void {
   }
 
   container.classList.remove('hidden')
-  // Layout defined in #ai-toolbar CSS class (app.css)
 
   const prompts = state.get('prompts')
   const selectedId = state.get('selectedPromptId')
   const isStreaming = state.get('isStreaming')
+  const aiMode = state.get('aiMode')
+  const customText = state.get('customPromptText')
 
   const promptOptions = prompts.map(p =>
     `<option value="${escapeHtml(p.id)}" ${p.id === selectedId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`
   ).join('')
+
+  const isPresetMode = aiMode === 'preset'
+  const isCustomMode = aiMode === 'custom'
+
+  const canRun = isStreaming
+    ? false
+    : isPresetMode
+      ? Boolean(selectedId && note)
+      : Boolean(customText.trim() && note)
 
   container.innerHTML = `
     <div class="ai-label">
       ${icon('sparkles', 16)}
       <span class="ai-label-text">AI</span>
     </div>
-    <select id="prompt-select" class="ai-prompt-select">
-      <option value="">Select prompt…</option>
-      ${promptOptions}
-    </select>
-    <button id="run-prompt-btn" class="ai-run-btn" ${(!selectedId || !note || isStreaming) ? 'disabled' : ''}>
+    <div class="ai-mode-toggle">
+      <button id="ai-preset-btn" class="ai-mode-btn ${isPresetMode ? 'active' : ''}">Preset</button>
+      <button id="ai-custom-btn" class="ai-mode-btn ${isCustomMode ? 'active' : ''}">Custom</button>
+    </div>
+    ${isPresetMode ? `
+      <select id="prompt-select" class="ai-prompt-select">
+        <option value="">Select prompt…</option>
+        ${promptOptions}
+      </select>
+    ` : `
+      <input
+        type="text"
+        id="custom-prompt-input"
+        class="ai-custom-input"
+        placeholder="Enter custom prompt..."
+        value="${escapeHtml(customText)}"
+      />
+    `}
+    <button id="run-prompt-btn" class="ai-run-btn" ${!canRun ? 'disabled' : ''}>
       ${icon('play', 14)}
       ${isStreaming ? 'Running…' : 'Run'}
     </button>
@@ -51,6 +75,25 @@ function renderToolbar(): void {
   container.querySelector<HTMLSelectElement>('#prompt-select')?.addEventListener('change', (e) => {
     const val = (e.target as HTMLSelectElement).value
     state.setState({ selectedPromptId: val || null })
+    renderToolbar()
+  })
+
+  container.querySelector<HTMLInputElement>('#custom-prompt-input')?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value
+    state.setState({ customPromptText: val })
+    const runBtn = container.querySelector<HTMLButtonElement>('#run-prompt-btn')
+    if (runBtn) {
+      runBtn.disabled = !val.trim() || isStreaming
+    }
+  })
+
+  container.querySelector('#ai-preset-btn')?.addEventListener('click', () => {
+    state.setState({ aiMode: 'preset' })
+    renderToolbar()
+  })
+
+  container.querySelector('#ai-custom-btn')?.addEventListener('click', () => {
+    state.setState({ aiMode: 'custom' })
     renderToolbar()
   })
 
@@ -63,15 +106,44 @@ function renderToolbar(): void {
 
 async function runPrompt(): Promise<void> {
   const note = state.get('currentNote')
-  const promptId = state.get('selectedPromptId')
-  if (!note || !promptId) return
+  const aiMode = state.get('aiMode')
+  const config = state.get('config')
+
+  if (!note) return
 
   state.setState({ isStreaming: true, streamingContent: '', showAIPanel: true })
   renderToolbar()
   renderAIPanel()
 
   try {
-    await PromptsAPI.executeOnNoteStream(promptId, note.id)
+    if (aiMode === 'preset') {
+      const promptId = state.get('selectedPromptId')
+      if (!promptId) {
+        state.setState({ isStreaming: false })
+        return
+      }
+      await PromptsAPI.executeOnNoteStream(promptId, note.id)
+    } else {
+      const customText = state.get('customPromptText')
+      if (!customText.trim()) {
+        state.setState({ isStreaming: false })
+        return
+      }
+
+      const llmConfig = config?.llm
+      const temperature = llmConfig?.temperature ?? 0.2
+      const maxTokens = llmConfig?.maxTokens ?? 2500
+
+      const noteContent = note.content || '(No content)'
+      const systemPrompt = `You are a helpful AI assistant. Analyze the user's note below and respond to their request.\n\nNote content:\n${noteContent}`
+
+      await LLMAPI.generateStreamWithOptions(
+        customText,
+        systemPrompt,
+        temperature,
+        maxTokens
+      )
+    }
   } catch (err) {
     console.error('Prompt execution failed:', err)
     state.setState({ isStreaming: false })
@@ -168,6 +240,7 @@ export function initToolbar(): void {
   state.subscribe('currentNote', () => renderToolbar())
   state.subscribe('selectedPromptId', () => renderToolbar())
   state.subscribe('showAIPanel', () => renderAIPanel())
+  state.subscribe('aiMode', () => renderToolbar())
 }
 
 export async function loadPrompts(): Promise<void> {

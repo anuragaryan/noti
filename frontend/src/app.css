@@ -752,6 +752,60 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   -webkit-appearance: none;
 }
 
+.ai-mode-toggle {
+  display: flex;
+  gap: 2px;
+  height: 30px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--secondary);
+  flex-shrink: 0;
+}
+
+.ai-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ai-mode-btn.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.ai-custom-input {
+  flex: 1;
+  height: 30px;
+  border-radius: var(--radius-pill);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-secondary);
+  font-size: 13px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  outline: none;
+  cursor: text;
+}
+
+.ai-custom-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.ai-custom-input:focus {
+  border-color: var(--primary);
+}
+
 .ai-run-btn {
   display: flex;
   align-items: center;
@@ -767,6 +821,7 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   transition: opacity 0.15s;
 }
 .ai-run-btn:disabled      { background: var(--muted); color: var(--muted-foreground); cursor: not-allowed; }
+.ai-run-btn:not(:disabled) { background: var(--primary); color: var(--primary-foreground); }
 
 
 /* ── AI result panel ──────────────────────────────────────── */
