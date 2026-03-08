@@ -96,8 +96,21 @@ export async function startRecording(): Promise<void> {
   const source = state.get('recordingSource') || 'microphone'
 
   try {
-    const perms = await AudioAPI.checkPermissions(source)
-    if (perms.status === 'denied') {
+    const initialPerms = await AudioAPI.checkPermissions(source)
+    let permissionStatus = String(initialPerms.status ?? 'unknown')
+
+    if (permissionStatus !== 'granted') {
+      try {
+        await AudioAPI.requestPermissions(source)
+      } catch {
+        // Ignore and rely on a follow-up permission check for final status.
+      }
+
+      const updatedPerms = await AudioAPI.checkPermissions(source)
+      permissionStatus = String(updatedPerms.status ?? 'unknown')
+    }
+
+    if (permissionStatus !== 'granted') {
       state.showNotification('Microphone permission denied. Please allow in System Settings.', 'error')
       return
     }
