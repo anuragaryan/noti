@@ -26,9 +26,15 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
 
 // ─── Note State Helper ────────────────────────────────────────────────────────
 
-function updateNoteInState(noteId: string, title: string, content: string): void {
+function updateNoteInState(
+  noteId: string,
+  title: string,
+  content: string,
+  options?: { updateCurrentNote?: boolean }
+): void {
   const currentNote = state.get('currentNote')
   const notes = state.get('notes')
+  const shouldUpdateCurrentNote = options?.updateCurrentNote ?? true
 
   const updatedNotes = notes.map(n =>
     n.id === noteId ? { ...n, title, content } : n
@@ -38,7 +44,9 @@ function updateNoteInState(noteId: string, title: string, content: string): void
     isDirty: false,
     lastSaved: new Date(),
     notes: updatedNotes,
-    ...(currentNote?.id === noteId ? { currentNote: { ...currentNote, title, content } as Note } : {})
+    ...(shouldUpdateCurrentNote && currentNote?.id === noteId
+      ? { currentNote: { ...currentNote, title, content } as Note }
+      : {})
   })
 }
 
@@ -259,7 +267,8 @@ async function autoSave(noteId: string, title: string, content: string): Promise
     try {
       state.setState({ isSaving: true })
       await NotesAPI.update(noteId, title, content)
-      updateNoteInState(noteId, title, content)
+      updateNoteInState(noteId, title, content, { updateCurrentNote: false })
+      state.setState({ isSaving: false })
       void renderTopBar()
     } catch (err) {
       console.error('Auto-save failed:', err)
