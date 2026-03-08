@@ -4,7 +4,7 @@
  */
 
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime'
-import type { StreamChunkPayload, DownloadPayload, LLMReadyPayload, TranscriptionResult } from './types'
+import type { StreamChunkPayload, LLMReadyPayload, TranscriptionResult, DownloadEventPayload } from './types'
 
 // Track active listeners for cleanup
 const activeListeners: string[] = []
@@ -48,17 +48,9 @@ export const AppEvents = {
     on<TranscriptionResult>('transcription:done', cb)
   },
 
-  // ─── Model Downloads ─────────────────────────────────────────────────────
-  onDownloadStart(cb: (payload: DownloadPayload) => void): void {
-    on<DownloadPayload>('download:start', cb)
-  },
-
-  onDownloadFinish(cb: (payload: DownloadPayload) => void): void {
-    on<DownloadPayload>('download:finish', cb)
-  },
-
-  onDownloadError(cb: (error: string) => void): void {
-    on<string>('download:error', cb)
+  // ─── Downloads ────────────────────────────────────────────────────────────
+  onDownloadEvent(cb: (payload: DownloadEventPayload) => void): void {
+    on<DownloadEventPayload>('download:event', cb)
   },
 
   // ─── Config ──────────────────────────────────────────────────────────────

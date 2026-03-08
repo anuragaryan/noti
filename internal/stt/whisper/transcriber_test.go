@@ -161,7 +161,7 @@ func cleanupStartProcessing(t *testing.T, tr *Transcriber) {
 // model file for modelName, returning the full path.
 func writeDummyModel(t *testing.T, base, modelName string) string {
 	t.Helper()
-	dir := filepath.Join(base, "models")
+	dir := filepath.Join(base, "models", "stt")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}

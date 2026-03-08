@@ -78,9 +78,9 @@ export function StartVoiceRecording():Promise<void>;
 
 export function StartVoiceRecordingWithSource(arg1:string):Promise<void>;
 
-export function StopVoiceRecording():Promise<domain.TranscriptionResult>;
-
 export function StopTextStream():Promise<void>;
+
+export function StopVoiceRecording():Promise<domain.TranscriptionResult>;
 
 export function UpdateFolder(arg1:string,arg2:string,arg3:string):Promise<void>;
 

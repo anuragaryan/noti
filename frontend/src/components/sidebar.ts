@@ -619,13 +619,32 @@ function renderFooter(): void {
   settingsBtn.innerHTML = `${icon('settings', 18)} Settings`
   settingsBtn.addEventListener('click', () => state.openModal('settings'))
 
+  const downloadsBtn = el('button', { id: 'downloads-btn', class: 'settings-btn settings-btn-icon' })
+  downloadsBtn.innerHTML = `${icon('download', 18)}`
+  downloadsBtn.setAttribute('title', 'Downloads')
+  downloadsBtn.addEventListener('click', () => state.openModal('downloads'))
+
   const themeContainer = document.createElement('div')
   renderThemeToggle(themeContainer)
 
-  container.appendChild(settingsBtn)
+  const actionGroup = document.createElement('div')
+  actionGroup.className = 'sidebar-footer-actions'
+  actionGroup.appendChild(settingsBtn)
+  actionGroup.appendChild(downloadsBtn)
+
+  container.appendChild(actionGroup)
   container.appendChild(themeContainer)
   // Re-render theme toggle when theme changes
   state.subscribe('theme', () => renderThemeToggle(themeContainer))
+
+  const updateDownloadsVisibility = (): void => {
+    const downloads = state.get('downloads')
+    const hasDownloads = downloads.some(d => d.status === 'queued' || d.status === 'downloading' || d.completedInSession)
+    downloadsBtn.classList.toggle('hidden', !hasDownloads)
+  }
+
+  updateDownloadsVisibility()
+  state.subscribe('downloads', updateDownloadsVisibility)
 }
 
 // ─── Event Handlers ──────────────────────────────────────────────────────────

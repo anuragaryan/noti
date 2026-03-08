@@ -17,7 +17,7 @@ export type TranscriptionResult = domain.TranscriptionResult
 // UI-specific types
 export type Theme = 'light' | 'dark'
 
-export type ModalType = 'settings' | 'prompts' | 'delete-note' | 'delete-folder' | 'create-folder' | 'rename-note' | 'rename-folder' | 'move-note' | 'move-folder' | null
+export type ModalType = 'settings' | 'prompts' | 'delete-note' | 'delete-folder' | 'create-folder' | 'rename-note' | 'rename-folder' | 'move-note' | 'move-folder' | 'downloads' | null
 
 export interface SidebarState {
   expandedFolders: Set<string>
@@ -53,13 +53,32 @@ export interface StreamChunkPayload {
   finishReason?: string
 }
 
-export interface DownloadPayload {
-  modelName: string
-}
-
 export interface LLMReadyPayload {
   provider: string
   modelName: string
+}
+
+export type DownloadKind = 'stt-model' | 'llm-model' | 'llama-server'
+export type DownloadStatus = 'queued' | 'downloading' | 'completed' | 'error'
+
+export interface DownloadEventPayload {
+  id: string
+  kind: DownloadKind
+  label: string
+  status: DownloadStatus
+  bytesDownloaded?: number
+  totalBytes?: number
+  percent?: number
+  error?: string
+  timestamp?: string
+}
+
+export interface DownloadItem extends DownloadEventPayload {
+  percent: number
+  bytesDownloaded: number
+  totalBytes: number
+  completedInSession: boolean
+  createdAt: string
 }
 
 // Delete confirmation context

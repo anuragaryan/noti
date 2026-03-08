@@ -16,6 +16,7 @@ import { renderDeleteConfirmModal } from './components/modals/delete-confirm'
 import { renderCreateFolderModal } from './components/modals/create-folder'
 import { renderRenameModal } from './components/modals/rename'
 import { renderMoveModal } from './components/modals/move'
+import { renderDownloadsModal } from './components/modals/downloads'
 import { AppEvents } from './events'
 import { NotesAPI, FoldersAPI, AudioAPI, ConfigAPI } from './api'
 import state from './state'
@@ -42,6 +43,9 @@ function initModalSystem(): void {
     switch (modal) {
       case 'settings':
         await renderSettingsModal(content)
+        break
+      case 'downloads':
+        renderDownloadsModal(content)
         break
       case 'prompts':
         await renderPromptsModal(content)
@@ -77,6 +81,11 @@ function initModalSystem(): void {
   })
 
   state.subscribe('activeModal', () => void renderModal())
+  state.subscribe('downloads', () => {
+    if (state.get('activeModal') === 'downloads') {
+      renderDownloadsModal(content)
+    }
+  })
 }
 
 // ─── Notification Toast ───────────────────────────────────────────────────────
@@ -155,19 +164,28 @@ function initGoEvents(): void {
     state.setState({ sttAvailable: true })
   })
 
-  AppEvents.onDownloadStart(({ modelName }) => {
-    state.showNotification(`Downloading ${modelName}…`, 'info')
-  })
+  AppEvents.onDownloadEvent((payload) => {
+    state.upsertDownload(payload)
 
-  AppEvents.onDownloadFinish(({ modelName }) => {
-    state.showNotification(`${modelName} ready`, 'success')
-    void AudioAPI.getSTTStatus().then(status => {
-      state.setState({ sttAvailable: Boolean(status.available) })
-    })
-  })
+    if (
+      payload.status === 'queued' &&
+      state.get('activeModal') !== 'downloads' &&
+      !state.get('downloadsModalDismissed')
+    ) {
+      state.openModal('downloads')
+    }
 
-  AppEvents.onDownloadError((err) => {
-    state.showNotification(`Download failed: ${err}`, 'error')
+    if (payload.kind === 'stt-model' && payload.status === 'completed') {
+      void AudioAPI.getSTTStatus().then(status => {
+        state.setState({ sttAvailable: Boolean(status.available) })
+      })
+    }
+
+    if (payload.status === 'error') {
+      const label = payload.label || 'Download'
+      const message = payload.error ? `${label}: ${payload.error}` : `${label} download failed`
+      state.showNotification(message, 'error')
+    }
   })
 }
 

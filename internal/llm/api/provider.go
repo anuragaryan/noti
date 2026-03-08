@@ -52,6 +52,10 @@ func NewProvider(config *domain.LLMConfig) (*Provider, error) {
 	}, nil
 }
 
+// SetContext satisfies the LLMProvider interface. API providers currently do not
+// emit download events, so the context is not used.
+func (p *Provider) SetContext(ctx context.Context) {}
+
 // Initialize validates the API connection
 func (p *Provider) Initialize() error {
 	slog.Info("=== Initializing API LLM ===\n")

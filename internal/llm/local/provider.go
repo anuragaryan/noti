@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"noti/internal/domain"
+	"noti/internal/events"
 	"noti/internal/infrastructure/downloader"
 	"noti/internal/llm/shared"
 )
@@ -26,6 +27,7 @@ type Provider struct {
 	basePath        string
 	available       bool
 	mutex           sync.Mutex
+	ctx             context.Context
 }
 
 // NewProvider creates a new local LLM provider
@@ -146,6 +148,17 @@ func (p *Provider) Initialize() error {
 // SetServerManager sets the llama-server manager
 func (p *Provider) SetServerManager(manager *ServerManager) {
 	p.serverManager = manager
+	if manager != nil {
+		manager.SetContext(p.ctx)
+	}
+}
+
+// SetContext passes the runtime context down to the provider and server manager.
+func (p *Provider) SetContext(ctx context.Context) {
+	p.ctx = ctx
+	if p.serverManager != nil {
+		p.serverManager.SetContext(ctx)
+	}
 }
 
 // Generate produces text based on the request
@@ -316,12 +329,40 @@ func (p *Provider) downloadModel() error {
 		return fmt.Errorf("failed to create models directory: %w", err)
 	}
 
+	downloadID := fmt.Sprintf("llm:%s", p.config.ModelName)
+	events.EmitDownloadEvent(p.ctx, events.DownloadEvent{
+		ID:     downloadID,
+		Kind:   events.DownloadKindLLMModel,
+		Label:  p.config.ModelName,
+		Status: events.DownloadStatusQueued,
+	})
+
 	slog.Info("Downloading LLM model", "model", p.config.ModelName)
 	opts := &downloader.DownloadOptions{
 		DestDir: modelsDir,
+		ProgressFunc: func(downloaded, total int64) {
+			events.EmitDownloadEvent(p.ctx, events.DownloadEvent{
+				ID:              downloadID,
+				Kind:            events.DownloadKindLLMModel,
+				Label:           p.config.ModelName,
+				Status:          events.DownloadStatusDownloading,
+				BytesDownloaded: downloaded,
+				TotalBytes:      total,
+				Percent:         events.CalculatePercent(downloaded, total),
+			})
+		},
 	}
+	// Use Background so model downloads continue even if the UI context is cancelled;
+	// progress events still go through p.ctx for the active session.
 	result, err := downloader.DownloadLLM(context.Background(), p.config.ModelName, opts)
 	if err != nil {
+		events.EmitDownloadEvent(p.ctx, events.DownloadEvent{
+			ID:     downloadID,
+			Kind:   events.DownloadKindLLMModel,
+			Label:  p.config.ModelName,
+			Status: events.DownloadStatusError,
+			Error:  err.Error(),
+		})
 		return fmt.Errorf("download failed: %w", err)
 	}
 
@@ -330,6 +371,16 @@ func (p *Provider) downloadModel() error {
 	} else {
 		slog.Info("Model downloaded", "path", result.DestPath, "sizeMB", float64(result.SizeBytes)/(1024*1024))
 	}
+
+	events.EmitDownloadEvent(p.ctx, events.DownloadEvent{
+		ID:              downloadID,
+		Kind:            events.DownloadKindLLMModel,
+		Label:           p.config.ModelName,
+		Status:          events.DownloadStatusCompleted,
+		BytesDownloaded: result.SizeBytes,
+		TotalBytes:      result.SizeBytes,
+		Percent:         100,
+	})
 
 	return nil
 }

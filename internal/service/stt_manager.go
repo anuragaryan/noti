@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"noti/internal/domain"
+	"noti/internal/events"
 	"noti/internal/infrastructure/downloader"
 	"noti/internal/stt/whisper"
 
@@ -76,7 +77,7 @@ func (m *STTManager) Initialize(config *domain.STTConfig) error {
 
 		// Delete the potentially corrupt model file before downloading
 		modelFileName := fmt.Sprintf("ggml-%s.bin", config.ModelName)
-		modelPath := filepath.Join(m.basePath, "models", modelFileName)
+		modelPath := filepath.Join(m.basePath, "models", "stt", modelFileName)
 		if _, err := os.Stat(modelPath); err == nil {
 			slog.Info("Deleting existing model file to ensure a clean download", "path", modelPath)
 			os.Remove(modelPath)
@@ -95,10 +96,6 @@ func (m *STTManager) Initialize(config *domain.STTConfig) error {
 
 // DownloadModel downloads a Whisper model and initializes the STT service
 func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
-	if m.ctx != nil {
-		runtime.EventsEmit(m.ctx, "download:start", config.ModelName)
-	}
-
 	modelsPath := filepath.Join(m.basePath, "models", "stt")
 
 	ctx := m.ctx
@@ -106,23 +103,57 @@ func (m *STTManager) DownloadModel(config *domain.STTConfig) error {
 		ctx = context.Background()
 	}
 
+	downloadID := fmt.Sprintf("stt:%s", config.ModelName)
+	events.EmitDownloadEvent(m.ctx, events.DownloadEvent{
+		ID:     downloadID,
+		Kind:   events.DownloadKindSTTModel,
+		Label:  config.ModelName,
+		Status: events.DownloadStatusQueued,
+	})
+
 	opts := &downloader.DownloadOptions{
 		DestDir: modelsPath,
+		ProgressFunc: func(downloaded, total int64) {
+			events.EmitDownloadEvent(m.ctx, events.DownloadEvent{
+				ID:              downloadID,
+				Kind:            events.DownloadKindSTTModel,
+				Label:           config.ModelName,
+				Status:          events.DownloadStatusDownloading,
+				BytesDownloaded: downloaded,
+				TotalBytes:      total,
+				Percent:         events.CalculatePercent(downloaded, total),
+			})
+		},
 	}
 
 	slog.Info("Downloading Whisper model", "model", config.ModelName)
 	if err := downloader.DownloadModel(ctx, config.ModelName, opts); err != nil {
 		slog.Error("Model download failed", "error", err)
-		if m.ctx != nil {
-			runtime.EventsEmit(m.ctx, "download:error", "Model download failed. Check logs.")
-		}
+		events.EmitDownloadEvent(m.ctx, events.DownloadEvent{
+			ID:     downloadID,
+			Kind:   events.DownloadKindSTTModel,
+			Label:  config.ModelName,
+			Status: events.DownloadStatusError,
+			Error:  "Model download failed. Check logs.",
+		})
 		return fmt.Errorf("model download failed: %w", err)
 	}
 
 	slog.Info("Model download complete", "model", config.ModelName)
-	if m.ctx != nil {
-		runtime.EventsEmit(m.ctx, "download:finish", config.ModelName)
+	modelFile := filepath.Join(modelsPath, fmt.Sprintf("ggml-%s.bin", config.ModelName))
+	var size int64
+	if info, statErr := os.Stat(modelFile); statErr == nil {
+		size = info.Size()
 	}
+	events.EmitDownloadEvent(m.ctx, events.DownloadEvent{
+		ID:              downloadID,
+		Kind:            events.DownloadKindSTTModel,
+		Label:           config.ModelName,
+		Status:          events.DownloadStatusCompleted,
+		BytesDownloaded: size,
+		TotalBytes:      size,
+		Percent:         100,
+	})
 
 	// After a successful download, re-initialize the STT service
 	slog.Info("Re-initializing STT service after model download...")

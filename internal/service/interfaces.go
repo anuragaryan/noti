@@ -8,6 +8,9 @@ import (
 
 // LLMProvider defines the interface all LLM providers must implement
 type LLMProvider interface {
+	// SetContext passes the Wails runtime context so providers can emit events
+	SetContext(ctx context.Context)
+
 	// Initialize sets up the provider (load model, validate API key, etc.)
 	Initialize() error
 

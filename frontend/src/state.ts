@@ -4,18 +4,20 @@
  */
 
 import type {
-  Note,
-  Folder,
-  Prompt,
-  Config,
-  Theme,
-  ModalType,
-  RecordingState,
-  StreamingState,
-  DeleteContext,
-  CreateFolderContext,
-  RenameContext,
-  MoveContext,
+	Note,
+	Folder,
+	Prompt,
+	Config,
+	Theme,
+	ModalType,
+	RecordingState,
+	StreamingState,
+	DeleteContext,
+	CreateFolderContext,
+	RenameContext,
+	MoveContext,
+	DownloadEventPayload,
+	DownloadItem,
 } from './types'
 
 export interface AppState {
@@ -65,8 +67,10 @@ export interface AppState {
   renameContext: RenameContext | null
   moveContext: MoveContext | null
 
-  // Notifications
-  notification: { message: string; type: 'info' | 'success' | 'error' } | null
+	// Notifications
+		notification: { message: string; type: 'info' | 'success' | 'error' } | null
+		downloads: DownloadItem[]
+		downloadsModalDismissed: boolean
 }
 
 type Listener = () => void
@@ -112,8 +116,10 @@ class StateManager {
     renameContext: null,
     moveContext: null,
 
-    notification: null,
-  }
+			notification: null,
+			downloads: [],
+			downloadsModalDismissed: false,
+		}
 
   private _subscribers: Subscribers = new Map()
 
@@ -158,19 +164,29 @@ class StateManager {
 
   // ─── Convenience helpers ─────────────────────────────────────────────────
 
-  openModal(modal: ModalType): void {
-    this.setState({ activeModal: modal })
-  }
+	openModal(modal: ModalType): void {
+		const partial: Partial<AppState> = { activeModal: modal }
+		if (modal === 'downloads') {
+			partial.downloadsModalDismissed = false
+		}
+		this.setState(partial)
+	}
 
-  closeModal(): void {
-    this.setState({
-      activeModal: null,
-      deleteContext: null,
-      createFolderContext: null,
-      renameContext: null,
-      moveContext: null,
-    })
-  }
+	closeModal(): void {
+		const closingDownloads = this._state.activeModal === 'downloads'
+		const hasActiveDownloads = this._state.downloads.some((d) => d.status === 'queued' || d.status === 'downloading')
+		const partial: Partial<AppState> = {
+			activeModal: null,
+			deleteContext: null,
+			createFolderContext: null,
+			renameContext: null,
+			moveContext: null,
+		}
+		if (closingDownloads && hasActiveDownloads) {
+			partial.downloadsModalDismissed = true
+		}
+		this.setState(partial)
+	}
 
   showNotification(message: string, type: 'info' | 'success' | 'error' = 'info', durationMs = 3000): void {
     this.setState({ notification: { message, type } })
@@ -187,7 +203,59 @@ class StateManager {
       expanded.add(folderId)
     }
     this.setState({ expandedFolders: expanded })
-  }
+	}
+
+	upsertDownload(event: DownloadEventPayload): void {
+		const downloads = [...this._state.downloads]
+		const idx = downloads.findIndex((d) => d.id === event.id)
+		const base: DownloadItem = idx >= 0 ? { ...downloads[idx] } : {
+			id: event.id,
+			kind: event.kind,
+			label: event.label,
+			status: event.status,
+			bytesDownloaded: 0,
+			totalBytes: 0,
+			percent: 0,
+			error: event.error,
+			completedInSession: false,
+			createdAt: new Date().toISOString(),
+		}
+
+		base.kind = event.kind
+		base.label = event.label
+		base.status = event.status
+		if (event.status === 'queued') {
+			base.bytesDownloaded = 0
+			base.totalBytes = 0
+			base.percent = 0
+			base.error = undefined
+		}
+		base.bytesDownloaded = typeof event.bytesDownloaded === 'number' && event.bytesDownloaded >= 0 ? event.bytesDownloaded : base.bytesDownloaded
+		base.totalBytes = typeof event.totalBytes === 'number' && event.totalBytes >= 0 ? event.totalBytes : base.totalBytes
+		const percent = typeof event.percent === 'number' ? event.percent : base.percent
+		base.percent = Math.min(100, Math.max(0, percent || 0))
+		base.error = event.error
+		if (event.timestamp) {
+			base.createdAt = event.timestamp
+		}
+		if (event.status === 'completed' || event.status === 'error') {
+			base.completedInSession = true
+		}
+
+		if (idx >= 0) {
+			downloads[idx] = base
+		} else {
+			downloads.push(base)
+		}
+
+		const hasActive = downloads.some((d) => d.status === 'queued' || d.status === 'downloading')
+		const partial: Partial<AppState> = { downloads }
+		if (!hasActive && this._state.downloadsModalDismissed) {
+			partial.downloadsModalDismissed = false
+		}
+
+		this.setState(partial)
+	}
 }
 
 // Export singleton

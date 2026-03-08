@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"noti/internal/events"
 	"noti/internal/infrastructure/downloader"
 	"noti/internal/infrastructure/process"
 )
@@ -24,6 +25,8 @@ type ServerManager struct {
 	modelPath      string
 	port           int
 	mutex          sync.Mutex
+	ctx            context.Context
+	ctxMu          sync.RWMutex
 }
 
 // NewServerManager creates a new server manager
@@ -33,6 +36,19 @@ func NewServerManager(basePath string) *ServerManager {
 		basePath:       basePath,
 		port:           51337, // Hardcoded port for llama-server
 	}
+}
+
+func (m *ServerManager) SetContext(ctx context.Context) {
+	m.ctxMu.Lock()
+	m.ctx = ctx
+	m.ctxMu.Unlock()
+}
+
+func (m *ServerManager) emitDownloadEvent(evt events.DownloadEvent) {
+	m.ctxMu.RLock()
+	ctx := m.ctx
+	m.ctxMu.RUnlock()
+	events.EmitDownloadEvent(ctx, evt)
 }
 
 // EnsureBinary ensures the llama-server binary is available
@@ -55,6 +71,13 @@ func (m *ServerManager) EnsureBinary() error {
 	}
 
 	slog.Info("llama-server binary not found, downloading...")
+	downloadID := "llama-server"
+	m.emitDownloadEvent(events.DownloadEvent{
+		ID:     downloadID,
+		Kind:   events.DownloadKindLlamaServer,
+		Label:  "llama-server",
+		Status: events.DownloadStatusQueued,
+	})
 
 	// Create bin directory
 	binDir := filepath.Join(m.basePath, "bin")
@@ -66,11 +89,31 @@ func (m *ServerManager) EnsureBinary() error {
 	opts := &downloader.LlamaDownloadOptions{
 		DownloadOptions: downloader.DownloadOptions{
 			DestDir: binDir,
+			ProgressFunc: func(downloaded, total int64) {
+				m.emitDownloadEvent(events.DownloadEvent{
+					ID:              downloadID,
+					Kind:            events.DownloadKindLlamaServer,
+					Label:           "llama-server",
+					Status:          events.DownloadStatusDownloading,
+					BytesDownloaded: downloaded,
+					TotalBytes:      total,
+					Percent:         events.CalculatePercent(downloaded, total),
+				})
+			},
 		},
 		Extract: true,
 	}
+	// Keep using Background so the binary download can finish even if the UI context
+	// is cancelled (events still emit via m.ctx for the active session).
 	info, err := downloader.DownloadLlama(context.Background(), opts)
 	if err != nil {
+		m.emitDownloadEvent(events.DownloadEvent{
+			ID:     downloadID,
+			Kind:   events.DownloadKindLlamaServer,
+			Label:  "llama-server",
+			Status: events.DownloadStatusError,
+			Error:  err.Error(),
+		})
 		return fmt.Errorf("failed to download llama-server: %w", err)
 	}
 
@@ -83,6 +126,19 @@ func (m *ServerManager) EnsureBinary() error {
 
 	m.binaryPath = binPath
 	slog.Info("✓ llama-server binary ready", "path", binPath)
+	var size int64
+	if stat, statErr := os.Stat(binPath); statErr == nil {
+		size = stat.Size()
+	}
+	m.emitDownloadEvent(events.DownloadEvent{
+		ID:              downloadID,
+		Kind:            events.DownloadKindLlamaServer,
+		Label:           "llama-server",
+		Status:          events.DownloadStatusCompleted,
+		BytesDownloaded: size,
+		TotalBytes:      size,
+		Percent:         100,
+	})
 	return nil
 }
 

@@ -154,12 +154,12 @@ export function StartVoiceRecordingWithSource(arg1) {
   return window['go']['main']['App']['StartVoiceRecordingWithSource'](arg1);
 }
 
-export function StopVoiceRecording() {
-  return window['go']['main']['App']['StopVoiceRecording']();
-}
-
 export function StopTextStream() {
   return window['go']['main']['App']['StopTextStream']();
+}
+
+export function StopVoiceRecording() {
+  return window['go']['main']['App']['StopVoiceRecording']();
 }
 
 export function UpdateFolder(arg1, arg2, arg3) {

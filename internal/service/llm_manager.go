@@ -70,7 +70,9 @@ func (m *LLMManager) Initialize(config *domain.LLMConfig) error {
 		return fmt.Errorf("failed to create provider: %w", err)
 	}
 
-	// Initialize the provider
+	// Initialize the provider. Context must be wired in before Initialize so any
+	// model/download work performed during initialization can emit events.
+	provider.SetContext(m.ctx)
 	if err := provider.Initialize(); err != nil {
 		return fmt.Errorf("failed to initialize provider: %w", err)
 	}
