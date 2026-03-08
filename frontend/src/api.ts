@@ -146,6 +146,10 @@ export const LLMAPI = {
     return App.GenerateTextStream(prompt, systemPrompt)
   },
 
+  stopStream(): Promise<void> {
+    return App.StopTextStream()
+  },
+
   updateConfig(config: LLMConfig): Promise<void> {
     return App.UpdateLLMConfig(config)
   },

@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"noti/internal/domain"
@@ -20,6 +22,9 @@ import (
 // App struct
 type App struct {
 	ctx           context.Context
+	streamMu      sync.Mutex
+	streamCancel  context.CancelFunc
+	streamID      uint64
 	basePath      string
 	structurePath string
 	notesPath     string
@@ -176,6 +181,7 @@ func (a *App) startup(ctx context.Context) {
 
 // shutdown is called when the app is closing
 func (a *App) shutdown(ctx context.Context) {
+	a.cancelActiveStream()
 	a.sttManager.Cleanup()
 	a.llmManager.Cleanup()
 	if a.audioManager != nil {
@@ -441,16 +447,26 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 		return fmt.Errorf("streaming not available")
 	}
 
+	a.cancelActiveStream()
+
 	request := &domain.LLMRequest{
 		Prompt:       prompt,
 		SystemPrompt: systemPrompt,
 	}
 
+	streamCtx, cancel := context.WithCancel(a.ctx)
+	streamID := a.setActiveStreamCancel(cancel)
+
 	// Run streaming in goroutine to not block
 	go func() {
-		err := a.llmManager.GenerateStream(a.ctx, request,
+		defer a.clearActiveStreamCancel(streamID)
+
+		seenDone := false
+
+		err := a.llmManager.GenerateStream(streamCtx, request,
 			func(chunk *domain.StreamChunk) error {
 				if chunk.Done {
+					seenDone = true
 					runtime.EventsEmit(a.ctx, "llm:stream:done", chunk)
 				} else {
 					runtime.EventsEmit(a.ctx, "llm:stream:chunk", chunk)
@@ -459,11 +475,62 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 			})
 
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				if !seenDone {
+					runtime.EventsEmit(a.ctx, "llm:stream:done", &domain.StreamChunk{
+						Text:         "",
+						Done:         true,
+						FinishReason: "cancelled",
+					})
+				}
+				return
+			}
 			runtime.EventsEmit(a.ctx, "llm:stream:error", err.Error())
+			return
+		}
+
+		if !seenDone {
+			runtime.EventsEmit(a.ctx, "llm:stream:done", &domain.StreamChunk{
+				Text:         "",
+				Done:         true,
+				FinishReason: "stop",
+			})
 		}
 	}()
 
 	return nil
+}
+
+// StopTextStream cancels the currently running text stream, if any.
+func (a *App) StopTextStream() {
+	a.cancelActiveStream()
+}
+
+func (a *App) setActiveStreamCancel(cancel context.CancelFunc) uint64 {
+	a.streamMu.Lock()
+	defer a.streamMu.Unlock()
+	a.streamID++
+	a.streamCancel = cancel
+	return a.streamID
+}
+
+func (a *App) clearActiveStreamCancel(streamID uint64) {
+	a.streamMu.Lock()
+	defer a.streamMu.Unlock()
+	if a.streamID == streamID {
+		a.streamCancel = nil
+	}
+}
+
+func (a *App) cancelActiveStream() {
+	a.streamMu.Lock()
+	defer a.streamMu.Unlock()
+	if a.streamCancel == nil {
+		return
+	}
+
+	a.streamCancel()
+	a.streamCancel = nil
 }
 
 // ExecutePromptOnNoteStream executes a prompt on a note with streaming

@@ -158,6 +158,10 @@ export function StopVoiceRecording() {
   return window['go']['main']['App']['StopVoiceRecording']();
 }
 
+export function StopTextStream() {
+  return window['go']['main']['App']['StopTextStream']();
+}
+
 export function UpdateFolder(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateFolder'](arg1, arg2, arg3);
 }

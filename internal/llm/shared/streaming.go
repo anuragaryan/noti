@@ -123,7 +123,9 @@ func (c *StreamingClient) StreamChatCompletion(
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
-				// Stream ended
+				if err := callback("", true, "stop"); err != nil {
+					return fmt.Errorf("callback error: %w", err)
+				}
 				return nil
 			}
 			return fmt.Errorf("error reading stream: %w", err)

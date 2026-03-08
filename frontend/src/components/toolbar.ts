@@ -190,6 +190,11 @@ function renderAIPanel(): void {
   `
 
   panel.querySelector('#ai-close-btn')?.addEventListener('click', () => {
+    if (isStreaming) {
+      void LLMAPI.stopStream().catch((err) => {
+        console.error('Failed to stop stream:', err)
+      })
+    }
     state.setState({ showAIPanel: false, streamingContent: '', isStreaming: false })
     renderAIPanel()
     renderToolbar()
