@@ -23,19 +23,3 @@ func BuildMessages(request *domain.LLMRequest) []Message {
 
 	return messages
 }
-
-// GetEffectiveTemperature returns the request temperature or falls back to config default
-func GetEffectiveTemperature(requestTemp, configTemp float32) float32 {
-	if requestTemp == 0 {
-		return configTemp
-	}
-	return requestTemp
-}
-
-// GetEffectiveMaxTokens returns the request max tokens or falls back to config default
-func GetEffectiveMaxTokens(requestTokens, configTokens int) int {
-	if requestTokens == 0 {
-		return configTokens
-	}
-	return requestTokens
-}

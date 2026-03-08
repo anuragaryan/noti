@@ -134,9 +134,9 @@ export async function renderPromptsModal(container: HTMLElement): Promise<void> 
 
       try {
         if (prompt) {
-          await PromptsAPI.update(prompt.id, name, desc, system, user, prompt.temperature, prompt.maxTokens)
+          await PromptsAPI.update(prompt.id, name, desc, system, user)
         } else {
-          await PromptsAPI.create(name, desc, system, user, 0.7, 1024)
+          await PromptsAPI.create(name, desc, system, user)
         }
         const updated = await PromptsAPI.getAll()
         state.setState({ prompts: updated })

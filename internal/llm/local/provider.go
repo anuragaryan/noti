@@ -161,10 +161,6 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 		return nil, fmt.Errorf("llama-server is not running")
 	}
 
-	// Use request-specific parameters or fall back to config defaults
-	temperature := shared.GetEffectiveTemperature(request.Temperature, p.config.Temperature)
-	maxTokens := shared.GetEffectiveMaxTokens(request.MaxTokens, p.config.MaxTokens)
-
 	// Build messages array
 	messages := shared.BuildMessages(request)
 
@@ -172,12 +168,12 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 	apiReq := &shared.ChatRequest{
 		Model:       p.config.ModelName,
 		Messages:    messages,
-		Temperature: temperature,
-		MaxTokens:   maxTokens,
+		Temperature: p.config.Temperature,
+		MaxTokens:   p.config.MaxTokens,
 	}
 
 	slog.Debug("[Local LLM] Generating response for prompt", "length", len(request.Prompt))
-	slog.Debug("[Local LLM] Generation params", "temperature", temperature, "maxTokens", maxTokens)
+	slog.Debug("[Local LLM] Generation params", "temperature", p.config.Temperature, "maxTokens", p.config.MaxTokens)
 
 	// Send request using shared client
 	apiResp, err := p.client.ChatCompletion(ctx, apiReq)
@@ -216,10 +212,6 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 		return fmt.Errorf("llama-server is not running")
 	}
 
-	// Use request-specific parameters or fall back to config defaults
-	temperature := shared.GetEffectiveTemperature(request.Temperature, p.config.Temperature)
-	maxTokens := shared.GetEffectiveMaxTokens(request.MaxTokens, p.config.MaxTokens)
-
 	// Build messages array
 	messages := shared.BuildMessages(request)
 
@@ -227,13 +219,13 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 	streamReq := &shared.StreamChatRequest{
 		Model:       p.config.ModelName,
 		Messages:    messages,
-		Temperature: temperature,
-		MaxTokens:   maxTokens,
+		Temperature: p.config.Temperature,
+		MaxTokens:   p.config.MaxTokens,
 		Stream:      true,
 	}
 
 	slog.Info("[Local LLM] Starting streaming response for prompt", "length", len(request.Prompt))
-	slog.Info("[Local LLM] Generation params", "temperature", temperature, "maxTokens", maxTokens)
+	slog.Info("[Local LLM] Generation params", "temperature", p.config.Temperature, "maxTokens", p.config.MaxTokens)
 
 	// Track chunk index
 	chunkIndex := 0

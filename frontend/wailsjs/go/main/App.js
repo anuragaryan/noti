@@ -14,8 +14,8 @@ export function CreateNote(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateNote'](arg1, arg2, arg3);
 }
 
-export function CreatePrompt(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['CreatePrompt'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function CreatePrompt(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreatePrompt'](arg1, arg2, arg3, arg4);
 }
 
 export function DeleteFolder(arg1, arg2) {
@@ -52,14 +52,6 @@ export function GenerateText(arg1, arg2) {
 
 export function GenerateTextStream(arg1, arg2) {
   return window['go']['main']['App']['GenerateTextStream'](arg1, arg2);
-}
-
-export function GenerateTextStreamWithOptions(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['GenerateTextStreamWithOptions'](arg1, arg2, arg3, arg4);
-}
-
-export function GenerateTextWithOptions(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['GenerateTextWithOptions'](arg1, arg2, arg3, arg4);
 }
 
 export function GetAllFolders() {
@@ -178,6 +170,6 @@ export function UpdateNote(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateNote'](arg1, arg2, arg3);
 }
 
-export function UpdatePrompt(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['UpdatePrompt'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function UpdatePrompt(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['UpdatePrompt'](arg1, arg2, arg3, arg4, arg5);
 }

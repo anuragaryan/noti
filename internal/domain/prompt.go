@@ -9,8 +9,6 @@ type Prompt struct {
 	Description  string    `json:"description"`
 	SystemPrompt string    `json:"systemPrompt"`
 	UserPrompt   string    `json:"userPrompt"`
-	Temperature  float32   `json:"temperature"`
-	MaxTokens    int       `json:"maxTokens"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }

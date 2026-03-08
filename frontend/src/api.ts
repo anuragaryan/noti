@@ -142,16 +142,8 @@ export const LLMAPI = {
     return App.GenerateText(prompt, systemPrompt)
   },
 
-  generateWithOptions(prompt: string, systemPrompt: string, temperature: number, maxTokens: number): Promise<LLMResponse> {
-    return App.GenerateTextWithOptions(prompt, systemPrompt, temperature, maxTokens)
-  },
-
   generateStream(prompt: string, systemPrompt: string): Promise<void> {
     return App.GenerateTextStream(prompt, systemPrompt)
-  },
-
-  generateStreamWithOptions(prompt: string, systemPrompt: string, temperature: number, maxTokens: number): Promise<void> {
-    return App.GenerateTextStreamWithOptions(prompt, systemPrompt, temperature, maxTokens)
   },
 
   updateConfig(config: LLMConfig): Promise<void> {
@@ -175,10 +167,8 @@ export const PromptsAPI = {
     description: string,
     systemPrompt: string,
     userPrompt: string,
-    temperature: number,
-    maxTokens: number,
   ): Promise<Prompt> {
-    return App.CreatePrompt(name, description, systemPrompt, userPrompt, temperature, maxTokens)
+    return App.CreatePrompt(name, description, systemPrompt, userPrompt)
   },
 
   update(
@@ -187,10 +177,8 @@ export const PromptsAPI = {
     description: string,
     systemPrompt: string,
     userPrompt: string,
-    temperature: number,
-    maxTokens: number,
   ): Promise<void> {
-    return App.UpdatePrompt(id, name, description, systemPrompt, userPrompt, temperature, maxTokens)
+    return App.UpdatePrompt(id, name, description, systemPrompt, userPrompt)
   },
 
   delete(id: string): Promise<void> {

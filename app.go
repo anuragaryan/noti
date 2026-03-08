@@ -385,22 +385,6 @@ func (a *App) GenerateText(prompt string, systemPrompt string) (*domain.LLMRespo
 	return a.llmManager.Generate(a.ctx, request)
 }
 
-// GenerateTextWithOptions generates text with custom parameters
-func (a *App) GenerateTextWithOptions(prompt string, systemPrompt string, temperature float32, maxTokens int) (*domain.LLMResponse, error) {
-	if !a.llmManager.IsAvailable() {
-		return nil, fmt.Errorf("LLM service not available. Please configure LLM settings")
-	}
-
-	request := &domain.LLMRequest{
-		Prompt:       prompt,
-		SystemPrompt: systemPrompt,
-		Temperature:  temperature,
-		MaxTokens:    maxTokens,
-	}
-
-	return a.llmManager.Generate(a.ctx, request)
-}
-
 // GetLLMStatus returns LLM availability and configuration
 func (a *App) GetLLMStatus() map[string]interface{} {
 	status := a.llmManager.GetStatus()
@@ -482,40 +466,6 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 	return nil
 }
 
-// GenerateTextStreamWithOptions generates text with streaming and custom parameters
-func (a *App) GenerateTextStreamWithOptions(prompt string, systemPrompt string, temperature float32, maxTokens int) error {
-	if !a.llmManager.SupportsStreaming() {
-		runtime.EventsEmit(a.ctx, "llm:stream:error", "Streaming not available")
-		return fmt.Errorf("streaming not available")
-	}
-
-	request := &domain.LLMRequest{
-		Prompt:       prompt,
-		SystemPrompt: systemPrompt,
-		Temperature:  temperature,
-		MaxTokens:    maxTokens,
-	}
-
-	// Run streaming in goroutine to not block
-	go func() {
-		err := a.llmManager.GenerateStream(a.ctx, request,
-			func(chunk *domain.StreamChunk) error {
-				if chunk.Done {
-					runtime.EventsEmit(a.ctx, "llm:stream:done", chunk)
-				} else {
-					runtime.EventsEmit(a.ctx, "llm:stream:chunk", chunk)
-				}
-				return nil
-			})
-
-		if err != nil {
-			runtime.EventsEmit(a.ctx, "llm:stream:error", err.Error())
-		}
-	}()
-
-	return nil
-}
-
 // ExecutePromptOnNoteStream executes a prompt on a note with streaming
 func (a *App) ExecutePromptOnNoteStream(promptID, noteID string) error {
 	// Get the prompt
@@ -535,7 +485,7 @@ func (a *App) ExecutePromptOnNoteStream(promptID, noteID string) error {
 	// Replace {{content}} placeholder in user prompt
 	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", note.Content)
 
-	return a.GenerateTextStreamWithOptions(userPrompt, prompt.SystemPrompt, prompt.Temperature, prompt.MaxTokens)
+	return a.GenerateTextStream(userPrompt, prompt.SystemPrompt)
 }
 
 // ExecutePromptOnContentStream executes a prompt on content with streaming
@@ -550,7 +500,7 @@ func (a *App) ExecutePromptOnContentStream(promptID, content string) error {
 	// Replace {{content}} placeholder in user prompt
 	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", content)
 
-	return a.GenerateTextStreamWithOptions(userPrompt, prompt.SystemPrompt, prompt.Temperature, prompt.MaxTokens)
+	return a.GenerateTextStream(userPrompt, prompt.SystemPrompt)
 }
 
 // GetStreamingSupport returns whether streaming is available
@@ -580,13 +530,13 @@ func (a *App) GetPrompt(id string) (*domain.Prompt, error) {
 }
 
 // CreatePrompt creates a new prompt
-func (a *App) CreatePrompt(name, description, systemPrompt, userPrompt string, temperature float32, maxTokens int) (*domain.Prompt, error) {
-	return a.promptService.Create(name, description, systemPrompt, userPrompt, temperature, maxTokens)
+func (a *App) CreatePrompt(name, description, systemPrompt, userPrompt string) (*domain.Prompt, error) {
+	return a.promptService.Create(name, description, systemPrompt, userPrompt)
 }
 
 // UpdatePrompt updates an existing prompt
-func (a *App) UpdatePrompt(id, name, description, systemPrompt, userPrompt string, temperature float32, maxTokens int) error {
-	return a.promptService.Update(id, name, description, systemPrompt, userPrompt, temperature, maxTokens)
+func (a *App) UpdatePrompt(id, name, description, systemPrompt, userPrompt string) error {
+	return a.promptService.Update(id, name, description, systemPrompt, userPrompt)
 }
 
 // DeletePrompt deletes a prompt
@@ -615,8 +565,6 @@ func (a *App) ExecutePromptOnNote(promptID, noteID string) (*domain.PromptExecut
 	request := &domain.LLMRequest{
 		Prompt:       userPrompt,
 		SystemPrompt: prompt.SystemPrompt,
-		Temperature:  prompt.Temperature,
-		MaxTokens:    prompt.MaxTokens,
 	}
 
 	response, err := a.llmManager.Generate(a.ctx, request)
@@ -652,8 +600,6 @@ func (a *App) ExecutePromptOnContent(promptID, content string) (*domain.PromptEx
 	request := &domain.LLMRequest{
 		Prompt:       userPrompt,
 		SystemPrompt: prompt.SystemPrompt,
-		Temperature:  prompt.Temperature,
-		MaxTokens:    prompt.MaxTokens,
 	}
 
 	response, err := a.llmManager.Generate(a.ctx, request)

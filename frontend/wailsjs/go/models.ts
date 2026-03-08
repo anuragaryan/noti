@@ -242,8 +242,6 @@ export namespace domain {
 	    description: string;
 	    systemPrompt: string;
 	    userPrompt: string;
-	    temperature: number;
-	    maxTokens: number;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -260,8 +258,6 @@ export namespace domain {
 	        this.description = source["description"];
 	        this.systemPrompt = source["systemPrompt"];
 	        this.userPrompt = source["userPrompt"];
-	        this.temperature = source["temperature"];
-	        this.maxTokens = source["maxTokens"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }

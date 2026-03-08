@@ -65,8 +65,7 @@ func (p *Provider) Initialize() error {
 
 	// Test the connection with a simple request
 	testRequest := &domain.LLMRequest{
-		Prompt:    "Hello",
-		MaxTokens: 5,
+		Prompt: "ping",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -83,7 +82,7 @@ func (p *Provider) Initialize() error {
 	slog.Info("✓ API LLM provider initialized successfully!")
 	slog.Info("✓ Endpoint", "endpoint", p.endpoint)
 	slog.Info("✓ Model", "name", p.config.ModelName)
-	slog.Info("✓ Temperature: %.2f\n", p.config.Temperature)
+	slog.Info("✓ Temperature", "temperature", p.config.Temperature)
 	slog.Info("✓ Max tokens", "tokens", p.config.MaxTokens)
 
 	return nil
@@ -98,10 +97,6 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 	}
 	p.mutex.Unlock()
 
-	// Use request-specific parameters or fall back to config defaults
-	temperature := shared.GetEffectiveTemperature(request.Temperature, p.config.Temperature)
-	maxTokens := shared.GetEffectiveMaxTokens(request.MaxTokens, p.config.MaxTokens)
-
 	// Build messages array
 	messages := shared.BuildMessages(request)
 
@@ -109,12 +104,12 @@ func (p *Provider) Generate(ctx context.Context, request *domain.LLMRequest) (*d
 	apiReq := &shared.ChatRequest{
 		Model:       p.config.ModelName,
 		Messages:    messages,
-		Temperature: temperature,
-		MaxTokens:   maxTokens,
+		Temperature: p.config.Temperature,
+		MaxTokens:   p.config.MaxTokens,
 	}
 
 	slog.Info("[LLM API] Generating response for prompt", "length", len(request.Prompt))
-	slog.Info("[LLM API] Generation params", "temperature", temperature, "maxTokens", maxTokens)
+	slog.Info("[LLM API] Generation params", "temperature", p.config.Temperature, "maxTokens", p.config.MaxTokens)
 
 	// Send request using shared client
 	apiResp, err := p.client.ChatCompletion(ctx, apiReq)
@@ -149,10 +144,6 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 	}
 	p.mutex.Unlock()
 
-	// Use request-specific parameters or fall back to config defaults
-	temperature := shared.GetEffectiveTemperature(request.Temperature, p.config.Temperature)
-	maxTokens := shared.GetEffectiveMaxTokens(request.MaxTokens, p.config.MaxTokens)
-
 	// Build messages array
 	messages := shared.BuildMessages(request)
 
@@ -160,13 +151,13 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 	streamReq := &shared.StreamChatRequest{
 		Model:       p.config.ModelName,
 		Messages:    messages,
-		Temperature: temperature,
-		MaxTokens:   maxTokens,
+		Temperature: p.config.Temperature,
+		MaxTokens:   p.config.MaxTokens,
 		Stream:      true,
 	}
 
 	slog.Info("[LLM API] Starting streaming response for prompt", "length", len(request.Prompt))
-	slog.Info("[LLM API] Generation params", "temperature", temperature, "maxTokens", maxTokens)
+	slog.Info("[LLM API] Generation params", "temperature", p.config.Temperature, "maxTokens", p.config.MaxTokens)
 
 	// Track chunk index
 	chunkIndex := 0

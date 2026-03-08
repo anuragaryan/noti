@@ -12,10 +12,8 @@ type LLMConfig struct {
 
 // LLMRequest represents a text generation request
 type LLMRequest struct {
-	Prompt       string  `json:"prompt"`
-	Temperature  float32 `json:"temperature,omitempty"`
-	MaxTokens    int     `json:"maxTokens,omitempty"`
-	SystemPrompt string  `json:"systemPrompt,omitempty"`
+	Prompt       string `json:"prompt"`
+	SystemPrompt string `json:"systemPrompt,omitempty"`
 }
 
 // LLMResponse represents the generated text response

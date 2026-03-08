@@ -121,7 +121,6 @@ function renderToolbar(): void {
 async function runPrompt(): Promise<void> {
   const note = state.get('currentNote')
   const aiMode = state.get('aiMode')
-  const config = state.get('config')
 
   if (!note) return
 
@@ -144,19 +143,10 @@ async function runPrompt(): Promise<void> {
         return
       }
 
-      const llmConfig = config?.llm
-      const temperature = llmConfig?.temperature ?? 0.2
-      const maxTokens = llmConfig?.maxTokens ?? 2500
-
       const noteContent = note.content || '(No content)'
       const systemPrompt = `You are a helpful AI assistant. Analyze the user's note below and respond to their request.\n\nNote content:\n${noteContent}`
 
-      await LLMAPI.generateStreamWithOptions(
-        customText,
-        systemPrompt,
-        temperature,
-        maxTokens
-      )
+      await LLMAPI.generateStream(customText, systemPrompt)
     }
   } catch (err) {
     console.error('Prompt execution failed:', err)

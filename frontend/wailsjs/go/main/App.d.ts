@@ -8,7 +8,7 @@ export function CreateFolder(arg1:string,arg2:string):Promise<domain.Folder>;
 
 export function CreateNote(arg1:string,arg2:string,arg3:string):Promise<domain.Note>;
 
-export function CreatePrompt(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<domain.Prompt>;
+export function CreatePrompt(arg1:string,arg2:string,arg3:string,arg4:string):Promise<domain.Prompt>;
 
 export function DeleteFolder(arg1:string,arg2:boolean):Promise<void>;
 
@@ -27,10 +27,6 @@ export function ExecutePromptOnNoteStream(arg1:string,arg2:string):Promise<void>
 export function GenerateText(arg1:string,arg2:string):Promise<domain.LLMResponse>;
 
 export function GenerateTextStream(arg1:string,arg2:string):Promise<void>;
-
-export function GenerateTextStreamWithOptions(arg1:string,arg2:string,arg3:number,arg4:number):Promise<void>;
-
-export function GenerateTextWithOptions(arg1:string,arg2:string,arg3:number,arg4:number):Promise<domain.LLMResponse>;
 
 export function GetAllFolders():Promise<Array<domain.Folder>>;
 
@@ -90,4 +86,4 @@ export function UpdateLLMConfig(arg1:domain.LLMConfig):Promise<void>;
 
 export function UpdateNote(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function UpdatePrompt(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:number,arg7:number):Promise<void>;
+export function UpdatePrompt(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;

@@ -85,7 +85,7 @@ func (s *PromptService) Get(id string) (*domain.Prompt, error) {
 }
 
 // Create creates a new prompt
-func (s *PromptService) Create(name, description, systemPrompt, userPrompt string, temperature float32, maxTokens int) (*domain.Prompt, error) {
+func (s *PromptService) Create(name, description, systemPrompt, userPrompt string) (*domain.Prompt, error) {
 	id := uuid.New().String()
 	now := time.Now()
 
@@ -95,8 +95,6 @@ func (s *PromptService) Create(name, description, systemPrompt, userPrompt strin
 		Description:  description,
 		SystemPrompt: systemPrompt,
 		UserPrompt:   userPrompt,
-		Temperature:  temperature,
-		MaxTokens:    maxTokens,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -109,7 +107,7 @@ func (s *PromptService) Create(name, description, systemPrompt, userPrompt strin
 }
 
 // Update updates an existing prompt
-func (s *PromptService) Update(id, name, description, systemPrompt, userPrompt string, temperature float32, maxTokens int) error {
+func (s *PromptService) Update(id, name, description, systemPrompt, userPrompt string) error {
 	existing, err := s.Get(id)
 	if err != nil {
 		return err
@@ -119,8 +117,6 @@ func (s *PromptService) Update(id, name, description, systemPrompt, userPrompt s
 	existing.Description = description
 	existing.SystemPrompt = systemPrompt
 	existing.UserPrompt = userPrompt
-	existing.Temperature = temperature
-	existing.MaxTokens = maxTokens
 	existing.UpdatedAt = time.Now()
 
 	return s.savePromptToFile(existing)
@@ -165,12 +161,6 @@ func (s *PromptService) loadPromptFromFile(filePath string) (*domain.Prompt, err
 			if desc, ok := metadata["description"].(string); ok {
 				prompt.Description = desc
 			}
-			if temp, ok := metadata["temperature"].(float64); ok {
-				prompt.Temperature = float32(temp)
-			}
-			if tokens, ok := metadata["maxTokens"].(float64); ok {
-				prompt.MaxTokens = int(tokens)
-			}
 			if created, ok := metadata["createdAt"].(string); ok {
 				prompt.CreatedAt, _ = time.Parse(time.RFC3339, created)
 			}
@@ -210,8 +200,6 @@ func (s *PromptService) savePromptToFile(prompt *domain.Prompt) error {
 		"id":          prompt.ID,
 		"name":        prompt.Name,
 		"description": prompt.Description,
-		"temperature": prompt.Temperature,
-		"maxTokens":   prompt.MaxTokens,
 		"createdAt":   prompt.CreatedAt.Format(time.RFC3339),
 		"updatedAt":   prompt.UpdatedAt.Format(time.RFC3339),
 	}
@@ -246,16 +234,12 @@ func (s *PromptService) createDefaultPrompts() error {
 		description  string
 		systemPrompt string
 		userPrompt   string
-		temperature  float32
-		maxTokens    int
 	}{
 		{
 			name:         "Summarize",
 			description:  "Create a concise summary of the note",
 			systemPrompt: "You are a helpful assistant that creates clear, concise summaries.",
 			userPrompt:   "Please summarize the following note in 3-5 bullet points:\n\n{{content}}",
-			temperature:  0.3,
-			maxTokens:    2048,
 		},
 		{
 			name:         "Cleanup",
@@ -271,45 +255,35 @@ func (s *PromptService) createDefaultPrompts() error {
 							Input Text (to be inserted below): {{content}}
 
 							Output Format: Provide only the final, cleaned, and correctly formatted text.`,
-			temperature: 0.2,
-			maxTokens:   2048,
 		},
 		{
 			name:         "Expand Ideas",
 			description:  "Expand and elaborate on the ideas in the note",
 			systemPrompt: "You are a creative thinking assistant that helps expand and develop ideas.",
 			userPrompt:   "Please expand on the following ideas with additional details, examples, and perspectives:\n\n{{content}}",
-			temperature:  0.7,
-			maxTokens:    2048,
 		},
 		{
 			name:         "Improve Writing",
 			description:  "Improve the writing quality and clarity",
 			systemPrompt: "You are an expert editor. Improve clarity, grammar, and style while maintaining the original meaning.",
 			userPrompt:   "Please improve the writing of the following text:\n\n{{content}}",
-			temperature:  0.5,
-			maxTokens:    2048,
 		},
 		{
 			name:         "Extract Action Items",
 			description:  "Extract actionable tasks from the note",
 			systemPrompt: "You are a productivity assistant that identifies actionable tasks.",
 			userPrompt:   "Please extract all action items and tasks from the following note as a numbered list:\n\n{{content}}",
-			temperature:  0.2,
-			maxTokens:    2048,
 		},
 		{
 			name:         "Generate Questions",
 			description:  "Generate thought-provoking questions about the content",
 			systemPrompt: "You are a curious assistant that asks insightful questions to deepen understanding.",
 			userPrompt:   "Please generate 5-7 thought-provoking questions about the following content:\n\n{{content}}",
-			temperature:  0.6,
-			maxTokens:    2048,
 		},
 	}
 
 	for _, p := range defaultPrompts {
-		if _, err := s.Create(p.name, p.description, p.systemPrompt, p.userPrompt, p.temperature, p.maxTokens); err != nil {
+		if _, err := s.Create(p.name, p.description, p.systemPrompt, p.userPrompt); err != nil {
 			return err
 		}
 	}
