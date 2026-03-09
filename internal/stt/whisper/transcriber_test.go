@@ -484,7 +484,7 @@ func TestTranscriberProcessNextChunk_SkipsWhenInsufficient(t *testing.T) {
 	tr := buildTranscriber(t, &mockModel{})
 	tr.audioBuffer = make([]float32, sampleRate/4-1)
 
-	tr.processNextChunk()
+	tr.processNextChunk(" ")
 	tr.processingWg.Wait()
 
 	if tr.processedSamples != 0 {
@@ -496,7 +496,7 @@ func TestTranscriberProcessNextChunk_AdvancesPointer(t *testing.T) {
 	tr := buildTranscriber(t, modelWithSegments("chunk"))
 	tr.audioBuffer = make([]float32, sampleRate*2)
 
-	tr.processNextChunk()
+	tr.processNextChunk(" ")
 	tr.processingWg.Wait()
 
 	if tr.processedSamples != sampleRate*2 {
@@ -515,7 +515,7 @@ func TestProcessNextChunk_AccumulatesTranscript(t *testing.T) {
 	tr := buildTranscriber(t, m)
 	tr.audioBuffer = make([]float32, sampleRate*2)
 
-	tr.processNextChunk()
+	tr.processNextChunk(" ")
 	tr.processingWg.Wait()
 
 	tr.bufferMutex.Lock()
@@ -570,5 +570,107 @@ func TestStopProcessing_AccumulatedOnlyNoTail(t *testing.T) {
 	}
 	if got != "only this" {
 		t.Errorf("lastFinalText = %q, want %q", got, "only this")
+	}
+}
+
+// ── Pause-based line breaking ───────────────────────────────────────────────────
+
+func TestTranscribeAndAccumulate_JoinsWithSpace(t *testing.T) {
+	m := modelWithSegments("hello world")
+	tr := buildTranscriber(t, m)
+	tr.accumulatedTranscript = "previous"
+	tr.audioBuffer = make([]float32, sampleRate*2)
+
+	tr.processNextChunk(" ")
+	tr.processingWg.Wait()
+
+	tr.bufferMutex.Lock()
+	got := tr.accumulatedTranscript
+	tr.bufferMutex.Unlock()
+
+	want := "previous hello world"
+	if got != want {
+		t.Errorf("accumulatedTranscript = %q, want %q", got, want)
+	}
+}
+
+func TestTranscribeAndAccumulate_JoinsWithNewline(t *testing.T) {
+	m := modelWithSegments("second line")
+	tr := buildTranscriber(t, m)
+	tr.accumulatedTranscript = "first line"
+	tr.audioBuffer = make([]float32, sampleRate*2)
+
+	tr.processNextChunk("\n")
+	tr.processingWg.Wait()
+
+	tr.bufferMutex.Lock()
+	got := tr.accumulatedTranscript
+	tr.bufferMutex.Unlock()
+
+	want := "first line\nsecond line"
+	if got != want {
+		t.Errorf("accumulatedTranscript = %q, want %q", got, want)
+	}
+}
+
+func TestProcessNextChunk_ReturnsFalseWhenInsufficient(t *testing.T) {
+	tr := buildTranscriber(t, &mockModel{})
+	tr.audioBuffer = make([]float32, sampleRate/4-1)
+
+	accepted := tr.processNextChunk(" ")
+
+	if accepted {
+		t.Error("processNextChunk should return false when insufficient samples")
+	}
+}
+
+func TestProcessNextChunk_ReturnsTrueWhenAccepted(t *testing.T) {
+	tr := buildTranscriber(t, modelWithSegments("text"))
+	tr.audioBuffer = make([]float32, sampleRate*2)
+
+	accepted := tr.processNextChunk(" ")
+
+	if !accepted {
+		t.Error("processNextChunk should return true when chunk is accepted")
+	}
+}
+
+func TestStopProcessing_TailUsesNewlineAfterLongPause(t *testing.T) {
+	tr := startProcessingTranscriber(t, modelWithSegments("tail"))
+	tr.accumulatedTranscript = "first line"
+	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
+	tr.processedSamples = sampleRate
+	tr.pauseTotal = 2 * time.Second
+	tr.pauseCount = 2 // avg pause = 1s
+	tr.lastSpeechAt = time.Now().Add(-1500 * time.Millisecond)
+
+	got, err := stopAndWait(t, tr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "first line\ntail"
+	if got != want {
+		t.Errorf("lastFinalText = %q, want %q", got, want)
+	}
+}
+
+func TestStopProcessing_TailUsesSpaceWhenPauseNotLongerThanAverage(t *testing.T) {
+	tr := startProcessingTranscriber(t, modelWithSegments("tail"))
+	tr.accumulatedTranscript = "first line"
+	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
+	tr.processedSamples = sampleRate
+	tr.pauseTotal = 4 * time.Second
+	tr.pauseCount = 2 // avg pause = 2s
+	tr.lastSpeechAt = time.Now().Add(-1 * time.Second)
+
+	got, err := stopAndWait(t, tr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := "first line tail"
+	if got != want {
+		t.Errorf("lastFinalText = %q, want %q", got, want)
 	}
 }
