@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,12 +18,21 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const sampleRate = 16000
+const (
+	sampleRate            = 16000
+	pauseAfter            = 1 * time.Second
+	maxSegmentDuration    = 10 * time.Second
+	pauseCheckInterval    = 100 * time.Millisecond
+	minSpeechThresholdRMS = 0.005
+	maxSpeechThresholdRMS = 0.1
+	noiseFloorMultiplier  = 2.0
+	baselineSamplesMin    = sampleRate / 2
+)
 
 // Transcriber performs real-time speech-to-text transcription. Audio data is
-// fed via ProcessChunk; it is sliced into fixed-size windows and transcribed
-// sequentially. Each chunk's text is appended to a running transcript so the
-// frontend always receives the complete session text, not just the last chunk.
+// fed via ProcessChunk; it is transcribed when the user pauses for >1 second
+// or after a maximum segment duration. Each chunk's text is appended to a
+// running transcript so the frontend always receives the complete session text.
 type Transcriber struct {
 	model      whisper.Model
 	modelMutex sync.Mutex
@@ -37,22 +47,20 @@ type Transcriber struct {
 	audioBuffer           []float32
 	processedSamples      int
 	accumulatedTranscript string
-	samplesPerChunk       int
-	// processingWg tracks in-flight chunk goroutines. Chunk goroutines must
-	// run sequentially (serialised by modelMutex) so transcript order is
-	// preserved; processingWg lets StopProcessing wait for the last one.
-	processingWg sync.WaitGroup
-	// backgroundWg tracks the single background goroutine spawned by
-	// StopProcessing for final tail/fallback transcription. Tests can call
-	// backgroundWg.Wait() instead of time.Sleep to avoid flakiness.
-	backgroundWg sync.WaitGroup
-	// lastFinalText holds the text computed by the most recent background
-	// goroutine. It is set just before the "transcription:done" event is
-	// emitted, so tests that cannot intercept Wails events can read it after
-	// backgroundWg.Wait().
+
+	processingWg   sync.WaitGroup
+	backgroundWg   sync.WaitGroup
 	lastFinalText  string
 	isProcessing   bool
 	stopProcessing chan struct{}
+
+	lastSpeechAt       time.Time
+	segmentStartAt     time.Time
+	hasSpeechInSegment bool
+	noiseFloorRMS      float32
+	speechThresholdRMS float32
+	baselineBuffer     []float32
+	baselineReady      bool
 }
 
 // NewTranscriber creates a Transcriber for the given model. It only checks
@@ -66,10 +74,9 @@ func NewTranscriber(basePath string, config *domain.STTConfig) (*Transcriber, er
 	}
 
 	return &Transcriber{
-		config:          config,
-		modelPath:       modelPath,
-		audioBuffer:     []float32{},
-		samplesPerChunk: sampleRate * config.ChunkDurationSecs,
+		config:      config,
+		modelPath:   modelPath,
+		audioBuffer: []float32{},
 	}, nil
 }
 
@@ -112,6 +119,14 @@ func (t *Transcriber) StartProcessing() error {
 	t.accumulatedTranscript = ""
 	t.stopProcessing = make(chan struct{})
 	t.isProcessing = true
+
+	t.lastSpeechAt = time.Now()
+	t.segmentStartAt = time.Now()
+	t.hasSpeechInSegment = false
+	t.noiseFloorRMS = 0
+	t.speechThresholdRMS = 0
+	t.baselineBuffer = nil
+	t.baselineReady = false
 
 	t.bufferMutex.Unlock()
 
@@ -167,7 +182,11 @@ func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 				tailText = cleanTranscription(tailText)
 				if tailText != "" {
 					if base != "" {
-						base = base + " " + tailText
+						base = strings.TrimRight(base, " \t\n")
+						tailText = strings.TrimLeft(tailText, " \t\n")
+						if tailText != "" {
+							base = base + " " + tailText
+						}
 					} else {
 						base = tailText
 					}
@@ -212,8 +231,8 @@ func (t *Transcriber) StopProcessing() (*domain.TranscriptionResult, error) {
 	}, nil
 }
 
-// ProcessChunk appends an incoming audio chunk to the internal buffer. It is a
-// no-op when processing has not been started.
+// ProcessChunk appends an incoming audio chunk to the internal buffer and
+// analyzes it for speech activity. It is a no-op when processing has not been started.
 func (t *Transcriber) ProcessChunk(chunk domain.AudioChunk) {
 	t.bufferMutex.Lock()
 	defer t.bufferMutex.Unlock()
@@ -221,19 +240,49 @@ func (t *Transcriber) ProcessChunk(chunk domain.AudioChunk) {
 	if !t.isProcessing {
 		return
 	}
+
+	if !t.baselineReady {
+		t.baselineBuffer = append(t.baselineBuffer, chunk.Data...)
+		if len(t.baselineBuffer) >= baselineSamplesMin {
+			t.noiseFloorRMS = calculateRMS(t.baselineBuffer)
+			t.speechThresholdRMS = t.noiseFloorRMS * noiseFloorMultiplier
+			if t.speechThresholdRMS < minSpeechThresholdRMS {
+				t.speechThresholdRMS = minSpeechThresholdRMS
+			} else if t.speechThresholdRMS > maxSpeechThresholdRMS {
+				t.speechThresholdRMS = maxSpeechThresholdRMS
+			}
+			t.baselineReady = true
+			t.baselineBuffer = nil
+		}
+		t.audioBuffer = append(t.audioBuffer, chunk.Data...)
+		return
+	}
+
+	rms := calculateRMS(chunk.Data)
+	if rms > t.speechThresholdRMS {
+		t.lastSpeechAt = time.Now()
+		t.hasSpeechInSegment = true
+		t.noiseFloorRMS = t.noiseFloorRMS*0.9 + rms*0.1
+		t.speechThresholdRMS = t.noiseFloorRMS * noiseFloorMultiplier
+		if t.speechThresholdRMS < minSpeechThresholdRMS {
+			t.speechThresholdRMS = minSpeechThresholdRMS
+		} else if t.speechThresholdRMS > maxSpeechThresholdRMS {
+			t.speechThresholdRMS = maxSpeechThresholdRMS
+		}
+	}
+
 	t.audioBuffer = append(t.audioBuffer, chunk.Data...)
 }
 
-// processAudioRealtime fires a transcription pass every ChunkDurationSecs
-// seconds until stopProcessing is closed.
+// processAudioRealtime monitors for speech pauses and triggers transcription.
+// It fires when the user pauses for >1 second or after max segment duration.
 func (t *Transcriber) processAudioRealtime() {
-	// Capture the channel once so reads never race with StartProcessing
-	// overwriting t.stopProcessing when resetting for a new session.
 	t.bufferMutex.Lock()
 	stop := t.stopProcessing
+	t.segmentStartAt = time.Now()
 	t.bufferMutex.Unlock()
 
-	ticker := time.NewTicker(time.Duration(t.config.ChunkDurationSecs) * time.Second)
+	ticker := time.NewTicker(pauseCheckInterval)
 	defer ticker.Stop()
 
 	for {
@@ -241,36 +290,50 @@ func (t *Transcriber) processAudioRealtime() {
 		case <-stop:
 			return
 		case <-ticker.C:
-			t.processNextChunk()
+			t.bufferMutex.Lock()
+			now := time.Now()
+			silenceDuration := now.Sub(t.lastSpeechAt)
+			segmentDuration := now.Sub(t.segmentStartAt)
+			baselineReady := t.baselineReady
+
+			shouldTranscribe := baselineReady && ((t.hasSpeechInSegment && silenceDuration > pauseAfter) ||
+				(segmentDuration > maxSegmentDuration && len(t.audioBuffer) > t.processedSamples))
+			t.bufferMutex.Unlock()
+
+			if shouldTranscribe {
+				t.processNextChunk()
+			}
 		}
 	}
 }
 
-// processNextChunk extracts the next unseen chunk from the audio buffer,
-// transcribes it, appends the result to accumulatedTranscript, and emits the
-// full running transcript as a partial event. It is a no-op when fewer than
-// samplesPerChunk new samples are available.
-//
+// processNextChunk transcribes all unprocessed audio in the buffer.
+// It is called when pause is detected or max segment duration is reached.
 // Chunk goroutines are serialised through modelMutex so that transcript order
 // is always preserved regardless of scheduling.
 func (t *Transcriber) processNextChunk() {
 	t.bufferMutex.Lock()
 
 	totalSamples := len(t.audioBuffer)
-	if totalSamples < t.processedSamples+t.samplesPerChunk {
+	if totalSamples <= t.processedSamples {
+		t.bufferMutex.Unlock()
+		return
+	}
+
+	minTranscribeSamples := sampleRate / 4
+	if totalSamples-t.processedSamples < minTranscribeSamples {
 		t.bufferMutex.Unlock()
 		return
 	}
 
 	chunkStart := t.processedSamples
-	chunkEnd := chunkStart + t.samplesPerChunk
-	if chunkEnd > totalSamples {
-		chunkEnd = totalSamples
-	}
+	chunkEnd := totalSamples
 
 	chunk := make([]float32, chunkEnd-chunkStart)
 	copy(chunk, t.audioBuffer[chunkStart:chunkEnd])
 	t.processedSamples = chunkEnd
+	t.hasSpeechInSegment = false
+	t.segmentStartAt = time.Now()
 
 	t.bufferMutex.Unlock()
 
@@ -292,8 +355,15 @@ func (t *Transcriber) processNextChunk() {
 		}
 
 		t.bufferMutex.Lock()
-		if t.accumulatedTranscript != "" {
-			t.accumulatedTranscript += " " + text
+		prev := t.accumulatedTranscript
+		if prev != "" {
+			prev = strings.TrimRight(prev, " \t\n")
+			text = strings.TrimLeft(text, " \t\n")
+			if text != "" {
+				t.accumulatedTranscript = prev + " " + text
+			} else {
+				t.accumulatedTranscript = prev
+			}
 		} else {
 			t.accumulatedTranscript = text
 		}
@@ -356,6 +426,17 @@ func (t *Transcriber) transcribe(audioData []float32) (string, error) {
 func cleanTranscription(text string) string {
 	text = strings.ReplaceAll(text, "[BLANK_AUDIO]", "")
 	return strings.TrimSpace(text)
+}
+
+func calculateRMS(samples []float32) float32 {
+	if len(samples) == 0 {
+		return 0
+	}
+	var sum float32
+	for _, s := range samples {
+		sum += s * s
+	}
+	return float32(math.Sqrt(float64(sum / float32(len(samples)))))
 }
 
 // CancelProcessing halts the real-time loop without emitting a

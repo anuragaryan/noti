@@ -119,7 +119,7 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		slog.Error("Cannot load config", "error", err)
 		// Use a default config if loading fails
-		a.config = &domain.Config{RealtimeTranscriptionChunkSeconds: 3, ModelName: "base.en"}
+		a.config = &domain.Config{ModelName: "base.en"}
 		slog.Warn("Using default STT config.")
 	} else {
 		a.config = config
@@ -144,8 +144,7 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize STT service with self-healing
 	a.sttManager.SetContext(ctx)
 	sttConfig := &domain.STTConfig{
-		ModelName:         a.config.ModelName,
-		ChunkDurationSecs: a.config.RealtimeTranscriptionChunkSeconds,
+		ModelName: a.config.ModelName,
 	}
 	if err := a.sttManager.Initialize(sttConfig); err != nil {
 		slog.Error("STT initialization failed", "error", err)
@@ -751,9 +750,6 @@ func (a *App) GetConfig() *domain.Config {
 // SaveConfig saves the configuration and reinitializes affected services
 func (a *App) SaveConfig(config domain.Config) error {
 	// Validate configuration
-	if config.RealtimeTranscriptionChunkSeconds < 1 || config.RealtimeTranscriptionChunkSeconds > 30 {
-		return fmt.Errorf("transcription chunk seconds must be between 1 and 30")
-	}
 	if config.ModelName == "" {
 		return fmt.Errorf("STT model name cannot be empty")
 	}
@@ -785,11 +781,9 @@ func (a *App) SaveConfig(config domain.Config) error {
 	a.config = &config
 
 	// Reinitialize STT if model changed
-	if oldConfig.ModelName != config.ModelName ||
-		oldConfig.RealtimeTranscriptionChunkSeconds != config.RealtimeTranscriptionChunkSeconds {
+	if oldConfig.ModelName != config.ModelName {
 		sttConfig := &domain.STTConfig{
-			ModelName:         config.ModelName,
-			ChunkDurationSecs: config.RealtimeTranscriptionChunkSeconds,
+			ModelName: config.ModelName,
 		}
 		if err := a.sttManager.Initialize(sttConfig); err != nil {
 			slog.Warn("STT reinitialization failed", "error", err)

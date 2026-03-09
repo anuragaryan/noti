@@ -95,7 +95,6 @@ export namespace domain {
 	    }
 	}
 	export class Config {
-	    realtimeTranscriptionChunkSeconds: number;
 	    modelName: string;
 	    llm: LLMConfig;
 	    audio: AudioSettings;
@@ -106,7 +105,6 @@ export namespace domain {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.realtimeTranscriptionChunkSeconds = source["realtimeTranscriptionChunkSeconds"];
 	        this.modelName = source["modelName"];
 	        this.llm = this.convertValues(source["llm"], LLMConfig);
 	        this.audio = this.convertValues(source["audio"], AudioSettings);

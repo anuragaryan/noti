@@ -64,9 +64,7 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 	}
 
 	// Set defaults for any fields that might be missing (for backward compatibility)
-	if config.RealtimeTranscriptionChunkSeconds <= 0 {
-		config.RealtimeTranscriptionChunkSeconds = 3
-	}
+	// Note: RealtimeTranscriptionChunkSeconds is deprecated and ignored
 	if config.ModelName == "" {
 		config.ModelName = "base.en"
 	}

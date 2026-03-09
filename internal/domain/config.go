@@ -2,10 +2,9 @@ package domain
 
 // Config represents the application configuration
 type Config struct {
-	RealtimeTranscriptionChunkSeconds int           `json:"realtimeTranscriptionChunkSeconds"`
-	ModelName                         string        `json:"modelName"`
-	LLM                               LLMConfig     `json:"llm"`
-	Audio                             AudioSettings `json:"audio"`
+	ModelName string        `json:"modelName"`
+	LLM       LLMConfig     `json:"llm"`
+	Audio     AudioSettings `json:"audio"`
 }
 
 // AudioSettings holds audio capture configuration

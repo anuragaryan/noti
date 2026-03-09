@@ -68,10 +68,6 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
                 ${sttModelOptions}
               </select>
             </label>
-            <label class="form-label">
-              <span class="form-label-text">Realtime chunk (seconds): <span id="chunk-val">${config.realtimeTranscriptionChunkSeconds || 5}</span></span>
-              <input id="stt-chunk" type="range" min="1" max="30" value="${config.realtimeTranscriptionChunkSeconds || 5}" class="settings-range" />
-            </label>
           </div>
         </section>
 
@@ -144,10 +140,6 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
   `
 
   // Live slider updates
-  const chunkSlider = container.querySelector<HTMLInputElement>('#stt-chunk')
-  const chunkVal = container.querySelector<HTMLElement>('#chunk-val')
-  chunkSlider?.addEventListener('input', () => { if (chunkVal && chunkSlider) chunkVal.textContent = chunkSlider.value })
-
   const tempSlider = container.querySelector<HTMLInputElement>('#llm-temp')
   const tempVal = container.querySelector<HTMLElement>('#temp-val')
   tempSlider?.addEventListener('input', () => { if (tempVal && tempSlider) tempVal.textContent = tempSlider.value })
@@ -204,7 +196,6 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     const newConfig = domain.Config.createFrom({
       ...config,
       modelName: (container.querySelector<HTMLSelectElement>('#stt-model')?.value ?? config.modelName),
-      realtimeTranscriptionChunkSeconds: parseInt(container.querySelector<HTMLInputElement>('#stt-chunk')?.value ?? '5'),
       llm: {
         ...config.llm,
         provider: (container.querySelector<HTMLSelectElement>('#llm-provider')?.value ?? config.llm?.provider) as string,

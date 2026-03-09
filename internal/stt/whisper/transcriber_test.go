@@ -106,9 +106,8 @@ func buildTranscriber(t *testing.T, m *mockModel) *Transcriber {
 	t.Helper()
 	cfg := &domain.STTConfig{ModelName: "tiny", ChunkDurationSecs: 1}
 	tr := &Transcriber{
-		config:          cfg,
-		audioBuffer:     []float32{},
-		samplesPerChunk: sampleRate * cfg.ChunkDurationSecs,
+		config:      cfg,
+		audioBuffer: []float32{},
 	}
 	if m != nil {
 		tr.model = m
@@ -194,8 +193,8 @@ func TestNewTranscriber_Success(t *testing.T) {
 	if tr == nil {
 		t.Fatal("expected non-nil Transcriber")
 	}
-	if tr.samplesPerChunk != sampleRate*3 {
-		t.Errorf("samplesPerChunk = %d, want %d", tr.samplesPerChunk, sampleRate*3)
+	if tr.config == nil || tr.config.ModelName != "tiny" {
+		t.Error("expected config to be set with correct model name")
 	}
 }
 
@@ -483,8 +482,7 @@ func TestTranscriberSetContext(t *testing.T) {
 
 func TestTranscriberProcessNextChunk_SkipsWhenInsufficient(t *testing.T) {
 	tr := buildTranscriber(t, &mockModel{})
-	tr.audioBuffer = make([]float32, sampleRate/2)
-	tr.samplesPerChunk = sampleRate
+	tr.audioBuffer = make([]float32, sampleRate/4-1)
 
 	tr.processNextChunk()
 	tr.processingWg.Wait()
@@ -497,37 +495,27 @@ func TestTranscriberProcessNextChunk_SkipsWhenInsufficient(t *testing.T) {
 func TestTranscriberProcessNextChunk_AdvancesPointer(t *testing.T) {
 	tr := buildTranscriber(t, modelWithSegments("chunk"))
 	tr.audioBuffer = make([]float32, sampleRate*2)
-	tr.samplesPerChunk = sampleRate
 
 	tr.processNextChunk()
 	tr.processingWg.Wait()
 
-	if tr.processedSamples != sampleRate {
-		t.Errorf("processedSamples = %d, want %d", tr.processedSamples, sampleRate)
+	if tr.processedSamples != sampleRate*2 {
+		t.Errorf("processedSamples = %d, want %d", tr.processedSamples, sampleRate*2)
 	}
 }
 
 // ── Transcript accumulation ───────────────────────────────────────────────────
 
 func TestProcessNextChunk_AccumulatesTranscript(t *testing.T) {
-	// First chunk returns "hello", second returns "world".
-	// accumulatedTranscript should be "hello world" after two calls.
-	callCount := 0
+	// With pause-based detection, processNextChunk processes all available audio at once.
+	// This test verifies that transcribing a large buffer produces accumulated text.
 	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
-		callCount++
-		text := "hello"
-		if callCount > 1 {
-			text = "world"
-		}
-		return &mockContext{segments: []gowhisper.Segment{{Text: text}}}, nil
+		return &mockContext{segments: []gowhisper.Segment{{Text: "hello world"}}}, nil
 	}}
 	tr := buildTranscriber(t, m)
-	tr.audioBuffer = make([]float32, sampleRate*3)
-	tr.samplesPerChunk = sampleRate
+	tr.audioBuffer = make([]float32, sampleRate*2)
 
-	tr.processNextChunk() // chunk 1 → "hello"
-	tr.processingWg.Wait()
-	tr.processNextChunk() // chunk 2 → "world"
+	tr.processNextChunk()
 	tr.processingWg.Wait()
 
 	tr.bufferMutex.Lock()
