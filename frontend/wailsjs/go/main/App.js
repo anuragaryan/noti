@@ -138,6 +138,10 @@ export function SaveConfig(arg1) {
   return window['go']['main']['App']['SaveConfig'](arg1);
 }
 
+export function SearchNotes(arg1, arg2) {
+  return window['go']['main']['App']['SearchNotes'](arg1, arg2);
+}
+
 export function SetAudioSource(arg1) {
   return window['go']['main']['App']['SetAudioSource'](arg1);
 }

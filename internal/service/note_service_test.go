@@ -255,6 +255,81 @@ func TestNoteService_GetAll_ReturnsAllNotes(t *testing.T) {
 	}
 }
 
+func TestNoteService_Search_FindsContentMatches(t *testing.T) {
+	t.Parallel()
+	h := newNoteServiceHarness(t)
+
+	n, err := h.service.Create("Meeting", "Discuss roadmap and launch timeline", "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	results, err := h.service.Search("launch", 20)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Note.ID != n.ID {
+		t.Fatalf("expected note %q, got %q", n.ID, results[0].Note.ID)
+	}
+	if results[0].Line <= 0 {
+		t.Fatalf("expected positive line number, got %d", results[0].Line)
+	}
+}
+
+func TestNoteService_Search_UsesTokenizedANDMatching(t *testing.T) {
+	t.Parallel()
+	h := newNoteServiceHarness(t)
+
+	both, err := h.service.Create("Alpha Beta", "combined terms", "")
+	if err != nil {
+		t.Fatalf("Create both: %v", err)
+	}
+	if _, err := h.service.Create("Only Alpha", "single term", ""); err != nil {
+		t.Fatalf("Create alpha: %v", err)
+	}
+	if _, err := h.service.Create("Only Beta", "single term", ""); err != nil {
+		t.Fatalf("Create beta: %v", err)
+	}
+
+	results, err := h.service.Search("alpha beta", 20)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 AND result, got %d", len(results))
+	}
+	if results[0].Note.ID != both.ID {
+		t.Fatalf("expected note %q, got %q", both.ID, results[0].Note.ID)
+	}
+}
+
+func TestNoteService_Search_PrioritizesTitleMatches(t *testing.T) {
+	t.Parallel()
+	h := newNoteServiceHarness(t)
+
+	titleHit, err := h.service.Create("Roadmap Plan", "misc", "")
+	if err != nil {
+		t.Fatalf("Create title hit: %v", err)
+	}
+	if _, err := h.service.Create("Notes", "contains roadmap in content", ""); err != nil {
+		t.Fatalf("Create content hit: %v", err)
+	}
+
+	results, err := h.service.Search("roadmap", 20)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) < 2 {
+		t.Fatalf("expected at least 2 results, got %d", len(results))
+	}
+	if results[0].Note.ID != titleHit.ID {
+		t.Fatalf("expected title hit %q first, got %q", titleHit.ID, results[0].Note.ID)
+	}
+}
+
 // ── Update ────────────────────────────────────────────────────────────────────
 
 func TestNoteService_Update_ChangesContentOnDisk(t *testing.T) {

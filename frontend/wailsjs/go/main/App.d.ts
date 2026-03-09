@@ -70,6 +70,8 @@ export function RequestAudioPermissions(arg1:string):Promise<void>;
 
 export function SaveConfig(arg1:domain.Config):Promise<void>;
 
+export function SearchNotes(arg1:string,arg2:number):Promise<Array<domain.SearchMatch>>;
+
 export function SetAudioSource(arg1:string):Promise<void>;
 
 export function SetMixerConfig(arg1:number,arg2:number,arg3:string):Promise<void>;

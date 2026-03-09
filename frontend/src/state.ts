@@ -18,6 +18,7 @@ import type {
 	MoveContext,
 	DownloadEventPayload,
 	DownloadItem,
+	SearchMatch,
 } from './types'
 
 export interface AppState {
@@ -37,6 +38,9 @@ export interface AppState {
 
   // Sidebar
   expandedFolders: Set<string>
+  searchQuery: string
+  searchResults: SearchMatch[]
+  editorFocusLine: number | null
 
   // Recording
   isRecording: boolean
@@ -91,6 +95,9 @@ class StateManager {
     isPreviewMode: false,
 
     expandedFolders: new Set(),
+    searchQuery: '',
+    searchResults: [],
+    editorFocusLine: null,
 
     isRecording: false,
     recordingDuration: 0,

@@ -142,6 +142,11 @@ function initKeyboardShortcuts(): void {
         e.preventDefault()
         state.openModal('settings')
         break
+
+      case 'k':
+        e.preventDefault()
+        document.getElementById('search-input')?.focus()
+        break
     }
   })
 }

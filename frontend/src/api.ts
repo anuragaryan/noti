@@ -5,7 +5,7 @@
  */
 
 import * as App from '../wailsjs/go/main/App'
-import type { Note, Folder, Prompt, Config, LLMConfig, AudioDevice, LLMResponse, PromptExecutionResult, TranscriptionResult } from './types'
+import type { Note, Folder, Prompt, Config, LLMConfig, AudioDevice, LLMResponse, PromptExecutionResult, TranscriptionResult, SearchMatch } from './types'
 
 // ─── Notes API ──────────────────────────────────────────────────────────────
 
@@ -32,6 +32,10 @@ export const NotesAPI = {
 
   move(noteId: string, targetFolderId: string): Promise<void> {
     return App.MoveNote(noteId, targetFolderId)
+  },
+
+  search(query: string, limit: number = 200): Promise<SearchMatch[]> {
+    return App.SearchNotes(query, limit)
   },
 }
 

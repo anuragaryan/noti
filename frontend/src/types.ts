@@ -13,6 +13,7 @@ export type AudioDevice = domain.AudioDevice
 export type LLMResponse = domain.LLMResponse
 export type PromptExecutionResult = domain.PromptExecutionResult
 export type TranscriptionResult = domain.TranscriptionResult
+export type SearchMatch = domain.SearchMatch
 
 // UI-specific types
 export type Theme = 'light' | 'dark'

@@ -9,7 +9,7 @@ import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
 import { NotesAPI, FoldersAPI } from '../api'
 import state from '../state'
-import type { Folder, Note } from '../types'
+import type { Folder, Note, SearchMatch } from '../types'
 import appIcon from '../assets/images/app-icon.png'
 
 // ─── Context Menu ────────────────────────────────────────────────────────────
@@ -87,6 +87,11 @@ type DragPayload =
   | { kind: 'folder'; id: string; name: string; currentParentId: string }
 
 let dragPayload: DragPayload | null = null
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let searchRequestCounter = 0
+
+const SEARCH_DEBOUNCE_MS = 180
+const SEARCH_LIMIT = 300
 // ─── Helper: create element ─────────────────────────────────────────────────
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -126,15 +131,84 @@ function renderHeader(): void {
 function renderSearch(): void {
   const container = document.getElementById('sidebar-search')
   if (!container) return
+  const query = state.get('searchQuery')
   container.innerHTML = `
     <div class="search-bar" id="search-input-row">
       <span class="search-icon">${icon('search', 16)}</span>
-      <span class="search-placeholder">Search notes…</span>
+      <input
+        id="search-input"
+        class="search-input"
+        type="text"
+        value="${escapeHtml(query)}"
+        placeholder="Search notes..."
+        aria-label="Search notes"
+      />
+      <button id="search-clear-btn" class="search-clear-btn${query ? '' : ' hidden'}" aria-label="Clear search">
+        ${icon('x', 14)}
+      </button>
     </div>
   `
-  container.querySelector('#search-input-row')?.addEventListener('click', () => {
-    // Focus search — placeholder for now
+
+  const row = container.querySelector<HTMLDivElement>('#search-input-row')
+  const input = container.querySelector<HTMLInputElement>('#search-input')
+  const clearBtn = container.querySelector<HTMLButtonElement>('#search-clear-btn')
+
+  row?.addEventListener('click', () => {
+    input?.focus()
   })
+
+  input?.addEventListener('input', () => {
+    const nextQuery = input.value
+    state.setState({ searchQuery: nextQuery })
+    clearBtn?.classList.toggle('hidden', !nextQuery)
+    queueSearch(nextQuery)
+  })
+
+  clearBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    if (!input) return
+    input.value = ''
+    state.setState({ searchQuery: '', searchResults: [] })
+    clearBtn.classList.add('hidden')
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer)
+      searchDebounceTimer = null
+    }
+    searchRequestCounter++
+    renderFolderList()
+    renderNoteList()
+    input.focus()
+  })
+}
+
+function queueSearch(query: string): void {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+
+  const requestID = ++searchRequestCounter
+  const trimmed = query.trim()
+
+  if (!trimmed) {
+    state.setState({ searchResults: [] })
+    renderFolderList()
+    renderNoteList()
+    return
+  }
+
+  searchDebounceTimer = setTimeout(async () => {
+    try {
+      const results = await NotesAPI.search(trimmed, SEARCH_LIMIT)
+      if (requestID !== searchRequestCounter) return
+      state.setState({ searchResults: results })
+      renderFolderList()
+      renderNoteList()
+    } catch (err) {
+      if (requestID !== searchRequestCounter) return
+      console.error('Search failed:', err)
+      state.showNotification('Search failed', 'error')
+    }
+  }, SEARCH_DEBOUNCE_MS)
 }
 
 // ─── Action Bar ───────────────────────────────────────────────────────────────
@@ -481,6 +555,10 @@ function renderFolderList(): void {
   if (!container) return
   container.innerHTML = ''
 
+  if (state.get('searchQuery').trim()) {
+    return
+  }
+
   const folders = state.get('folders')
 
   const tree = buildFolderTree(folders)
@@ -497,10 +575,72 @@ function renderFolderList(): void {
 
 // ─── Note List ────────────────────────────────────────────────────────────────
 
+function buildFolderNameMap(folders: Folder[]): Map<string, Folder> {
+  const byID = new Map<string, Folder>()
+  for (const folder of folders) {
+    byID.set(folder.id, folder)
+  }
+  return byID
+}
+
+function folderPathLabel(folderID: string, byID: Map<string, Folder>): string {
+  if (!folderID) return 'All Notes'
+
+  const names: string[] = []
+  let currentID = folderID
+  while (currentID) {
+    const folder = byID.get(currentID)
+    if (!folder) break
+    names.unshift(folder.name)
+    currentID = folder.parentId || ''
+  }
+  return names.length > 0 ? names.join(' / ') : 'All Notes'
+}
+
 function renderNoteList(): void {
   const container = document.getElementById('sidebar-notes')
   if (!container) return
   container.innerHTML = ''
+
+  const query = state.get('searchQuery').trim()
+  if (query) {
+    const results = state.get('searchResults') as SearchMatch[]
+    const currentNote = state.get('currentNote')
+    const folderMap = buildFolderNameMap(state.get('folders'))
+
+    if (results.length === 0) {
+      const empty = el('div', { class: 'notes-empty' })
+      empty.textContent = `No matches for "${query}"`
+      container.appendChild(empty)
+      return
+    }
+
+    for (const result of results) {
+      const note = result.note as Note
+      const isActive = currentNote?.id === note.id
+      const row = el('div', { class: `note-row${isActive ? ' active' : ''}` })
+
+      const updatedAt = note.updatedAt
+        ? new Date(note.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : ''
+      const location = folderPathLabel(note.folderId || '', folderMap)
+
+      row.innerHTML = `
+        <span class="note-row-icon ${isActive ? 'active' : 'inactive'}">
+          ${icon('file-text', 14)}
+        </span>
+        <div class="note-row-body">
+          <div class="note-row-title ${isActive ? 'active' : 'inactive'}">${escapeHtml(note.title || 'Untitled')}</div>
+          <div class="note-row-subtitle">${escapeHtml(location)}${updatedAt ? ` · ${updatedAt}` : ''}</div>
+          <div class="note-row-snippet">${result.line > 0 ? `L${result.line}: ` : ''}${escapeHtml(result.snippet || '')}</div>
+        </div>
+      `
+
+      row.addEventListener('click', () => handleNoteSelect(note, result.line > 0 ? result.line : undefined))
+      container.appendChild(row)
+    }
+    return
+  }
 
   const notes = sortNotesByTitle(state.get('notes').filter(n => !n.folderId), state.get('sortOrder'))
   const currentNote = state.get('currentNote')
@@ -649,7 +789,7 @@ function renderFooter(): void {
 
 // ─── Event Handlers ──────────────────────────────────────────────────────────
 
-async function handleNoteSelect(note: Note): Promise<void> {
+async function handleNoteSelect(note: Note, targetLine?: number): Promise<void> {
   try {
     const fullNote = await NotesAPI.get(note.id)
     state.setState({
@@ -658,6 +798,7 @@ async function handleNoteSelect(note: Note): Promise<void> {
       isPreviewMode: false,
       showAIPanel: false,
       streamingContent: '',
+      editorFocusLine: targetLine ?? null,
     })
   } catch (err) {
     console.error('Failed to load note:', err)
@@ -701,6 +842,10 @@ export function initSidebar(): void {
   state.subscribe('notes', () => {
     renderNoteList()
     renderFolderList()
+    const query = state.get('searchQuery').trim()
+    if (query) {
+      queueSearch(query)
+    }
   })
   state.subscribe('folders', () => renderFolderList())
   state.subscribe('sortOrder', () => {
@@ -712,5 +857,10 @@ export function initSidebar(): void {
     renderNoteList()
     renderFolderList()
   })
+  state.subscribe('searchQuery', () => {
+    renderFolderList()
+    renderNoteList()
+  })
+  state.subscribe('searchResults', () => renderNoteList())
   state.subscribe('expandedFolders', () => renderFolderList())
 }

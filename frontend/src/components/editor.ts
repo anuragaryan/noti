@@ -234,6 +234,14 @@ function renderEditorArea(): void {
 
     const textarea = editorArea.querySelector<HTMLTextAreaElement>('#note-content-textarea')
     if (textarea) {
+      const targetLine = state.get('editorFocusLine')
+      if (targetLine && targetLine > 0) {
+        requestAnimationFrame(() => {
+          focusTextareaAtLine(textarea, targetLine)
+          state.setState({ editorFocusLine: null })
+        })
+      }
+
       textarea.addEventListener('input', debounce(() => {
         const latestNote = state.get('currentNote')
         if (!latestNote) return
@@ -247,6 +255,32 @@ function renderEditorArea(): void {
       }, DEBOUNCE_DELAY_MS))
     }
   }
+}
+
+function focusTextareaAtLine(textarea: HTMLTextAreaElement, lineNumber: number): void {
+  const value = textarea.value
+  if (!value) {
+    textarea.focus()
+    return
+  }
+
+  let targetIndex = 0
+  let currentLine = 1
+  while (currentLine < lineNumber && targetIndex < value.length) {
+    const nextNewline = value.indexOf('\n', targetIndex)
+    if (nextNewline === -1) {
+      targetIndex = value.length
+      break
+    }
+    targetIndex = nextNewline + 1
+    currentLine++
+  }
+
+  textarea.focus()
+  textarea.setSelectionRange(targetIndex, targetIndex)
+
+  const lineHeight = Number.parseFloat(getComputedStyle(textarea).lineHeight) || 20
+  textarea.scrollTop = Math.max(0, (currentLine - 3) * lineHeight)
 }
 
 // ─── Auto-save ───────────────────────────────────────────────────────────────

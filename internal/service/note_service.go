@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,13 @@ type NoteService struct {
 	pathResolver  *repository.PathResolver
 	fileSystem    *repository.FileSystem
 	notesPath     string
+	searchIndex   map[string]searchDocument
+	searchIndexed bool
+}
+
+type searchDocument struct {
+	raw   string
+	lower string
 }
 
 // NewNoteService creates a new NoteService.
@@ -38,7 +46,120 @@ func NewNoteService(
 		pathResolver:  pathResolver,
 		fileSystem:    fileSystem,
 		notesPath:     notesPath,
+		searchIndex:   make(map[string]searchDocument),
 	}
+}
+
+// Search returns notes whose title or content matches all query terms.
+// Results are ranked by relevance and then by recency.
+func (s *NoteService) Search(query string, limit int) ([]domain.SearchMatch, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return []domain.SearchMatch{}, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+
+	structure, err := s.structureRepo.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.ensureSearchIndexLocked(structure); err != nil {
+		return nil, err
+	}
+
+	tokens := tokenizeSearchQuery(trimmed)
+	if len(tokens) == 0 {
+		return []domain.SearchMatch{}, nil
+	}
+	fullQuery := strings.ToLower(trimmed)
+
+	type scored struct {
+		match domain.SearchMatch
+		score int
+	}
+	results := make([]scored, 0, len(structure.Notes))
+
+	for _, note := range structure.Notes {
+		title := strings.ToLower(note.Title)
+		doc, ok := s.searchIndex[note.ID]
+		if !ok {
+			var err error
+			doc, err = s.loadSearchDocument(&note, structure)
+			if err != nil {
+				slog.Warn("could not load note content while searching", "id", note.ID, "error", err)
+			}
+			s.searchIndex[note.ID] = doc
+		}
+
+		totalScore := 0
+		matchedAll := true
+		for _, token := range tokens {
+			inTitle := strings.Contains(title, token)
+			inContent := strings.Contains(doc.lower, token)
+			if !inTitle && !inContent {
+				matchedAll = false
+				break
+			}
+
+			switch {
+			case inTitle:
+				totalScore += 20
+			case inContent:
+				totalScore += 5
+			}
+		}
+
+		if !matchedAll {
+			continue
+		}
+
+		if strings.Contains(title, fullQuery) {
+			totalScore += 35
+		}
+		if strings.Contains(doc.lower, fullQuery) {
+			totalScore += 10
+		}
+
+		line, snippet := firstMatchingLineAndSnippet(doc.raw, fullQuery, tokens)
+		if snippet == "" {
+			snippet = note.Title
+		}
+
+		results = append(results, scored{
+			match: domain.SearchMatch{
+				Note:    note,
+				Line:    line,
+				Snippet: snippet,
+			},
+			score: totalScore,
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].score != results[j].score {
+			return results[i].score > results[j].score
+		}
+		if !results[i].match.Note.UpdatedAt.Equal(results[j].match.Note.UpdatedAt) {
+			return results[i].match.Note.UpdatedAt.After(results[j].match.Note.UpdatedAt)
+		}
+		return strings.Compare(results[i].match.Note.ID, results[j].match.Note.ID) < 0
+	})
+
+	if limit > len(results) {
+		limit = len(results)
+	}
+
+	out := make([]domain.SearchMatch, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, results[i].match)
+	}
+	return out, nil
 }
 
 // GetAll returns all notes (without file content).
@@ -143,6 +264,9 @@ func (s *NoteService) Create(title, content, folderID string) (*domain.Note, err
 		_ = os.Remove(notePath)
 		return nil, fmt.Errorf("failed to save structure: %w", err)
 	}
+	if s.searchIndexed {
+		s.searchIndex[note.ID] = searchDocument{raw: content, lower: strings.ToLower(content)}
+	}
 
 	return &note, nil
 }
@@ -193,6 +317,9 @@ func (s *NoteService) Update(id, title, content string) error {
 		// Save content to the (potentially renamed) path.
 		if err := s.fileSystem.SaveNoteContent(&structure.Notes[i], content, structure); err != nil {
 			return fmt.Errorf("failed to save note content: %w", err)
+		}
+		if s.searchIndexed {
+			s.searchIndex[structure.Notes[i].ID] = searchDocument{raw: content, lower: strings.ToLower(content)}
 		}
 
 		return s.structureRepo.Save(structure)
@@ -281,7 +408,125 @@ func (s *NoteService) Delete(id string) error {
 		// the caller knows the operation was not fully committed.
 		return fmt.Errorf("note file deleted but structure save failed (data may be inconsistent): %w", err)
 	}
+	if s.searchIndexed {
+		delete(s.searchIndex, noteToDelete.ID)
+	}
 	return nil
+}
+
+func (s *NoteService) ensureSearchIndexLocked(structure *domain.FolderStructure) error {
+	if !s.searchIndexed {
+		return s.rebuildSearchIndexLocked(structure)
+	}
+	return nil
+}
+
+func (s *NoteService) rebuildSearchIndexLocked(structure *domain.FolderStructure) error {
+	index := make(map[string]searchDocument, len(structure.Notes))
+	for i := range structure.Notes {
+		note := &structure.Notes[i]
+		doc, err := s.loadSearchDocument(note, structure)
+		if err != nil {
+			slog.Warn("could not load content while building search index", "id", note.ID, "error", err)
+			index[note.ID] = searchDocument{}
+			continue
+		}
+		index[note.ID] = doc
+	}
+	s.searchIndex = index
+	s.searchIndexed = true
+	return nil
+}
+
+func (s *NoteService) loadSearchDocument(note *domain.Note, structure *domain.FolderStructure) (searchDocument, error) {
+	content, err := s.fileSystem.LoadNoteContent(note, structure)
+	if err != nil {
+		return searchDocument{}, err
+	}
+	return searchDocument{raw: content, lower: strings.ToLower(content)}, nil
+}
+
+func firstMatchingLineAndSnippet(content, fullQuery string, tokens []string) (int, string) {
+	if content == "" {
+		return 0, ""
+	}
+
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lower := strings.ToLower(line)
+		if fullQuery != "" && strings.Contains(lower, fullQuery) {
+			idx := strings.Index(lower, fullQuery)
+			return i + 1, buildSnippet(line, idx, len(fullQuery))
+		}
+		for _, token := range tokens {
+			if token == "" {
+				continue
+			}
+			if strings.Contains(lower, token) {
+				idx := strings.Index(lower, token)
+				return i + 1, buildSnippet(line, idx, len(token))
+			}
+		}
+	}
+
+	return 0, ""
+}
+
+func buildSnippet(line string, matchStart, matchLen int) string {
+	const maxLen = 140
+	if strings.TrimSpace(line) == "" {
+		return ""
+	}
+	trimmedLeft := strings.TrimLeft(line, " \t")
+	leftDelta := len(line) - len(trimmedLeft)
+	if matchStart >= leftDelta {
+		matchStart -= leftDelta
+	}
+	text := strings.TrimRight(trimmedLeft, " \t")
+
+	if len(text) <= maxLen || matchStart < 0 {
+		return text
+	}
+
+	windowStart := matchStart - 40
+	if windowStart < 0 {
+		windowStart = 0
+	}
+	windowEnd := matchStart + matchLen + 60
+	if windowEnd > len(text) {
+		windowEnd = len(text)
+	}
+
+	prefix := ""
+	suffix := ""
+	if windowStart > 0 {
+		prefix = "..."
+	}
+	if windowEnd < len(text) {
+		suffix = "..."
+	}
+
+	return prefix + text[windowStart:windowEnd] + suffix
+}
+
+func tokenizeSearchQuery(query string) []string {
+	parts := strings.Fields(strings.ToLower(query))
+	if len(parts) == 0 {
+		return nil
+	}
+	tokens := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		tokens = append(tokens, p)
+	}
+	return tokens
 }
 
 // ── internal helpers ──────────────────────────────────────────────────────────

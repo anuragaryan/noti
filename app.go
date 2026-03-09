@@ -738,6 +738,10 @@ func (a *App) DeleteNote(id string) error {
 	return a.noteService.Delete(id)
 }
 
+func (a *App) SearchNotes(query string, limit int) ([]domain.SearchMatch, error) {
+	return a.noteService.Search(query, limit)
+}
+
 // ============================================================================
 // CONFIG OPERATIONS
 // ============================================================================

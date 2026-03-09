@@ -433,8 +433,39 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   padding: 0 14px;
   cursor: text;
 }
+.search-bar:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
 .search-icon        { color: var(--muted-foreground); display: flex; flex-shrink: 0; }
-.search-placeholder { font-family: var(--font-secondary); font-size: 14px; color: var(--muted-foreground); user-select: none; }
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--sidebar-foreground);
+  font-family: var(--font-secondary);
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+}
+.search-input::placeholder {
+  color: var(--muted-foreground);
+}
+.search-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.search-clear-btn:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 16%, transparent);
+  color: var(--sidebar-foreground);
+}
 
 .action-btn {
   width: 24px;
@@ -549,6 +580,24 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 .note-row-title.active   { font-weight: 600; color: var(--sidebar-accent-foreground); }
 .note-row-title.inactive { font-weight: 500; color: var(--sidebar-foreground); }
+
+.note-row-subtitle {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  font-family: var(--font-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-row-snippet {
+  font-size: 12px;
+  color: var(--sidebar-foreground);
+  font-family: var(--font-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .note-meta { font-size: 12px; color: var(--muted-foreground); font-family: var(--font-secondary); display: none; }
 .note-meta.visible { display: block; }
