@@ -84,9 +84,6 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 	if config.Audio.DefaultSource == "" {
 		config.Audio.DefaultSource = "microphone"
 	}
-	if config.Audio.SampleRate == 0 {
-		config.Audio.SampleRate = 16000
-	}
 	if config.Audio.Mixer.MicrophoneGain == 0 {
 		config.Audio.Mixer.MicrophoneGain = 1.0
 	}

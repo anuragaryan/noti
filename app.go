@@ -759,11 +759,6 @@ func (a *App) SaveConfig(config domain.Config) error {
 	if config.LLM.MaxTokens < 50 {
 		return fmt.Errorf("LLM max tokens must be more than 50")
 	}
-	if config.Audio.SampleRate != 8000 && config.Audio.SampleRate != 16000 &&
-		config.Audio.SampleRate != 22050 && config.Audio.SampleRate != 44100 &&
-		config.Audio.SampleRate != 48000 {
-		return fmt.Errorf("invalid sample rate")
-	}
 	if config.Audio.Mixer.MicrophoneGain < 0 || config.Audio.Mixer.MicrophoneGain > 2 {
 		return fmt.Errorf("microphone gain must be between 0 and 2")
 	}

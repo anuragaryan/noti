@@ -11,8 +11,6 @@ type Config struct {
 type AudioSettings struct {
 	// DefaultSource is the default audio source: "microphone", "system", or "mixed"
 	DefaultSource string `json:"defaultSource"`
-	// SampleRate is the audio sample rate in Hz (default 16000 for speech)
-	SampleRate int `json:"sampleRate"`
 	// Mixer holds the audio mixing configuration
 	Mixer AudioMixerConfig `json:"mixer"`
 }
@@ -21,7 +19,6 @@ type AudioSettings struct {
 func DefaultAudioSettings() AudioSettings {
 	return AudioSettings{
 		DefaultSource: "microphone",
-		SampleRate:    16000,
 		Mixer:         DefaultMixerConfig(),
 	}
 }

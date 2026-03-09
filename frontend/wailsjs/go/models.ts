@@ -40,7 +40,6 @@ export namespace domain {
 	}
 	export class AudioSettings {
 	    defaultSource: string;
-	    sampleRate: number;
 	    mixer: AudioMixerConfig;
 	
 	    static createFrom(source: any = {}) {
@@ -50,7 +49,6 @@ export namespace domain {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.defaultSource = source["defaultSource"];
-	        this.sampleRate = source["sampleRate"];
 	        this.mixer = this.convertValues(source["mixer"], AudioMixerConfig);
 	    }
 	

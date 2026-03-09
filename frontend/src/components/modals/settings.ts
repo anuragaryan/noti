@@ -120,14 +120,6 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
                 <option value="mixed" ${config.audio?.defaultSource === 'mixed' ? 'selected' : ''}>Mixed (Mic + System)</option>
               </select>
             </label>
-            <label class="form-label">
-              <span class="form-label-text">Sample Rate</span>
-              <select id="audio-samplerate" class="form-select">
-                ${[8000, 16000, 22050, 44100, 48000].map(r =>
-                  `<option value="${r}" ${config?.audio?.sampleRate === r ? 'selected' : ''}>${r} Hz</option>`
-                ).join('')}
-              </select>
-            </label>
           </div>
         </section>
       </div>
@@ -207,7 +199,6 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
       },
       audio: Object.assign(config.audio ?? {}, {
         defaultSource: (container.querySelector<HTMLSelectElement>('#audio-source')?.value ?? config.audio?.defaultSource),
-        sampleRate: parseInt(container.querySelector<HTMLSelectElement>('#audio-samplerate')?.value ?? '44100'),
         mixer: config.audio?.mixer,
       }),
     })
