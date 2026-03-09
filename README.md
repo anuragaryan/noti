@@ -1,19 +1,112 @@
-# README
+# NotI
 
-## About
+NotI is an AI-first note-taking desktop app.
 
-This is the official Wails Vanilla template.
+**Note + AI = NotI**: you capture ideas quickly, then use built-in AI to structure, rewrite, summarize, or expand them without leaving your notes workflow.
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+At a high level, NotI combines:
 
-## Live Development
+- local-first note and folder management
+- speech-to-text (Whisper) for voice capture
+- LLM-powered writing assistance (local models or API provider)
+- a native desktop experience built with Wails (Go backend + TypeScript frontend)
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## Development
 
-## Building
+### 1) Install prerequisites (macOS-first)
 
-To build a redistributable, production mode package, use `wails build`.
+- Xcode Command Line Tools
+  - `xcode-select --install`
+- Go 1.24+
+- Bun (for frontend dependencies and scripts)
+- Wails CLI v2
+  - `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+
+### 2) Clone and install dependencies
+
+```bash
+git clone <your-fork-or-repo-url>
+cd noti
+bun install --cwd frontend
+```
+
+### 3) Build and test
+
+```bash
+./test.sh
+./build.sh debug
+./build.sh production
+```
+
+The built app is generated at `build/bin/noti.app`.
+
+### 4) Important local setup note
+
+Current build/test scripts assume a local `whisper.cpp` checkout and macOS CGO flags are available. If your local path differs, update `build.sh` and `test.sh` before building.
+
+## Architecture
+
+NotI is a Wails desktop app with a Go backend and a TypeScript frontend.
+
+- `frontend/`
+  - Vite + TypeScript UI + Tailwind CSS
+  - stateful note editor, sidebar, settings, prompts, and runtime events
+- `main.go`
+  - Wails app bootstrap, menu setup, logging, and production error reporting wiring
+- `app.go`
+  - Wails-bound application methods exposed to the frontend
+  - orchestration across notes, folders, config, STT, LLM, prompts, and audio
+- `internal/service/`
+  - service layer for business logic and lifecycle management
+  - includes `STTManager`, `LLMManager`, `AudioManager`, `NoteService`, `FolderService`, and `PromptService`
+- `internal/stt/whisper/`
+  - real-time Whisper transcription pipeline with VAD, chunking, assembly, and event emission
+- `internal/llm/`
+  - provider abstraction for local (`llama-server`) and API-based LLMs
+  - model/binary download and runtime health management
+- `internal/infrastructure/downloader/`
+  - model and binary download registry + progress callbacks
+
+Storage defaults:
+
+- Notes: `~/Documents/noti/notes`
+- Folder structure metadata: `~/Documents/noti/notes/structure.json`
+- App config/models/binaries: user config directory under `Noti` (for example on macOS: `~/Library/Application Support/Noti`)
+
+## Requirements
+
+macOS-first development environment:
+
+- macOS with microphone permissions enabled for the app/terminal during development
+- Go `1.24+`
+- Bun `1.x+`
+- Wails `v2` CLI
+- CGO-enabled Go toolchain
+- Native dependencies used by this project:
+  - `whisper.cpp` (Go bindings)
+  - PortAudio
+  - Apple frameworks used in current scripts (Accelerate, Foundation, Metal)
+
+Optional but recommended:
+
+- Local LLM runtime support for `llama-server` model execution
+- API endpoint + API key if using API provider mode
+
+## Data & Privacy
+
+NotI is designed to be local-first:
+
+- Notes are stored as local files on your machine.
+- STT and local LLM flows can run entirely on-device.
+- Model files and binaries are downloaded to local application directories.
+
+When external services are used:
+
+- If you configure an API-based LLM provider, prompts/content sent to that provider leave your machine.
+- API credentials are stored in local app configuration.
+
+Good practices:
+
+- Use local provider mode for sensitive notes when possible.
+- Treat API keys like secrets and rotate them if exposed.
+- Exclude personal note directories and local config from backups/shares if needed.
