@@ -1,0 +1,95 @@
+{
+  "stt_models": [
+    {
+      "id": 1,
+      "model_code": "small.en-q8_0",
+      "model_name": "EN Model - Small",
+      "checksums": "67a179f608ea6114bd3fdb9060e762b588a3fb3bd00c4387971be4d177958067",
+      "is_recommended": false,
+      "size": "275 MB",
+      "note": "minimal hardware requirement (<2 GB Free Memory)"
+    },
+    {
+      "id": 2,
+      "model_code": "medium.en-q8_0",
+      "model_name": "EN Model - Medium",
+      "checksums": "43fa2cd084de5a04399a896a9a7a786064e221365c01700cea4666005218f11c",
+      "is_recommended": false,
+      "size": "820 MB",
+      "note": "minimal hardware requirement (2-3 GB Free Memory)"
+    },
+    {
+      "id": 3,
+      "model_code": "large-v3-turbo-q5_0",
+      "model_name": "Multilingual Model - L - Turbo - Q5",
+      "checksums": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+      "is_recommended": true,
+      "size": "575 MB",
+      "note": "best everyday usage (3-5 GB Free Memory)"
+    },
+    {
+      "id": 4,
+      "model_code": "large-v3-turbo-q8_0",
+      "model_name": "Multilingual Model - L - Turbo - Q8",
+      "checksums": "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
+      "is_recommended": false,
+      "size": "875 MB",
+      "note": "minimal hardware requirement (5-8 GB Free Memory)"
+    },
+    {
+      "id": 5,
+      "model_code": "large-v3-q5_0",
+      "model_name": "Multilingual Model - Large",
+      "checksums": "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+      "is_recommended": false,
+      "size": "1.1 GB",
+      "note": "best performing model (8+ GB Free Memory)"
+    }
+  ],
+  "llm_models": [
+    {
+      "id": 1,
+      "model_code": "gemma-2-2b-it-Q4_K_M",
+      "model_name": "Gemma 2 - 2B - Instruction",
+      "checksums": "",
+      "repo": "ggml-org/gemma-2-2b-it-GGUF",
+      "is_recommended": false,
+      "size": "1.6 GB",
+      "note": "Runs fine on any modern laptop (4 GB Free Memory)"
+    },
+    {
+      "id": 2,
+      "model_code": "gemma-2-9b-it-Q4_K_M",
+      "model_name": "Gemma 2 - 9B - Instruction",
+      "checksums": "",
+      "repo": "ggml-org/gemma-2-9b-it-GGUF",
+      "is_recommended": false,
+      "size": "5.4 GB",
+      "note": "Needs a decent machine (12 GB Free Memory)"
+    },
+    {
+      "id": 3,
+      "model_code": "Qwen3.5-4B-UD-Q4_K_XL",
+      "model_name": "Qwen3.5 - 4B - Dynamic Quantization",
+      "checksums": "",
+      "repo": "unsloth/Qwen3.5-4B-GGUF",
+      "is_recommended": true,
+      "size": "2.9 GB",
+      "note": "Sweet spot for low-end hardware (8 GB Free Memory)"
+    },
+    {
+      "id": 4,
+      "model_code": "Qwen3.5-9B-UD-Q4_K_XL",
+      "model_name": "Qwen 3.5 - 9B - Dynamic Quantization",
+      "checksums": "",
+      "repo": "unsloth/Qwen3.5-9B-GGUF",
+      "is_recommended": false,
+      "size": "5.9GB",
+      "note": "Needs a decent machine (12 GB Free Memory)"
+    }
+  ],
+  "llama_server": {
+    "endpoint": "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest",
+    "version": "latest"
+  }
+}
