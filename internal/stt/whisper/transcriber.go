@@ -341,34 +341,15 @@ func (t *Transcriber) processNextChunk() {
 	go func(audioChunk []float32) {
 		defer t.processingWg.Done()
 
-		// modelMutex serialises both inference and transcript accumulation so
-		// chunks are always appended in the order they were recorded.
-		text, err := t.TranscribeThreadSafe(audioChunk)
+		fullTranscript, err := t.transcribeAndAccumulate(audioChunk)
 		if err != nil {
 			slog.Error("[stt] chunk transcription error", "error", err)
 			return
 		}
 
-		text = cleanTranscription(text)
-		if text == "" {
+		if fullTranscript == "" {
 			return
 		}
-
-		t.bufferMutex.Lock()
-		prev := t.accumulatedTranscript
-		if prev != "" {
-			prev = strings.TrimRight(prev, " \t\n")
-			text = strings.TrimLeft(text, " \t\n")
-			if text != "" {
-				t.accumulatedTranscript = prev + " " + text
-			} else {
-				t.accumulatedTranscript = prev
-			}
-		} else {
-			t.accumulatedTranscript = text
-		}
-		fullTranscript := t.accumulatedTranscript
-		t.bufferMutex.Unlock()
 
 		if t.ctx != nil {
 			result := domain.TranscriptionResult{
@@ -388,6 +369,42 @@ func (t *Transcriber) TranscribeThreadSafe(audioData []float32) (string, error) 
 	t.modelMutex.Lock()
 	defer t.modelMutex.Unlock()
 	return t.transcribe(audioData)
+}
+
+// transcribeAndAccumulate runs Whisper inference and appends the result to
+// accumulatedTranscript under a single lock to guarantee ordering.
+// Returns the full accumulated transcript (or empty if no new text) and any error.
+func (t *Transcriber) transcribeAndAccumulate(audioChunk []float32) (string, error) {
+	t.modelMutex.Lock()
+	defer t.modelMutex.Unlock()
+
+	text, err := t.transcribe(audioChunk)
+	if err != nil {
+		return "", err
+	}
+
+	text = cleanTranscription(text)
+	if text == "" {
+		return "", nil
+	}
+
+	t.bufferMutex.Lock()
+	prev := t.accumulatedTranscript
+	if prev != "" {
+		prev = strings.TrimRight(prev, " \t\n")
+		text = strings.TrimLeft(text, " \t\n")
+		if text != "" {
+			t.accumulatedTranscript = prev + " " + text
+		} else {
+			t.accumulatedTranscript = prev
+		}
+	} else {
+		t.accumulatedTranscript = text
+	}
+	fullTranscript := t.accumulatedTranscript
+	t.bufferMutex.Unlock()
+
+	return fullTranscript, nil
 }
 
 // transcribe runs Whisper inference on audioData. Callers must hold modelMutex.
