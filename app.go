@@ -751,6 +751,14 @@ func (a *App) GetConfig() *domain.Config {
 	return a.config
 }
 
+// IsFirstRun returns true when config.json was created on this launch.
+func (a *App) IsFirstRun() bool {
+	if a.configService == nil {
+		return false
+	}
+	return a.configService.IsFirstRun()
+}
+
 // SaveConfig saves the configuration and reinitializes affected services
 func (a *App) SaveConfig(config domain.Config) error {
 	// Validate configuration

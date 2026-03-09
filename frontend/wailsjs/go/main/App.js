@@ -122,6 +122,10 @@ export function GetStreamingSupport() {
   return window['go']['main']['App']['GetStreamingSupport']();
 }
 
+export function IsFirstRun() {
+  return window['go']['main']['App']['IsFirstRun']();
+}
+
 export function IsRecording() {
   return window['go']['main']['App']['IsRecording']();
 }

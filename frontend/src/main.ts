@@ -10,6 +10,7 @@ import { initEditor, saveCurrentNote, getEditorTitle, getEditorContent } from '.
 import { initToolbar, loadPrompts } from './components/toolbar'
 import { initRecording } from './components/recording'
 import { renderEmptyState } from './components/empty-state'
+import { renderGettingStarted } from './components/getting-started'
 import { renderSettingsModal } from './components/modals/settings'
 import { renderPromptsModal } from './components/modals/prompts'
 import { renderDeleteConfirmModal } from './components/modals/delete-confirm'
@@ -198,11 +199,12 @@ function initGoEvents(): void {
 
 async function loadInitialData(): Promise<void> {
   try {
-    const [notes, folders, config, sttStatus] = await Promise.all([
+    const [notes, folders, config, sttStatus, isFirstRun] = await Promise.all([
       NotesAPI.getAll(),
       FoldersAPI.getAll(),
       ConfigAPI.get(),
       AudioAPI.getSTTStatus(),
+      ConfigAPI.isFirstRun(),
     ])
 
     state.setState({
@@ -210,6 +212,7 @@ async function loadInitialData(): Promise<void> {
       folders,
       config,
       sttAvailable: Boolean(sttStatus.available),
+      showGettingStarted: isFirstRun,
       // Sync recording source from config so the UI reflects the actual configured source
       recordingSource: config?.audio?.defaultSource ?? 'microphone',
     })
@@ -224,20 +227,49 @@ async function loadInitialData(): Promise<void> {
 
 function initEmptyState(): void {
   const emptyEl = document.getElementById('empty-state')
-  if (emptyEl) renderEmptyState(emptyEl)
+  if (!emptyEl) return
+
+  const renderPlaceholder = (): void => {
+    if (state.get('showGettingStarted')) {
+      void renderGettingStarted(emptyEl)
+      return
+    }
+    renderEmptyState(emptyEl)
+  }
+
+  renderPlaceholder()
 
   state.subscribe('currentNote', () => {
     const emptyEl = document.getElementById('empty-state')
     const editorArea = document.getElementById('editor-area')
     const note = state.get('currentNote')
+    const showGettingStarted = state.get('showGettingStarted')
 
-    if (note) {
+    if (note && !showGettingStarted) {
       emptyEl?.classList.add('hidden')
       if (editorArea) editorArea.classList.remove('hidden')
     } else {
       emptyEl?.classList.remove('hidden')
       if (editorArea) editorArea.classList.add('hidden')
+      if (emptyEl) renderPlaceholder()
     }
+  })
+
+  state.subscribe('showGettingStarted', () => {
+    const emptyEl = document.getElementById('empty-state')
+    const editorArea = document.getElementById('editor-area')
+    const note = state.get('currentNote')
+    const showGettingStarted = state.get('showGettingStarted')
+
+    if (showGettingStarted || !note) {
+      emptyEl?.classList.remove('hidden')
+      editorArea?.classList.add('hidden')
+      if (emptyEl) renderPlaceholder()
+      return
+    }
+
+    emptyEl?.classList.add('hidden')
+    editorArea?.classList.remove('hidden')
   })
 }
 
@@ -266,7 +298,7 @@ async function boot(): Promise<void> {
   // 5. Show empty state initially (no note selected)
   const emptyEl = document.getElementById('empty-state')
   const editorArea = document.getElementById('editor-area')
-  if (!state.get('currentNote')) {
+  if (state.get('showGettingStarted') || !state.get('currentNote')) {
     emptyEl?.classList.remove('hidden')
     editorArea?.classList.add('hidden')
   }

@@ -14,6 +14,7 @@ import (
 type ConfigService struct {
 	basePath      string
 	defaultConfig []byte
+	firstRun      bool
 }
 
 // NewConfigService creates a new config service
@@ -27,6 +28,7 @@ func NewConfigService(basePath string, defaultConfig []byte) *ConfigService {
 // Load loads the application configuration from config.json
 func (s *ConfigService) Load() (*domain.Config, error) {
 	configFilePath := filepath.Join(s.basePath, "config.json")
+	s.firstRun = false
 
 	data, err := os.ReadFile(configFilePath)
 	if err != nil {
@@ -44,6 +46,7 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 		if err := os.WriteFile(configFilePath, s.defaultConfig, 0644); err != nil {
 			return nil, fmt.Errorf("failed to write default config file: %w", err)
 		}
+		s.firstRun = true
 		// Use the embedded config data for this session
 		data = s.defaultConfig
 	}
@@ -96,6 +99,11 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 
 	slog.Info("Loaded config", "path", configFilePath)
 	return &config, nil
+}
+
+// IsFirstRun reports whether config.json was created during the latest Load call.
+func (s *ConfigService) IsFirstRun() bool {
+	return s.firstRun
 }
 
 // Save saves the configuration to config.json

@@ -217,6 +217,10 @@ export const ConfigAPI = {
     return App.GetConfig()
   },
 
+  isFirstRun(): Promise<boolean> {
+    return App.IsFirstRun()
+  },
+
   save(config: Config): Promise<void> {
     return App.SaveConfig(config)
   },

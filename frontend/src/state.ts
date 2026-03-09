@@ -63,6 +63,7 @@ export interface AppState {
   // Theme
   theme: Theme
   sortOrder: 'asc' | 'desc'
+  showGettingStarted: boolean
 
   // Modals
   activeModal: ModalType
@@ -116,6 +117,7 @@ class StateManager {
 
     theme: 'light',
     sortOrder: 'asc',
+    showGettingStarted: false,
 
     activeModal: null,
     deleteContext: null,

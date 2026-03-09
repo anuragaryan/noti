@@ -62,6 +62,8 @@ export function GetSTTStatus():Promise<Record<string, any>>;
 
 export function GetStreamingSupport():Promise<boolean>;
 
+export function IsFirstRun():Promise<boolean>;
+
 export function IsRecording():Promise<boolean>;
 
 export function MoveNote(arg1:string,arg2:string):Promise<void>;
