@@ -224,7 +224,7 @@ function renderActions(): void {
 
   const makeActionBtn = (iconName: string, title: string, onClick: () => void, active = false) => {
     const btn = el('button', { title, class: `action-btn${active ? ' active' : ''}` })
-    btn.innerHTML = icon(iconName, 14)
+    btn.innerHTML = icon(iconName, 18)
     btn.addEventListener('click', onClick)
     return btn
   }

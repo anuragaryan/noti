@@ -110,9 +110,12 @@ function renderEditorHeader(): void {
 
   const note = state.get('currentNote')
   if (!note) {
+    container.classList.add('hidden')
     container.innerHTML = ''
     return
   }
+
+  container.classList.remove('hidden')
 
   const isRecording = state.get('isRecording')
   const isPreview = state.get('isPreviewMode')
