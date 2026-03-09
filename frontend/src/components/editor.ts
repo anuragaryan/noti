@@ -40,12 +40,19 @@ function updateNoteInState(
     n.id === noteId ? { ...n, title, content } : n
   ) as Note[]
 
+  const shouldSyncCurrentNoteTitleOnly =
+    !shouldUpdateCurrentNote &&
+    currentNote?.id === noteId &&
+    currentNote.title !== title
+
   state.setState({
     isDirty: false,
     lastSaved: new Date(),
     notes: updatedNotes,
     ...(shouldUpdateCurrentNote && currentNote?.id === noteId
       ? { currentNote: { ...currentNote, title, content } as Note }
+      : shouldSyncCurrentNoteTitleOnly
+        ? { currentNote: { ...currentNote, title } as Note }
       : {})
   })
 }
@@ -117,6 +124,10 @@ function renderEditorHeader(): void {
 
   container.classList.remove('hidden')
 
+  const existingTitleInput = document.querySelector<HTMLInputElement>('#note-title-input')
+  const hasMatchingInput = existingTitleInput?.dataset.noteId === note.id
+  const titleValue = hasMatchingInput ? (existingTitleInput?.value ?? '') : (note.title || '')
+
   const isRecording = state.get('isRecording')
   const isPreview = state.get('isPreviewMode')
 
@@ -126,7 +137,8 @@ function renderEditorHeader(): void {
         id="note-title-input"
         type="text"
         class="note-title-input"
-        value="${escapeHtml(note.title || '')}"
+        data-note-id="${escapeHtml(note.id)}"
+        value="${escapeHtml(titleValue)}"
         placeholder="Untitled"
       />
     </div>
