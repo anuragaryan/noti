@@ -1180,6 +1180,18 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   cursor: pointer;
 }
 
+.settings-section .form-select {
+  width: 100%;
+}
+
+.form-note {
+  margin: 2px 0 0;
+  font-family: var(--font-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted-foreground);
+}
+
 .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .checkbox-input { width: 16px; height: 16px; cursor: pointer; }
 .checkbox-text  { font-family: var(--font-secondary); font-size: 13px; color: var(--foreground); }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -16,26 +17,43 @@ const (
 	baseURL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 )
 
-// Known SHA256 checksums for model files. Add more as needed.
-// Leave empty string to skip verification for that model.
-var modelChecksums = map[string]string{
-	"small.en-q8_0":       "67a179f608ea6114bd3fdb9060e762b588a3fb3bd00c4387971be4d177958067",
-	"medium.en-q8_0":      "43fa2cd084de5a04399a896a9a7a786064e221365c01700cea4666005218f11c",
-	"large-v3-turbo-q5_0": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
-	"large-v3-turbo-q8_0": "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
-	"large-v3-q5_0":       "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+var (
+	sttRegistryMu     sync.RWMutex
+	validModels       []string
+	modelChecksums    = map[string]string{}
+	sttRegistryReason string
+)
+
+// STTModelEntry describes a supported STT model and optional checksum.
+type STTModelEntry struct {
+	Code     string
+	Checksum string
 }
 
-// How much free RAM?
-//├── <2GB free → small.en-q8_0 (minimal hardware)
-//├── 2-3GB free → medium.en-q8_0
-//├── 3-5GB free → large-v3-turbo-q5_0 (best everyday)
-//└── 5-8GB free → large-v3-turbo-q8_0
-//└── 8+GB free → large-v3-q5_0 (best performing)
+// SetSTTRegistry updates the known STT models and optional checksums.
+func SetSTTRegistry(entries []STTModelEntry) {
+	sttRegistryMu.Lock()
+	defer sttRegistryMu.Unlock()
+	sttRegistryReason = ""
 
-// ValidModels is the list of all supported model names.
-var ValidModels = []string{
-	"large-v3-turbo-q5_0", "large-v3-turbo-q8_0", "medium.en-q8_0", "small.en-q8_0", "large-v3-q5_0",
+	validModels = make([]string, 0, len(entries))
+	modelChecksums = make(map[string]string, len(entries))
+	for _, entry := range entries {
+		if entry.Code == "" {
+			continue
+		}
+		validModels = append(validModels, entry.Code)
+		modelChecksums[entry.Code] = entry.Checksum
+	}
+}
+
+// SetSTTRegistryUnavailable marks STT registry unavailable with a reason.
+func SetSTTRegistryUnavailable(reason string) {
+	sttRegistryMu.Lock()
+	defer sttRegistryMu.Unlock()
+	validModels = []string{}
+	modelChecksums = map[string]string{}
+	sttRegistryReason = reason
 }
 
 // DownloadModel downloads the named GGUF/GGML Whisper model to opts.DestDir.
@@ -56,6 +74,10 @@ func DownloadModel(ctx context.Context, model string, opts *DownloadOptions) err
 	}
 	opts.applyDefaults()
 
+	if reason := sttUnavailableReason(); reason != "" {
+		return fmt.Errorf("stt model catalog unavailable: %s", reason)
+	}
+
 	if !isValidModel(model) {
 		return fmt.Errorf("unknown model %q — run ListModels() to see valid options", model)
 	}
@@ -64,7 +86,7 @@ func DownloadModel(ctx context.Context, model string, opts *DownloadOptions) err
 
 	// If the file already exists, optionally verify and skip download.
 	if _, err := os.Stat(destPath); err == nil {
-		if checksum, ok := modelChecksums[model]; ok && checksum != "" {
+		if checksum := checksumForModel(model); checksum != "" {
 			if verifyErr := verifyChecksum(destPath, checksum); verifyErr != nil {
 				// File is corrupt — delete it so we re-download below.
 				_ = os.Remove(destPath)
@@ -104,7 +126,7 @@ func DownloadModel(ctx context.Context, model string, opts *DownloadOptions) err
 	}
 
 	// Post-download checksum verification.
-	if checksum, ok := modelChecksums[model]; ok && checksum != "" {
+	if checksum := checksumForModel(model); checksum != "" {
 		if err := verifyChecksum(destPath, checksum); err != nil {
 			_ = os.Remove(destPath)
 			return fmt.Errorf("checksum mismatch for model %q: %w", model, err)
@@ -121,15 +143,32 @@ func ModelPath(model, destDir string) string {
 
 // ListGGMLModels returns all supported model names.
 func ListGGMLModels() []string {
-	out := make([]string, len(ValidModels))
-	copy(out, ValidModels)
+	sttRegistryMu.RLock()
+	defer sttRegistryMu.RUnlock()
+
+	out := make([]string, len(validModels))
+	copy(out, validModels)
 	return out
 }
 
 // --- internal helpers -------------------------------------------------------
 
 func isValidModel(model string) bool {
-	return slices.Contains(ValidModels, model)
+	sttRegistryMu.RLock()
+	defer sttRegistryMu.RUnlock()
+	return slices.Contains(validModels, model)
+}
+
+func checksumForModel(model string) string {
+	sttRegistryMu.RLock()
+	defer sttRegistryMu.RUnlock()
+	return modelChecksums[model]
+}
+
+func sttUnavailableReason() string {
+	sttRegistryMu.RLock()
+	defer sttRegistryMu.RUnlock()
+	return sttRegistryReason
 }
 
 func buildURL(model string) string {

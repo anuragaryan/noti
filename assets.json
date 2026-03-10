@@ -50,28 +50,28 @@
     {
       "id": 1,
       "model_code": "gemma-2-2b-it-Q4_K_M",
-      "model_name": "Gemma 2 - 2B - Instruction",
+      "model_name": "Gemma - 3n - E2B - it",
       "checksums": "",
       "repo": "ggml-org/gemma-2-2b-it-GGUF",
       "is_recommended": false,
       "size": "1.6 GB",
-      "note": "Runs fine on any modern laptop (4 GB Free Memory)"
+      "note": "Runs fine on any modern laptop (2 GB Free Memory)"
     },
     {
       "id": 2,
       "model_code": "gemma-2-9b-it-Q4_K_M",
-      "model_name": "Gemma 2 - 9B - Instruction",
+      "model_name": "Gemma - 3n - E4B - it",
       "checksums": "",
       "repo": "ggml-org/gemma-2-9b-it-GGUF",
       "is_recommended": false,
       "size": "5.4 GB",
-      "note": "Needs a decent machine (12 GB Free Memory)"
+      "note": "Needs a decent machine (8 GB Free Memory)"
     },
     {
       "id": 3,
       "model_code": "Qwen3.5-4B-UD-Q4_K_XL",
       "model_name": "Qwen3.5 - 4B - Dynamic Quantization",
-      "checksums": "",
+      "checksums": "b252c5610a42ca82d20fe2a12813e9d069eed89292907e26c783eeb0bc961bc7",
       "repo": "unsloth/Qwen3.5-4B-GGUF",
       "is_recommended": true,
       "size": "2.9 GB",
@@ -81,7 +81,7 @@
       "id": 4,
       "model_code": "Qwen3.5-9B-UD-Q4_K_XL",
       "model_name": "Qwen 3.5 - 9B - Dynamic Quantization",
-      "checksums": "",
+      "checksums": "6f5d30666c2d8ae16a306e616d95341dcf3cc46810df84d7e6f5a7d1e4c1b293",
       "repo": "unsloth/Qwen3.5-9B-GGUF",
       "is_recommended": false,
       "size": "5.9GB",

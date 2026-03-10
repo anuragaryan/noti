@@ -46,7 +46,7 @@ export function GetCurrentAudioSource():Promise<string>;
 
 export function GetFolderPath(arg1:string):Promise<Array<domain.Folder>>;
 
-export function GetLLMModels():Promise<Array<Record<string, string>>>;
+export function GetLLMModels():Promise<Array<domain.ModelOption>>;
 
 export function GetLLMStatus():Promise<Record<string, any>>;
 
@@ -56,7 +56,7 @@ export function GetNote(arg1:string):Promise<domain.Note>;
 
 export function GetPrompt(arg1:string):Promise<domain.Prompt>;
 
-export function GetSTTModels():Promise<Array<string>>;
+export function GetSTTModels():Promise<Array<domain.ModelOption>>;
 
 export function GetSTTStatus():Promise<Record<string, any>>;
 

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -29,12 +30,14 @@ type App struct {
 	structurePath string
 	notesPath     string
 	config        *domain.Config
+	assetsCatalog *domain.AssetsCatalog
 	structureRepo *repository.StructureRepository
 	pathResolver  *repository.PathResolver
 	fileSystem    *repository.FileSystem
 	folderService *service.FolderService
 	noteService   *service.NoteService
 	configService *service.ConfigService
+	assetsService *service.AssetsService
 	sttManager    *service.STTManager
 	llmManager    *service.LLMManager
 	promptService *service.PromptService
@@ -68,6 +71,7 @@ func NewApp() *App {
 	folderService := service.NewFolderService(structureRepo, pathResolver, notesPath)
 	noteService := service.NewNoteService(structureRepo, pathResolver, fileSystem, notesPath)
 	configService := service.NewConfigService(basePath, defaultConfig)
+	assetsService := service.NewAssetsService(basePath, defaultAssetsCatalog)
 	sttManager := service.NewSTTManager(basePath)
 	llmManager := service.NewLLMManager(basePath)
 	promptService := service.NewPromptService(basePath)
@@ -86,6 +90,7 @@ func NewApp() *App {
 		folderService: folderService,
 		noteService:   noteService,
 		configService: configService,
+		assetsService: assetsService,
 		sttManager:    sttManager,
 		llmManager:    llmManager,
 		promptService: promptService,
@@ -115,11 +120,34 @@ func (a *App) startup(ctx context.Context) {
 	slog.Info("Successfully initialized notes directory", "path", a.notesPath)
 
 	// Load config
+	recommendedSTT := ""
+	recommendedLLM := ""
+
+	catalog, err := a.assetsService.Load()
+	if err != nil {
+		slog.Warn("Model catalog unavailable; continuing with config-only defaults", "error", err)
+		a.assetsCatalog = nil
+		downloader.SetSTTRegistryUnavailable(err.Error())
+		downloader.SetLLMRegistryUnavailable(err.Error())
+	} else {
+		a.assetsCatalog = catalog
+
+		downloader.SetSTTRegistry(a.assetsService.STTRegistryEntries(catalog))
+		downloader.SetLLMRegistry(a.assetsService.LLMRegistryEntries(catalog))
+
+		recommendedSTT = a.assetsService.RecommendedSTTModel(catalog)
+		recommendedLLM = a.assetsService.RecommendedLLMModel(catalog)
+		a.configService.SetModelDefaults(recommendedSTT, recommendedLLM)
+	}
+
 	config, err := a.configService.Load()
 	if err != nil {
 		slog.Error("Cannot load config", "error", err)
 		// Use a default config if loading fails
-		a.config = &domain.Config{ModelName: "base.en"}
+		a.config = &domain.Config{ModelName: recommendedSTT}
+		a.config.LLM.Provider = "local"
+		a.config.LLM.ModelName = recommendedLLM
+		a.config.Audio = domain.DefaultAudioSettings()
 		slog.Warn("Using default STT config.")
 	} else {
 		a.config = config
@@ -251,9 +279,29 @@ func (a *App) GetSTTStatus() map[string]interface{} {
 	}
 }
 
-// GetSTTModels returns the list of supported STT model names
-func (a *App) GetSTTModels() []string {
-	return downloader.ListGGMLModels()
+// GetSTTModels returns STT model options sorted by catalog ID.
+func (a *App) GetSTTModels() []domain.ModelOption {
+	if a.assetsCatalog == nil {
+		return []domain.ModelOption{}
+	}
+
+	models := append([]domain.STTModelAsset(nil), a.assetsCatalog.STTModels...)
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].ID < models[j].ID
+	})
+
+	out := make([]domain.ModelOption, 0, len(models))
+	for _, model := range models {
+		out = append(out, domain.ModelOption{
+			ID:            model.ID,
+			Code:          model.ModelCode,
+			Name:          model.ModelName,
+			IsRecommended: model.IsRecommended,
+			Note:          model.Note,
+		})
+	}
+
+	return out
 }
 
 // ============================================================================
@@ -407,17 +455,29 @@ func (a *App) GetLLMStatus() map[string]interface{} {
 	return status
 }
 
-// GetLLMModels returns the list of supported local LLM model names with descriptions
-func (a *App) GetLLMModels() []map[string]string {
-	entries := downloader.ListModels()
-	result := make([]map[string]string, len(entries))
-	for i, e := range entries {
-		result[i] = map[string]string{
-			"name":        e.Aliases[0],
-			"description": e.Description,
-		}
+// GetLLMModels returns LLM model options sorted by catalog ID.
+func (a *App) GetLLMModels() []domain.ModelOption {
+	if a.assetsCatalog == nil {
+		return []domain.ModelOption{}
 	}
-	return result
+
+	models := append([]domain.LLMModelAsset(nil), a.assetsCatalog.LLMModels...)
+	sort.Slice(models, func(i, j int) bool {
+		return models[i].ID < models[j].ID
+	})
+
+	out := make([]domain.ModelOption, 0, len(models))
+	for _, model := range models {
+		out = append(out, domain.ModelOption{
+			ID:            model.ID,
+			Code:          model.ModelCode,
+			Name:          model.ModelName,
+			IsRecommended: model.IsRecommended,
+			Note:          model.Note,
+		})
+	}
+
+	return out
 }
 
 // UpdateLLMConfig updates LLM configuration and switches provider

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,10 +20,10 @@ const (
 // Model registry
 // ---------------------------------------------------------------------------
 
-// ModelEntry describes a known model: its Hugging Face repo and exact filename.
-type ModelEntry struct {
-	// Aliases are the short names a caller may pass to Download.
-	Aliases []string
+// LLMModelEntry describes a known model: its Hugging Face repo and exact filename.
+type LLMModelEntry struct {
+	// ModelCode is the short name a caller may pass to Download.
+	ModelCode string
 	// Repo is the HuggingFace "owner/repo" string.
 	Repo string
 	// File is the exact GGUF filename inside the repo.
@@ -31,33 +32,35 @@ type ModelEntry struct {
 	Description string
 }
 
-// Registry is the built-in model catalogue.  Add entries here to support new
-// models without changing any other code.
-var Registry = []ModelEntry{
-	{
-		Aliases:     []string{"gemma-2-2b-it-q4_k_m", "gemma-2-2b-it"},
-		Repo:        "ggml-org/gemma-2-2b-it-GGUF",
-		File:        "gemma-2-2b-it-Q4_K_M.gguf",
-		Description: "Google Gemma 2 2B Instruct, Q4_K_M quantisation",
-	},
-	{
-		Aliases:     []string{"gemma-2-9b-it-q4_k_m", "gemma-2-9b-it"},
-		Repo:        "ggml-org/gemma-2-9b-it-GGUF",
-		File:        "gemma-2-9b-it-Q4_K_M.gguf",
-		Description: "Google Gemma 2 9B Instruct, Q4_K_M quantisation",
-	},
-	{
-		Aliases:     []string{"Qwen3.5-4B-UD-Q4_K_XL", "Qwen3.5-4B-UD"},
-		Repo:        "unsloth/Qwen3.5-4B-GGUF",
-		File:        "Qwen3.5-4B-UD-Q4_K_XL.gguf",
-		Description: "Alibaba Qwen 3.5 4B, Q4_K_XL quantisation",
-	},
-	{
-		Aliases:     []string{"Qwen3.5-9B-UD-Q4_K_XL", "Qwen3.5-9B-UD"},
-		Repo:        "unsloth/Qwen3.5-9B-GGUF",
-		File:        "Qwen3.5-9B-UD-Q4_K_XL.gguf",
-		Description: "Alibaba Qwen 3.5 9B, Q4_K_XL quantisation",
-	},
+var (
+	registryMu     sync.RWMutex
+	registry       []LLMModelEntry
+	registryReason string
+)
+
+// SetLLMRegistry updates the runtime model catalogue used by downloader APIs.
+func SetLLMRegistry(entries []LLMModelEntry) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	registryReason = ""
+
+	registry = make([]LLMModelEntry, len(entries))
+	for i := range entries {
+		registry[i] = LLMModelEntry{
+			ModelCode:   entries[i].ModelCode,
+			Repo:        entries[i].Repo,
+			File:        entries[i].File,
+			Description: entries[i].Description,
+		}
+	}
+}
+
+// SetLLMRegistryUnavailable marks LLM registry unavailable with a reason.
+func SetLLMRegistryUnavailable(reason string) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	registry = []LLMModelEntry{}
+	registryReason = reason
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +69,7 @@ var Registry = []ModelEntry{
 
 // DownloadResult contains metadata about the completed download.
 type DownloadResult struct {
-	ModelName string // the alias that was requested
+	ModelName string // the model code that was requested
 	Repo      string // HuggingFace repo
 	File      string // exact filename on HF
 	URL       string // full download URL
@@ -75,7 +78,7 @@ type DownloadResult struct {
 	Skipped   bool   // true when file already existed and was not re-downloaded
 }
 
-// ErrUnknownModel is returned when the requested model alias is not in Registry.
+// ErrUnknownModel is returned when the requested model code is not in Registry.
 var ErrUnknownModel = errors.New("unknown model")
 
 // ---------------------------------------------------------------------------
@@ -83,7 +86,7 @@ var ErrUnknownModel = errors.New("unknown model")
 // ---------------------------------------------------------------------------
 
 // Download fetches the GGUF file for modelName into opts.DestDir.
-// modelName must match one of the Aliases in Registry (case-insensitive).
+// modelName must match ModelCode in Registry exactly.
 //
 // Example:
 //
@@ -99,7 +102,7 @@ func DownloadLLM(ctx context.Context, modelName string, opts *DownloadOptions) (
 	}
 	opts.applyDefaults()
 
-	entry, err := Lookup(ctx, modelName)
+	entry, err := Lookup(modelName)
 	if err != nil {
 		return nil, err
 	}
@@ -160,29 +163,49 @@ func DownloadLLM(ctx context.Context, modelName string, opts *DownloadOptions) (
 	}, nil
 }
 
-// Lookup finds a ModelEntry by alias (case-insensitive).
+// Lookup finds a LLMModelEntry by exact model code.
 // Returns ErrUnknownModel (with a helpful list) when not found.
-func Lookup(ctx context.Context, modelName string) (*ModelEntry, error) {
-	lower := strings.ToLower(modelName)
-	for i := range Registry {
-		for _, alias := range Registry[i].Aliases {
-			if strings.ToLower(alias) == lower {
-				return &Registry[i], nil
-			}
+func Lookup(modelName string) (*LLMModelEntry, error) {
+	if reason := llmUnavailableReason(); reason != "" {
+		return nil, fmt.Errorf("llm model catalog unavailable: %s", reason)
+	}
+
+	requested := strings.ToLower(modelName)
+	entries := ListModels()
+	for i := range entries {
+		if strings.ToLower(entries[i].ModelCode) == requested {
+			entry := entries[i]
+			return &entry, nil
 		}
 	}
 
-	availableModels := make([]string, 0, len(Registry)+1)
+	availableModels := make([]string, 0, len(entries)+1)
 	availableModels = append(availableModels, fmt.Sprintf("%q\n\nSupported models:", modelName))
-	for _, e := range Registry {
-		availableModels = append(availableModels, fmt.Sprintf("  %-36s  %s", e.Aliases[0], e.Description))
+	for _, e := range entries {
+		availableModels = append(availableModels, fmt.Sprintf("  %-36s  %s", e.ModelCode, e.Description))
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnknownModel, strings.Join(availableModels, "\n"))
 }
 
 // ListModels returns a copy of the model registry for display purposes.
-func ListModels() []ModelEntry {
-	out := make([]ModelEntry, len(Registry))
-	copy(out, Registry)
+func ListModels() []LLMModelEntry {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
+	out := make([]LLMModelEntry, len(registry))
+	for i := range registry {
+		out[i] = LLMModelEntry{
+			ModelCode:   registry[i].ModelCode,
+			Repo:        registry[i].Repo,
+			File:        registry[i].File,
+			Description: registry[i].Description,
+		}
+	}
 	return out
+}
+
+func llmUnavailableReason() string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	return registryReason
 }

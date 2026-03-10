@@ -1,12 +1,10 @@
 import { domain } from '../../wailsjs/go/models'
-import { AudioAPI, ConfigAPI, LLMAPI } from '../api'
+import { AudioAPI, ConfigAPI, LLMAPI, type ModelOption } from '../api'
 import state from '../state'
 import { escapeHtml } from '../utils/html'
 
 const RECOMMENDED = {
-  sttModel: 'large-v3-turbo-q5_0',
   llmProvider: 'local',
-  llmModel: 'Qwen3.5-4B-UD-Q4_K_XL',
   source: 'mixed',
 } as const
 
@@ -14,6 +12,25 @@ type SourceOption = 'microphone' | 'system' | 'mixed'
 
 function labelWithRecommendation(value: string, recommended: string): string {
   return value === recommended ? `${value} (recommended)` : value
+}
+
+function modelLabel(model: ModelOption): string {
+  return model.isRecommended ? `${model.name} (recommended)` : model.name
+}
+
+function sortByID(models: ModelOption[]): ModelOption[] {
+  return [...models].sort((a, b) => a.id - b.id)
+}
+
+function noteForModel(models: ModelOption[], code: string): string {
+  return models.find((m) => m.code === code)?.note?.trim() || ''
+}
+
+function providerNote(provider: string): string {
+  if (provider === 'api') {
+    return 'Sends transcript text and prompts to your configured API endpoint. Requires network access and a valid API key.'
+  }
+  return 'Runs inference locally with llama.cpp. Text stays on this device and works offline after model download.'
 }
 
 function llmProviderLabel(provider: string): string {
@@ -30,12 +47,12 @@ function sourceLabel(source: SourceOption): string {
 
 function sourceHint(source: SourceOption): string {
   if (source === 'microphone') {
-    return 'For the selected source (Mic only): captures your microphone. Best for personal voice notes and dictation.'
+    return 'Captures your microphone only. Best for personal voice notes and dictation.'
   }
   if (source === 'system') {
-    return 'For the selected source (System only): captures system playback audio. Best for recorded meetings and media.'
+    return 'Captures system playback audio only. Best for meetings, calls, and media playback.'
   }
-  return 'For the selected source (Mixed): captures microphone and system audio. Best for meetings, calls, and recordings.'
+  return 'Captures microphone and system audio together. Best when you need both your voice and playback audio.'
 }
 
 function renderSourceOptions(selectedSource: SourceOption): string {
@@ -56,24 +73,22 @@ function renderSourceOptions(selectedSource: SourceOption): string {
   }).join('')
 }
 
-function sttOptionsHtml(sttModels: string[], selectedModel: string): string {
-  const models = sttModels.length > 0 ? sttModels : [selectedModel]
+function sttOptionsHtml(sttModels: ModelOption[], selectedModel: string): string {
+  const models = sttModels.length > 0
+    ? sttModels
+    : [{ id: 0, code: selectedModel, name: selectedModel, isRecommended: false, note: '' }]
   return models.map((model) => {
-    const label = labelWithRecommendation(model, RECOMMENDED.sttModel)
-    return `<option value="${escapeHtml(model)}" ${model === selectedModel ? 'selected' : ''}>${escapeHtml(label)}</option>`
+    return `<option value="${escapeHtml(model.code)}" ${model.code === selectedModel ? 'selected' : ''}>${escapeHtml(modelLabel(model))}</option>`
   }).join('')
 }
 
-function localModelOptionsHtml(models: Array<Record<string, string>>, selectedModel: string): string {
+function localModelOptionsHtml(models: ModelOption[], selectedModel: string): string {
   if (models.length === 0) {
-    const label = labelWithRecommendation(selectedModel, RECOMMENDED.llmModel)
-    return `<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(label)}</option>`
+    return `<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(selectedModel)}</option>`
   }
 
   return models.map((m) => {
-    const name = String(m.name || '')
-    const label = labelWithRecommendation(name, RECOMMENDED.llmModel)
-    return `<option value="${escapeHtml(name)}" ${name === selectedModel ? 'selected' : ''}>${escapeHtml(label)}</option>`
+    return `<option value="${escapeHtml(m.code)}" ${m.code === selectedModel ? 'selected' : ''}>${escapeHtml(modelLabel(m))}</option>`
   }).join('')
 }
 
@@ -81,12 +96,14 @@ function renderScreen(
   container: HTMLElement,
   config: domain.Config,
   selectedSource: SourceOption,
-  sttModels: string[],
-  llmModels: Array<Record<string, string>>,
+  sttModels: ModelOption[],
+  llmModels: ModelOption[],
 ): void {
+  const sortedSTTModels = sortByID(sttModels)
+  const sortedLLMModels = sortByID(llmModels)
   const currentProvider = config.llm?.provider === 'api' ? 'api' : 'local'
-  const currentSTTModel = config.modelName || sttModels[0] || RECOMMENDED.sttModel
-  const fallbackLocalModel = llmModels[0]?.name || config.llm?.modelName || RECOMMENDED.llmModel
+  const currentSTTModel = config.modelName || sortedSTTModels[0]?.code || ''
+  const fallbackLocalModel = sortedLLMModels[0]?.code || config.llm?.modelName || ''
   const rememberedModels: Record<string, string> = {
     local: currentProvider === 'local' ? (config.llm?.modelName || fallbackLocalModel) : fallbackLocalModel,
     api: currentProvider === 'api' ? (config.llm?.modelName || '') : '',
@@ -106,9 +123,9 @@ function renderScreen(
           <div class="getting-started-field">
             <span class="getting-started-label">Model</span>
             <select id="gs-stt-model" class="form-select">
-              ${sttOptionsHtml(sttModels, currentSTTModel)}
+              ${sttOptionsHtml(sortedSTTModels, currentSTTModel)}
             </select>
-            <p class="getting-started-help">For the selected model: strong accuracy with good speed on most devices.</p>
+            <p id="gs-stt-note" class="getting-started-help"></p>
           </div>
         </section>
 
@@ -123,16 +140,16 @@ function renderScreen(
                 <option value="local" ${currentProvider === 'local' ? 'selected' : ''}>${escapeHtml(labelWithRecommendation('Local (llama.cpp)', 'Local (llama.cpp)'))}</option>
                 <option value="api" ${currentProvider === 'api' ? 'selected' : ''}>API (OpenAI / compatible)</option>
               </select>
-              <p class="getting-started-help">For the selected API: processing stays on-device and can work offline.</p>
+              <p id="gs-provider-note" class="getting-started-help">${escapeHtml(providerNote(currentProvider))}</p>
             </div>
             <div class="getting-started-field">
               <span class="getting-started-label">Model</span>
               <div id="gs-llm-model-container">
                 <select id="gs-llm-model" class="form-select">
-                  ${localModelOptionsHtml(llmModels, rememberedModels.local)}
+                  ${localModelOptionsHtml(sortedLLMModels, rememberedModels.local)}
                 </select>
               </div>
-              <p class="getting-started-help">For the selected model: balanced quality and performance for first-time setup.</p>
+              <p id="gs-llm-note" class="getting-started-help"></p>
             </div>
           </div>
           <div id="gs-api-extra" class="getting-started-row${currentProvider === 'api' ? '' : ' hidden'}">
@@ -155,12 +172,11 @@ function renderScreen(
             ${renderSourceOptions(selectedSource)}
           </div>
           <p class="getting-started-source-hint" id="gs-source-hint">${escapeHtml(sourceHint(selectedSource))}</p>
-          <p class="getting-started-help">This helper text updates when you switch Mic only, System only, or Mixed.</p>
         </section>
 
         <div class="getting-started-divider"></div>
 
-        <p class="getting-started-note">Better models improve quality but may be slower. You can tune all values anytime in Settings.</p>
+        <p class="getting-started-note">You can tune all values anytime in Settings.</p>
 
         <div class="getting-started-actions">
           <button id="gs-start" class="btn-primary">Start transcribing</button>
@@ -172,23 +188,53 @@ function renderScreen(
   const providerSelect = container.querySelector<HTMLSelectElement>('#gs-llm-provider')
   const modelContainer = container.querySelector<HTMLElement>('#gs-llm-model-container')
   const apiExtra = container.querySelector<HTMLElement>('#gs-api-extra')
+  const providerNoteEl = container.querySelector<HTMLElement>('#gs-provider-note')
+  const sttNote = container.querySelector<HTMLElement>('#gs-stt-note')
+  const llmNote = container.querySelector<HTMLElement>('#gs-llm-note')
+
+  const renderNotes = (): void => {
+    const sttCode = container.querySelector<HTMLSelectElement>('#gs-stt-model')?.value ?? currentSTTModel
+    const sttText = noteForModel(sortedSTTModels, sttCode)
+    if (sttNote) {
+      sttNote.textContent = sttText
+      sttNote.classList.toggle('hidden', sttText === '')
+    }
+
+    if (!llmNote) return
+    if (activeProvider !== 'local') {
+      llmNote.textContent = ''
+      llmNote.classList.add('hidden')
+      return
+    }
+    const llmCode = container.querySelector<HTMLInputElement | HTMLSelectElement>('#gs-llm-model')?.value ?? rememberedModels.local
+    const llmText = noteForModel(sortedLLMModels, llmCode)
+    llmNote.textContent = llmText
+    llmNote.classList.toggle('hidden', llmText === '')
+  }
 
   const renderModelInput = (provider: string): void => {
     if (!modelContainer) return
     const remembered = rememberedModels[provider] || (provider === 'local' ? fallbackLocalModel : '')
     if (provider === 'local') {
-      modelContainer.innerHTML = `<select id="gs-llm-model" class="form-select">${localModelOptionsHtml(llmModels, remembered)}</select>`
+      modelContainer.innerHTML = `<select id="gs-llm-model" class="form-select">${localModelOptionsHtml(sortedLLMModels, remembered)}</select>`
+      renderNotes()
       return
     }
     modelContainer.innerHTML = `<input id="gs-llm-model" type="text" class="form-input" value="${escapeHtml(remembered)}" placeholder="gpt-4o-mini" />`
+    renderNotes()
   }
 
   providerSelect?.addEventListener('change', () => {
     const currentModelValue = modelContainer?.querySelector<HTMLInputElement | HTMLSelectElement>('#gs-llm-model')?.value ?? ''
     rememberedModels[activeProvider] = currentModelValue
     activeProvider = providerSelect.value === 'api' ? 'api' : 'local'
+    if (providerNoteEl) providerNoteEl.textContent = providerNote(activeProvider)
     apiExtra?.classList.toggle('hidden', activeProvider !== 'api')
     renderModelInput(activeProvider)
+  })
+
+  container.querySelector<HTMLSelectElement>('#gs-stt-model')?.addEventListener('change', () => {
+    renderNotes()
   })
 
   modelContainer?.addEventListener('input', (e) => {
@@ -199,7 +245,10 @@ function renderScreen(
   modelContainer?.addEventListener('change', (e) => {
     if (!(e.target instanceof HTMLSelectElement) || e.target.id !== 'gs-llm-model') return
     rememberedModels[activeProvider] = e.target.value
+    renderNotes()
   })
+
+  renderNotes()
 
   container.querySelectorAll<HTMLButtonElement>('[data-source]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -255,16 +304,16 @@ export async function renderGettingStarted(container: HTMLElement): Promise<void
   const config = state.get('config')
   if (!config) return
 
-  let sttModels: string[] = []
-  let llmModels: Array<Record<string, string>> = []
+  let sttModels: ModelOption[] = []
+  let llmModels: ModelOption[] = []
   try {
     ;[sttModels, llmModels] = await Promise.all([
       AudioAPI.getSTTModels(),
       LLMAPI.getLLMModels(),
     ])
   } catch {
-    sttModels = config.modelName ? [config.modelName] : [RECOMMENDED.sttModel]
-    llmModels = config.llm?.modelName ? [{ name: config.llm.modelName, description: '' }] : [{ name: RECOMMENDED.llmModel, description: '' }]
+    sttModels = []
+    llmModels = []
   }
 
   const configuredSource = (config.audio?.defaultSource || 'mixed') as SourceOption

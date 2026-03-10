@@ -186,6 +186,26 @@ export namespace domain {
 	        this.finishReason = source["finishReason"];
 	    }
 	}
+	export class ModelOption {
+	    id: number;
+	    code: string;
+	    name: string;
+	    isRecommended: boolean;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModelOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.code = source["code"];
+	        this.name = source["name"];
+	        this.isRecommended = source["isRecommended"];
+	        this.note = source["note"];
+	    }
+	}
 	export class Note {
 	    id: string;
 	    title: string;

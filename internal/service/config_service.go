@@ -15,13 +15,30 @@ type ConfigService struct {
 	basePath      string
 	defaultConfig []byte
 	firstRun      bool
+	defaultSTT    string
+	defaultLLM    string
 }
 
 // NewConfigService creates a new config service
 func NewConfigService(basePath string, defaultConfig []byte) *ConfigService {
+	var parsed domain.Config
+	_ = json.Unmarshal(defaultConfig, &parsed)
+
 	return &ConfigService{
 		basePath:      basePath,
 		defaultConfig: defaultConfig,
+		defaultSTT:    parsed.ModelName,
+		defaultLLM:    parsed.LLM.ModelName,
+	}
+}
+
+// SetModelDefaults updates fallback model names used when config is missing fields.
+func (s *ConfigService) SetModelDefaults(sttModel, llmModel string) {
+	if sttModel != "" {
+		s.defaultSTT = sttModel
+	}
+	if llmModel != "" {
+		s.defaultLLM = llmModel
 	}
 }
 
@@ -69,12 +86,15 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 	// Set defaults for any fields that might be missing (for backward compatibility)
 	// Note: RealtimeTranscriptionChunkSeconds is deprecated and ignored
 	if config.ModelName == "" {
-		config.ModelName = "base.en"
+		config.ModelName = s.defaultSTT
 	}
 
 	// Set LLM defaults if not configured
 	if config.LLM.Provider == "" {
-		config.LLM.Provider = "api" // Default to API provider
+		config.LLM.Provider = "local" // Default to local provider
+	}
+	if config.LLM.ModelName == "" {
+		config.LLM.ModelName = s.defaultLLM
 	}
 	if config.LLM.Temperature == 0 {
 		config.LLM.Temperature = 0.7

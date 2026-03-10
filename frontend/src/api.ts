@@ -7,6 +7,14 @@
 import * as App from '../wailsjs/go/main/App'
 import type { Note, Folder, Prompt, Config, LLMConfig, AudioDevice, LLMResponse, PromptExecutionResult, TranscriptionResult, SearchMatch } from './types'
 
+export type ModelOption = {
+  id: number
+  code: string
+  name: string
+  isRecommended: boolean
+  note: string
+}
+
 // ─── Notes API ──────────────────────────────────────────────────────────────
 
 export const NotesAPI = {
@@ -70,7 +78,7 @@ export const AudioAPI = {
     return App.GetSTTStatus()
   },
 
-  getSTTModels(): Promise<string[]> {
+  getSTTModels(): Promise<ModelOption[]> {
     return App.GetSTTModels()
   },
 
@@ -134,7 +142,7 @@ export const LLMAPI = {
     return App.GetLLMStatus()
   },
 
-  getLLMModels(): Promise<Array<Record<string, string>>> {
+  getLLMModels(): Promise<ModelOption[]> {
     return App.GetLLMModels()
   },
 
