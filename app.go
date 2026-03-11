@@ -14,6 +14,7 @@ import (
 
 	"noti/internal/domain"
 	"noti/internal/infrastructure/downloader"
+	"noti/internal/policy"
 	"noti/internal/repository"
 	"noti/internal/service"
 
@@ -169,18 +170,27 @@ func (a *App) startup(ctx context.Context) {
 		slog.Info("Audio source set", "source", a.config.Audio.DefaultSource)
 	}
 
+	// Defer model initialization on first run until the user saves Getting Started.
+	deferModelInit := policy.ShouldDeferModelInitOnStartup(a.configService.IsFirstRun())
+
 	// Initialize STT service with self-healing
 	a.sttManager.SetContext(ctx)
-	sttConfig := &domain.STTConfig{
-		ModelName: a.config.ModelName,
-	}
-	if err := a.sttManager.Initialize(sttConfig); err != nil {
-		slog.Error("STT initialization failed", "error", err)
+	if deferModelInit {
+		slog.Info("First run detected; deferring STT initialization until setup is saved")
+	} else {
+		sttConfig := &domain.STTConfig{
+			ModelName: a.config.ModelName,
+		}
+		if err := a.sttManager.Initialize(sttConfig); err != nil {
+			slog.Error("STT initialization failed", "error", err)
+		}
 	}
 
 	// Initialize LLM service if configured
 	a.llmManager.SetContext(ctx)
-	if a.config.LLM.Provider != "" {
+	if deferModelInit {
+		slog.Info("First run detected; deferring LLM initialization until setup is saved")
+	} else if a.config.LLM.Provider != "" {
 		if err := a.llmManager.Initialize(&a.config.LLM); err != nil {
 			slog.Error("LLM initialization failed", "error", err)
 			slog.Warn("LLM features will be disabled. You can configure LLM settings later.")
@@ -851,8 +861,8 @@ func (a *App) SaveConfig(config domain.Config) error {
 
 	oldConfig := a.config
 
-	// Reinitialize STT if model changed
-	if oldConfig.ModelName != config.ModelName {
+	// Reinitialize STT if model changed or service is not initialized yet.
+	if policy.ShouldInitializeSTTOnSave(oldConfig.ModelName, config.ModelName, a.sttManager.IsAvailable()) {
 		sttConfig := &domain.STTConfig{
 			ModelName: config.ModelName,
 		}
@@ -861,11 +871,8 @@ func (a *App) SaveConfig(config domain.Config) error {
 		}
 	}
 
-	// Reinitialize LLM if config changed
-	if oldConfig.LLM.Provider != config.LLM.Provider ||
-		oldConfig.LLM.ModelName != config.LLM.ModelName ||
-		oldConfig.LLM.APIEndpoint != config.LLM.APIEndpoint ||
-		oldConfig.LLM.APIKey != config.LLM.APIKey {
+	// Reinitialize LLM if config changed or service is not initialized yet.
+	if policy.ShouldInitializeLLMOnSave(oldConfig.LLM, config.LLM, a.llmManager.IsAvailable()) {
 		if err := a.llmManager.SwitchProvider(&config.LLM); err != nil {
 			slog.Warn("LLM reinitialization failed", "error", err)
 			return fmt.Errorf("failed to reinitialize LLM provider: %w", err)

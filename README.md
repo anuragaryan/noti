@@ -56,6 +56,7 @@ NotI is a Wails desktop app with a Go backend and a TypeScript frontend.
 - `app.go`
   - Wails-bound application methods exposed to the frontend
   - orchestration across notes, folders, config, STT, LLM, prompts, and audio
+  - on first run, STT/LLM initialization (and model downloads) is deferred until the Getting Started setup is saved
 - `internal/service/`
   - service layer for business logic and lifecycle management
   - includes `STTManager`, `LLMManager`, `AudioManager`, `NoteService`, `FolderService`, and `PromptService`
@@ -72,6 +73,12 @@ Storage defaults:
 - Notes: `~/Documents/noti/notes`
 - Folder structure metadata: `~/Documents/noti/notes/structure.json`
 - App config/models/binaries: user config directory under `Noti` (for example on macOS: `~/Library/Application Support/Noti`)
+
+First-run behavior:
+
+- `config.json` is created from the embedded template on first launch.
+- The Getting Started screen is shown and model downloads do not start automatically.
+- Model initialization/download begins only after the user clicks save in Getting Started.
 
 ## Requirements
 
