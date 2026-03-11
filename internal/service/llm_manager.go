@@ -83,8 +83,9 @@ func (m *LLMManager) Initialize(config *domain.LLMConfig) error {
 	// Notify frontend
 	if m.ctx != nil {
 		runtime.EventsEmit(m.ctx, "llm:ready", map[string]interface{}{
-			"provider": config.Provider,
-			"model":    config.ModelName,
+			"provider":  config.Provider,
+			"modelName": config.ModelName,
+			"model":     config.ModelName,
 		})
 	}
 

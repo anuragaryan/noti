@@ -83,6 +83,21 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 		}
 	}
 
+	var presence struct {
+		LLM *struct {
+			Temperature *float32 `json:"temperature"`
+		} `json:"llm"`
+		Audio *struct {
+			Mixer *struct {
+				MicrophoneGain *float32 `json:"microphoneGain"`
+				SystemGain     *float32 `json:"systemGain"`
+			} `json:"mixer"`
+		} `json:"audio"`
+	}
+	if err := json.Unmarshal(data, &presence); err != nil {
+		return nil, fmt.Errorf("failed to inspect config field presence: %w", err)
+	}
+
 	// Set defaults for any fields that might be missing (for backward compatibility)
 	// Note: RealtimeTranscriptionChunkSeconds is deprecated and ignored
 	if config.ModelName == "" {
@@ -96,7 +111,7 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 	if config.LLM.ModelName == "" {
 		config.LLM.ModelName = s.defaultLLM
 	}
-	if config.LLM.Temperature == 0 {
+	if presence.LLM == nil || presence.LLM.Temperature == nil {
 		config.LLM.Temperature = 0.7
 	}
 	if config.LLM.MaxTokens == 0 {
@@ -107,10 +122,10 @@ func (s *ConfigService) Load() (*domain.Config, error) {
 	if config.Audio.DefaultSource == "" {
 		config.Audio.DefaultSource = "microphone"
 	}
-	if config.Audio.Mixer.MicrophoneGain == 0 {
+	if presence.Audio == nil || presence.Audio.Mixer == nil || presence.Audio.Mixer.MicrophoneGain == nil {
 		config.Audio.Mixer.MicrophoneGain = 1.0
 	}
-	if config.Audio.Mixer.SystemGain == 0 {
+	if presence.Audio == nil || presence.Audio.Mixer == nil || presence.Audio.Mixer.SystemGain == nil {
 		config.Audio.Mixer.SystemGain = 1.0
 	}
 	if config.Audio.Mixer.MixMode == "" {

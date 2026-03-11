@@ -156,8 +156,17 @@ func (s *PromptService) loadPromptFromFile(filePath string) (*domain.Prompt, err
 				return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 			}
 
-			prompt.ID = metadata["id"].(string)
-			prompt.Name = metadata["name"].(string)
+			id, ok := metadata["id"].(string)
+			if !ok || strings.TrimSpace(id) == "" {
+				return nil, fmt.Errorf("invalid frontmatter: missing or non-string id")
+			}
+			name, ok := metadata["name"].(string)
+			if !ok || strings.TrimSpace(name) == "" {
+				return nil, fmt.Errorf("invalid frontmatter: missing or non-string name")
+			}
+
+			prompt.ID = id
+			prompt.Name = name
 			if desc, ok := metadata["description"].(string); ok {
 				prompt.Description = desc
 			}

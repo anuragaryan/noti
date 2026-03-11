@@ -161,9 +161,10 @@ function initGoEvents(): void {
     void ConfigAPI.get().then(config => state.setState({ config }))
   })
 
-  AppEvents.onLLMReady(({ provider, modelName }) => {
+  AppEvents.onLLMReady(({ provider, modelName, model }) => {
+    const resolvedModelName = modelName || model || 'unknown'
     state.setState({ llmAvailable: true })
-    state.showNotification(`LLM ready: ${modelName} (${provider})`, 'info')
+    state.showNotification(`LLM ready: ${resolvedModelName} (${provider})`, 'info')
   })
 
   AppEvents.onSTTReady(() => {

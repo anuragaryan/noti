@@ -353,7 +353,7 @@ func (m *AudioManager) startMixedCapture(config domain.AudioCaptureConfig, callb
 	micConfig.Source = domain.AudioSourceMicrophone
 	err := m.micCapturer.StartCapture(ctx, micConfig, func(chunk domain.AudioChunk) {
 		// Apply gain and write to buffer
-		gain := m.mixerConfig.MicrophoneGain
+		gain := m.GetMixerConfig().MicrophoneGain
 		for i := range chunk.Data {
 			chunk.Data[i] *= gain
 		}
@@ -368,7 +368,7 @@ func (m *AudioManager) startMixedCapture(config domain.AudioCaptureConfig, callb
 	sysConfig.Source = domain.AudioSourceSystem
 	err = m.systemCapturer.StartCapture(ctx, sysConfig, func(chunk domain.AudioChunk) {
 		// Apply gain and write to buffer
-		gain := m.mixerConfig.SystemGain
+		gain := m.GetMixerConfig().SystemGain
 		for i := range chunk.Data {
 			chunk.Data[i] *= gain
 		}

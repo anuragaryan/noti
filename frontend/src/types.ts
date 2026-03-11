@@ -57,6 +57,7 @@ export interface StreamChunkPayload {
 export interface LLMReadyPayload {
   provider: string
   modelName: string
+  model?: string
 }
 
 export type DownloadKind = 'stt-model' | 'llm-model' | 'llama-server'
