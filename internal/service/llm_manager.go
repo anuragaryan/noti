@@ -38,46 +38,13 @@ func (m *LLMManager) Initialize(config *domain.LLMConfig) error {
 		return fmt.Errorf("invalid LLM configuration")
 	}
 
-	m.config = config
-
-	var provider LLMProvider
-	var err error
-
-	// Create provider based on configuration
-	switch config.Provider {
-	case "api":
-		apiProvider, apiErr := api.NewProvider(config)
-		if apiErr != nil {
-			err = apiErr
-		} else {
-			provider = apiProvider
-		}
-	case "local":
-		localProvider, localErr := local.NewProvider(m.basePath, config)
-		if localErr != nil {
-			err = localErr
-		} else {
-			// Set up server manager for local provider
-			serverManager := local.NewServerManager(m.basePath)
-			localProvider.SetServerManager(serverManager)
-			provider = localProvider
-		}
-	default:
-		return fmt.Errorf("unknown provider: %s", config.Provider)
-	}
-
+	provider, err := m.buildProvider(config)
 	if err != nil {
-		return fmt.Errorf("failed to create provider: %w", err)
-	}
-
-	// Initialize the provider. Context must be wired in before Initialize so any
-	// model/download work performed during initialization can emit events.
-	provider.SetContext(m.ctx)
-	if err := provider.Initialize(); err != nil {
-		return fmt.Errorf("failed to initialize provider: %w", err)
+		return err
 	}
 
 	m.provider = provider
+	m.config = config
 	slog.Info("LLM provider initialized successfully", "provider", config.Provider)
 
 	// Notify frontend
@@ -107,8 +74,16 @@ func (m *LLMManager) Generate(ctx context.Context, request *domain.LLMRequest) (
 
 // GenerateStream produces text using streaming
 func (m *LLMManager) GenerateStream(ctx context.Context, request *domain.LLMRequest, callback domain.StreamCallback) error {
-	if !m.SupportsStreaming() {
-		return fmt.Errorf("streaming not available")
+	if m.provider == nil {
+		return fmt.Errorf("LLM provider not initialized")
+	}
+
+	if !m.provider.IsAvailable() {
+		return fmt.Errorf("LLM provider not available")
+	}
+
+	if !m.provider.SupportsStreaming() {
+		return fmt.Errorf("streaming not supported by current provider")
 	}
 
 	return m.provider.GenerateStream(ctx, request, callback)
@@ -121,14 +96,40 @@ func (m *LLMManager) SupportsStreaming() bool {
 
 // SwitchProvider switches to a different provider configuration
 func (m *LLMManager) SwitchProvider(newConfig *domain.LLMConfig) error {
-	// Cleanup old provider
-	if m.provider != nil {
-		m.provider.Cleanup()
-		m.provider = nil
+	if newConfig == nil || newConfig.Provider == "" {
+		return fmt.Errorf("invalid LLM configuration")
 	}
 
-	// Initialize new provider
-	return m.Initialize(newConfig)
+	oldProvider := m.provider
+	oldConfig := m.config
+
+	if oldProvider != nil {
+		oldProvider.Cleanup()
+	}
+	m.provider = nil
+
+	newProvider, err := m.buildProvider(newConfig)
+	if err != nil {
+		slog.Warn("Failed to switch LLM provider; attempting rollback", "error", err)
+
+		if oldConfig != nil && oldConfig.Provider != "" {
+			rollbackProvider, rollbackErr := m.buildProvider(oldConfig)
+			if rollbackErr != nil {
+				m.config = nil
+				return fmt.Errorf("failed to switch LLM provider: %w (rollback failed: %v)", err, rollbackErr)
+			}
+			m.provider = rollbackProvider
+			m.config = oldConfig
+		} else {
+			m.config = nil
+		}
+
+		return fmt.Errorf("failed to switch LLM provider: %w", err)
+	}
+
+	m.provider = newProvider
+	m.config = newConfig
+	return nil
 }
 
 // IsAvailable returns whether the LLM provider is available
@@ -172,4 +173,39 @@ func (m *LLMManager) Cleanup() {
 		m.provider.Cleanup()
 		m.provider = nil
 	}
+}
+
+func (m *LLMManager) buildProvider(config *domain.LLMConfig) (LLMProvider, error) {
+	var provider LLMProvider
+
+	// Create provider based on configuration
+	switch config.Provider {
+	case "api":
+		apiProvider, err := api.NewProvider(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create provider: %w", err)
+		}
+		provider = apiProvider
+	case "local":
+		localProvider, err := local.NewProvider(m.basePath, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create provider: %w", err)
+		}
+
+		// Set up server manager for local provider
+		serverManager := local.NewServerManager(m.basePath)
+		localProvider.SetServerManager(serverManager)
+		provider = localProvider
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", config.Provider)
+	}
+
+	// Initialize the provider. Context must be wired in before Initialize so any
+	// model/download work performed during initialization can emit events.
+	provider.SetContext(m.ctx)
+	if err := provider.Initialize(); err != nil {
+		return nil, fmt.Errorf("failed to initialize provider: %w", err)
+	}
+
+	return provider, nil
 }

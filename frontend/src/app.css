@@ -792,6 +792,87 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   color: var(--foreground);
 }
 
+.markdown-body {
+  font-family: var(--font-secondary);
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--foreground);
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-family: var(--font-primary);
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 16px 0 8px;
+}
+
+.markdown-body h1 { font-size: 22px; }
+.markdown-body h2 { font-size: 19px; }
+.markdown-body h3 { font-size: 17px; }
+.markdown-body h4 { font-size: 15px; }
+.markdown-body h5 { font-size: 14px; }
+.markdown-body h6 { font-size: 13px; }
+
+.markdown-body p {
+  margin: 8px 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.markdown-body li {
+  margin: 2px 0;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 12px;
+  margin: 12px 0;
+  color: var(--muted-foreground);
+}
+
+.markdown-body code {
+  font-family: var(--font-primary);
+  font-size: 13px;
+  background: var(--muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.markdown-body pre {
+  background: var(--muted);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.markdown-body a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
 
 /* ── AI toolbar ───────────────────────────────────────────── */
 
@@ -897,7 +978,52 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   font-size: 14px;
   line-height: 1.8;
   color: var(--foreground);
-  white-space: pre-wrap;
+}
+
+.ai-thinking {
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+}
+
+.ai-thinking-title {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-family: var(--font-primary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.ai-thinking-title-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-thinking-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted-foreground);
+  transition: transform 0.15s ease;
+}
+
+.ai-thinking-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.ai-thinking-body {
+  border-top: 1px solid var(--border);
+  margin: 0 12px 12px;
+  padding: 10px 0 0 14px;
+  border-left: 2px solid var(--border);
 }
 
 .ai-small-btn  { display: flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: var(--radius-sm); font-family: var(--font-secondary); font-size: 12px; border: none; cursor: pointer; }

@@ -51,6 +51,8 @@ export interface AppState {
   // AI / Streaming
   isStreaming: boolean
   streamingContent: string
+  streamingReasoning: string
+  showThinkingWidget: boolean
   selectedPromptId: string | null
   showAIPanel: boolean
   aiMode: 'preset' | 'custom'
@@ -107,6 +109,8 @@ class StateManager {
 
     isStreaming: false,
     streamingContent: '',
+    streamingReasoning: '',
+    showThinkingWidget: true,
     selectedPromptId: null,
     showAIPanel: false,
     aiMode: 'preset',

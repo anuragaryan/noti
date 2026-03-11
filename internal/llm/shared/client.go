@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -68,10 +69,23 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/xhtml+xml") {
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 220 {
+			preview = preview[:220] + "..."
+		}
+		return nil, fmt.Errorf("API returned HTML instead of JSON. Check API endpoint/base URL and auth. response preview: %s", preview)
+	}
+
 	// Parse response
 	var apiResp ChatResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 220 {
+			preview = preview[:220] + "..."
+		}
+		return nil, fmt.Errorf("failed to parse response: %w (response preview: %s)", err, preview)
 	}
 
 	return &apiResp, nil

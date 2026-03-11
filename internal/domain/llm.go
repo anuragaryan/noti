@@ -26,10 +26,11 @@ type LLMResponse struct {
 
 // StreamChunk represents a single chunk from streaming response
 type StreamChunk struct {
-	Text         string `json:"text"`
-	Index        int    `json:"index"`
-	FinishReason string `json:"finishReason,omitempty"`
-	Done         bool   `json:"done"`
+	Text          string `json:"text"`
+	ReasoningText string `json:"reasoningText,omitempty"`
+	Index         int    `json:"index"`
+	FinishReason  string `json:"finishReason,omitempty"`
+	Done          bool   `json:"done"`
 }
 
 // StreamCallback is called for each chunk during streaming

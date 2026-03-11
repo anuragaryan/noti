@@ -370,8 +370,9 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
       state.setState({ config: newConfig })
       state.showNotification('Settings saved', 'success')
       state.closeModal()
-    } catch {
-      state.showNotification('Failed to save settings', 'error')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      state.showNotification(`Failed to save settings: ${message}`, 'error')
     }
   })
 }

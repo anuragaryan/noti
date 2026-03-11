@@ -482,17 +482,26 @@ func (a *App) GetLLMModels() []domain.ModelOption {
 
 // UpdateLLMConfig updates LLM configuration and switches provider
 func (a *App) UpdateLLMConfig(llmConfig domain.LLMConfig) error {
-	// Update config
-	a.config.LLM = llmConfig
-
-	// Save config
-	if err := a.configService.Save(a.config); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
+	if llmConfig.MaxTokens < 50 {
+		return fmt.Errorf("LLM max tokens must be more than 50")
+	}
+	if llmConfig.MaxTokens > 1_000_000 {
+		return fmt.Errorf("LLM max tokens must be 1,000,000 or less")
 	}
 
-	// Switch provider
+	oldLLM := a.config.LLM
+
+	// Switch provider first so we don't persist broken config
 	if err := a.llmManager.SwitchProvider(&llmConfig); err != nil {
 		return fmt.Errorf("failed to switch LLM provider: %w", err)
+	}
+
+	// Update config and persist
+	a.config.LLM = llmConfig
+	if err := a.configService.Save(a.config); err != nil {
+		a.config.LLM = oldLLM
+		_ = a.llmManager.SwitchProvider(&oldLLM)
+		return fmt.Errorf("failed to save config: %w", err)
 	}
 
 	return nil
@@ -501,11 +510,6 @@ func (a *App) UpdateLLMConfig(llmConfig domain.LLMConfig) error {
 // GenerateTextStream generates text with streaming response
 // Emits events: llm:stream:chunk, llm:stream:done, llm:stream:error
 func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
-	if !a.llmManager.SupportsStreaming() {
-		runtime.EventsEmit(a.ctx, "llm:stream:error", "Streaming not available")
-		return fmt.Errorf("streaming not available")
-	}
-
 	a.cancelActiveStream()
 
 	request := &domain.LLMRequest{
@@ -513,7 +517,7 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 		SystemPrompt: systemPrompt,
 	}
 
-	streamCtx, cancel := context.WithCancel(a.ctx)
+	streamCtx, cancel := context.WithTimeout(a.ctx, 5*time.Minute)
 	streamID := a.setActiveStreamCancel(cancel)
 
 	// Run streaming in goroutine to not block
@@ -542,6 +546,10 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 						FinishReason: "cancelled",
 					})
 				}
+				return
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				runtime.EventsEmit(a.ctx, "llm:stream:error", "stream timed out after 5 minutes")
 				return
 			}
 			runtime.EventsEmit(a.ctx, "llm:stream:error", err.Error())
@@ -831,6 +839,9 @@ func (a *App) SaveConfig(config domain.Config) error {
 	if config.LLM.MaxTokens < 50 {
 		return fmt.Errorf("LLM max tokens must be more than 50")
 	}
+	if config.LLM.MaxTokens > 1_000_000 {
+		return fmt.Errorf("LLM max tokens must be 1,000,000 or less")
+	}
 	if config.Audio.Mixer.MicrophoneGain < 0 || config.Audio.Mixer.MicrophoneGain > 2 {
 		return fmt.Errorf("microphone gain must be between 0 and 2")
 	}
@@ -838,14 +849,7 @@ func (a *App) SaveConfig(config domain.Config) error {
 		return fmt.Errorf("system gain must be between 0 and 2")
 	}
 
-	// Save configuration to file
-	if err := a.configService.Save(&config); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	// Update in-memory config
 	oldConfig := a.config
-	a.config = &config
 
 	// Reinitialize STT if model changed
 	if oldConfig.ModelName != config.ModelName {
@@ -864,8 +868,17 @@ func (a *App) SaveConfig(config domain.Config) error {
 		oldConfig.LLM.APIKey != config.LLM.APIKey {
 		if err := a.llmManager.SwitchProvider(&config.LLM); err != nil {
 			slog.Warn("LLM reinitialization failed", "error", err)
+			return fmt.Errorf("failed to reinitialize LLM provider: %w", err)
 		}
 	}
+
+	// Save configuration to file
+	if err := a.configService.Save(&config); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	// Update in-memory config
+	a.config = &config
 
 	// Update audio settings
 	if oldConfig.Audio.DefaultSource != config.Audio.DefaultSource {

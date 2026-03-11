@@ -49,6 +49,7 @@ export interface StreamingState {
 // Event payload types
 export interface StreamChunkPayload {
   text: string
+  reasoningText?: string
   index: number
   done: boolean
   finishReason?: string

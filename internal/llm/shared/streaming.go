@@ -41,8 +41,9 @@ type StreamChatRequest struct {
 
 // StreamDelta represents the delta in a streaming response
 type StreamDelta struct {
-	Role    string `json:"role,omitempty"`
-	Content string `json:"content,omitempty"`
+	Role             string `json:"role,omitempty"`
+	Content          string `json:"content,omitempty"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 }
 
 // StreamChoice represents a choice in streaming response
@@ -62,7 +63,7 @@ type StreamResponse struct {
 }
 
 // ChunkCallback is called for each parsed chunk
-type ChunkCallback func(text string, done bool, finishReason string) error
+type ChunkCallback func(text string, reasoningText string, done bool, finishReason string) error
 
 // StreamChatCompletion sends a streaming chat completion request
 func (c *StreamingClient) StreamChatCompletion(
@@ -111,6 +112,16 @@ func (c *StreamingClient) StreamChatCompletion(
 		return fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/xhtml+xml") {
+		body, _ := io.ReadAll(resp.Body)
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 220 {
+			preview = preview[:220] + "..."
+		}
+		return fmt.Errorf("API returned HTML instead of an event stream. Check API endpoint/base URL and auth. response preview: %s", preview)
+	}
+
 	// Read SSE stream with minimal buffering to avoid delays
 	reader := bufio.NewReaderSize(resp.Body, 1) // Use size 1 to minimize buffering
 	for {
@@ -123,7 +134,7 @@ func (c *StreamingClient) StreamChatCompletion(
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
-				if err := callback("", true, "stop"); err != nil {
+				if err := callback("", "", true, "stop"); err != nil {
 					return fmt.Errorf("callback error: %w", err)
 				}
 				return nil
@@ -137,13 +148,13 @@ func (c *StreamingClient) StreamChatCompletion(
 			continue
 		}
 
-		// Handle SSE data lines
-		if strings.HasPrefix(lineStr, "data: ") {
-			data := strings.TrimPrefix(lineStr, "data: ")
+		// Handle SSE data lines (both "data: ..." and "data:...")
+		if strings.HasPrefix(lineStr, "data:") {
+			data := strings.TrimSpace(strings.TrimPrefix(lineStr, "data:"))
 
 			// Check for stream end
 			if data == "[DONE]" {
-				return callback("", true, "stop")
+				return callback("", "", true, "stop")
 			}
 
 			// Parse JSON response
@@ -158,13 +169,14 @@ func (c *StreamingClient) StreamChatCompletion(
 			if len(streamResp.Choices) > 0 {
 				choice := streamResp.Choices[0]
 				content := choice.Delta.Content
+				reasoningText := choice.Delta.ReasoningContent
 				finishReason := choice.FinishReason
 
 				// Check if this is the final chunk
 				done := finishReason != ""
 
-				if content != "" || done {
-					if err := callback(content, done, finishReason); err != nil {
+				if content != "" || reasoningText != "" || done {
+					if err := callback(content, reasoningText, done, finishReason); err != nil {
 						return fmt.Errorf("callback error: %w", err)
 					}
 				}

@@ -294,8 +294,9 @@ function renderScreen(
         showGettingStarted: false,
       })
       state.showNotification('Setup complete', 'success')
-    } catch {
-      state.showNotification('Failed to save setup', 'error')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      state.showNotification(`Failed to save setup: ${message}`, 'error')
     }
   })
 }

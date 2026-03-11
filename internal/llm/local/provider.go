@@ -245,12 +245,13 @@ func (p *Provider) GenerateStream(ctx context.Context, request *domain.LLMReques
 
 	// Use streaming client
 	err := p.streamingClient.StreamChatCompletion(ctx, streamReq,
-		func(text string, done bool, finishReason string) error {
+		func(text string, reasoningText string, done bool, finishReason string) error {
 			chunk := &domain.StreamChunk{
-				Text:         text,
-				Index:        chunkIndex,
-				FinishReason: finishReason,
-				Done:         done,
+				Text:          text,
+				ReasoningText: reasoningText,
+				Index:         chunkIndex,
+				FinishReason:  finishReason,
+				Done:          done,
 			}
 			chunkIndex++
 			return callback(chunk)
