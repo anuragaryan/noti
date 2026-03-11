@@ -6,6 +6,7 @@
 import state from '../state'
 import { AudioAPI } from '../api'
 import { AppEvents } from '../events'
+import { isNearBottom, scrollToBottom } from '../utils/scroll'
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
 
@@ -43,13 +44,6 @@ function updateTimerDisplay(): void {
 // The live transcript is appended after this base, separated by '\n\n'.
 let preRecordingContent = ''
 
-const AUTO_SCROLL_THRESHOLD_PX = 80
-
-function isNearBottom(textarea: HTMLTextAreaElement, thresholdPx: number = AUTO_SCROLL_THRESHOLD_PX): boolean {
-  const distanceFromBottom = textarea.scrollHeight - textarea.scrollTop - textarea.clientHeight
-  return distanceFromBottom <= thresholdPx
-}
-
 // Write the running transcript into the textarea, always replacing the
 // previous partial so the text doesn't duplicate.
 function setLiveTranscript(text: string): void {
@@ -59,9 +53,7 @@ function setLiveTranscript(text: string): void {
   const separator = preRecordingContent ? '\n\n' : ''
   textarea.value = preRecordingContent + separator + text
   if (shouldAutoScroll) {
-    requestAnimationFrame(() => {
-      textarea.scrollTop = textarea.scrollHeight
-    })
+    scrollToBottom(textarea)
   }
   // Trigger auto-save debounce
   textarea.dispatchEvent(new Event('input'))

@@ -9,6 +9,7 @@ import { AppEvents } from '../events'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
 import { renderMarkdownPreview } from '../utils/markdown'
+import { isNearBottom, scrollToBottom } from '../utils/scroll'
 
 const MANAGE_PROMPTS_VALUE = '__manage_prompts__'
 
@@ -127,8 +128,10 @@ async function runPrompt(): Promise<void> {
 
   state.setState({
     isStreaming: true,
+    streamingStatus: 'running',
     streamingContent: '',
     streamingReasoning: '',
+    streamingReasoningComplete: false,
     showThinkingWidget: true,
     showAIPanel: true,
   })
@@ -139,14 +142,14 @@ async function runPrompt(): Promise<void> {
     if (aiMode === 'preset') {
       const promptId = state.get('selectedPromptId')
       if (!promptId) {
-        state.setState({ isStreaming: false })
+        state.setState({ isStreaming: false, streamingStatus: 'idle' })
         return
       }
       await PromptsAPI.executeOnNoteStream(promptId, note.id)
     } else {
       const customText = state.get('customPromptText')
       if (!customText.trim()) {
-        state.setState({ isStreaming: false })
+        state.setState({ isStreaming: false, streamingStatus: 'idle' })
         return
       }
 
@@ -157,7 +160,7 @@ async function runPrompt(): Promise<void> {
     }
   } catch (err) {
     console.error('Prompt execution failed:', err)
-    state.setState({ isStreaming: false })
+    state.setState({ isStreaming: false, streamingStatus: 'error' })
     state.showNotification('AI prompt failed', 'error')
     renderToolbar()
     renderAIPanel()
@@ -175,6 +178,7 @@ function renderAIPanel(): void {
   const reasoning = state.get('streamingReasoning')
   const showThinkingWidget = state.get('showThinkingWidget')
   const isStreaming = state.get('isStreaming')
+  const streamingStatus = state.get('streamingStatus')
 
   if (!show) {
     panel.classList.add('hidden')
@@ -185,7 +189,14 @@ function renderAIPanel(): void {
   // Layout defined in #ai-panel CSS class (app.css)
 
   const showThinking = Boolean(reasoning.trim())
+  const isReasoningComplete = showThinking
+    && (state.get('streamingReasoningComplete') || streamingStatus === 'done')
+  const isReasoningInterrupted = showThinking
+    && !isReasoningComplete
+    && (streamingStatus === 'error' || streamingStatus === 'cancelled')
   const thinkingBodyClass = showThinkingWidget ? '' : 'hidden'
+  const thinkingStatusIcon = isReasoningComplete ? 'check' : (isReasoningInterrupted ? 'alert-circle' : 'loader')
+  const thinkingStatusLabel = isReasoningComplete ? 'Reasoning complete' : (isReasoningInterrupted ? 'Reasoning interrupted' : 'Thinking')
 
   panel.innerHTML = `
     <div class="ai-panel-header">
@@ -201,7 +212,7 @@ function renderAIPanel(): void {
     ${showThinking ? `
       <div id="ai-thinking" class="ai-thinking">
         <button id="ai-thinking-toggle" class="ai-thinking-title" type="button">
-          <span class="ai-thinking-title-left">${icon('loader', 14)} Thinking</span>
+          <span class="ai-thinking-title-left">${icon(thinkingStatusIcon, 14)} ${thinkingStatusLabel}</span>
           <span class="ai-thinking-chevron ${showThinkingWidget ? '' : 'collapsed'}">${icon('chevron-down', 14)}</span>
         </button>
         <div id="ai-thinking-body" class="ai-thinking-body ${thinkingBodyClass}">${renderMarkdownPreview(reasoning)}</div>
@@ -225,8 +236,10 @@ function renderAIPanel(): void {
       showAIPanel: false,
       streamingContent: '',
       streamingReasoning: '',
+      streamingReasoningComplete: false,
       showThinkingWidget: true,
       isStreaming: false,
+      streamingStatus: isStreaming ? 'cancelled' : 'idle',
     })
     renderAIPanel()
     renderToolbar()
@@ -256,14 +269,23 @@ export function initToolbar(): void {
 
   // Wire streaming events
   AppEvents.onStreamChunk((chunk) => {
+    const panelEl = document.getElementById('ai-panel')
+    const shouldAutoScroll = panelEl ? isNearBottom(panelEl) : false
+
     const currentContent = state.get('streamingContent')
     const currentReasoning = state.get('streamingReasoning')
+    const currentReasoningComplete = state.get('streamingReasoningComplete')
     const nextContent = currentContent + (chunk.text || '')
     const nextReasoning = currentReasoning + (chunk.reasoningText || '')
+    const hasReasoning = Boolean(nextReasoning.trim())
+    const hasReasoningChunk = Boolean(chunk.reasoningText?.trim())
+    const hasOutputChunk = Boolean(chunk.text)
+    const nextReasoningComplete = hasReasoning && (currentReasoningComplete || (!hasReasoningChunk && hasOutputChunk))
 
     state.setState({
       streamingContent: nextContent,
       streamingReasoning: nextReasoning,
+      streamingReasoningComplete: nextReasoningComplete,
     })
 
     const resultEl = document.getElementById('ai-result-markdown')
@@ -277,17 +299,25 @@ export function initToolbar(): void {
     } else if (chunk.reasoningText) {
       renderAIPanel()
     }
+
+    if (nextReasoningComplete !== currentReasoningComplete) {
+      renderAIPanel()
+    }
+
+    if (panelEl && shouldAutoScroll) {
+      scrollToBottom(panelEl)
+    }
   })
 
   AppEvents.onStreamDone(() => {
-    state.setState({ isStreaming: false })
+    state.setState({ isStreaming: false, streamingStatus: 'done' })
     renderToolbar()
     renderAIPanel()
   })
 
   AppEvents.onStreamError((err) => {
     console.error('Stream error:', err)
-    state.setState({ isStreaming: false })
+    state.setState({ isStreaming: false, streamingStatus: 'error' })
     state.showNotification(`AI error: ${err}`, 'error')
     renderToolbar()
     renderAIPanel()

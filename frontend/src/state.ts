@@ -50,8 +50,10 @@ export interface AppState {
 
   // AI / Streaming
   isStreaming: boolean
+  streamingStatus: 'idle' | 'running' | 'done' | 'error' | 'cancelled'
   streamingContent: string
   streamingReasoning: string
+  streamingReasoningComplete: boolean
   showThinkingWidget: boolean
   selectedPromptId: string | null
   showAIPanel: boolean
@@ -108,8 +110,10 @@ class StateManager {
     partialTranscript: '',
 
     isStreaming: false,
+    streamingStatus: 'idle',
     streamingContent: '',
     streamingReasoning: '',
+    streamingReasoningComplete: false,
     showThinkingWidget: true,
     selectedPromptId: null,
     showAIPanel: false,

@@ -1,3 +1,0 @@
-- To test use: ./test.sh --no-cache
-- To build the debug build: ./build.sh debug
-- To build the prod build: ./build.sh
