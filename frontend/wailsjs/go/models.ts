@@ -94,6 +94,7 @@ export namespace domain {
 	}
 	export class Config {
 	    modelName: string;
+	    sttLanguage: string;
 	    llm: LLMConfig;
 	    audio: AudioSettings;
 	
@@ -104,6 +105,7 @@ export namespace domain {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.modelName = source["modelName"];
+	        this.sttLanguage = source["sttLanguage"];
 	        this.llm = this.convertValues(source["llm"], LLMConfig);
 	        this.audio = this.convertValues(source["audio"], AudioSettings);
 	    }

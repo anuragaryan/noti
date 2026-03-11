@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +34,10 @@ type Transcriber struct {
 	clock   Clock
 	engine  speechEngine
 	emitter transcriptionEmitter
+
+	configuredLanguage string
+	autoDetectLanguage bool
+	lockedLanguage     string
 
 	defaultsOnce sync.Once
 
@@ -71,13 +76,19 @@ func NewTranscriber(basePath string, config *domain.STTConfig) (*Transcriber, er
 		return nil, fmt.Errorf("whisper model not found at %s", modelPath)
 	}
 
+	options := DefaultOptions()
+	language, autoDetect := resolveSTTLanguage(config)
+	options.Language = language
+
 	return &Transcriber{
-		config:      config,
-		modelPath:   modelPath,
-		audioBuffer: []float32{},
-		options:     DefaultOptions(),
-		clock:       realClock{},
-		emitter:     noopEmitter{},
+		config:             config,
+		modelPath:          modelPath,
+		audioBuffer:        []float32{},
+		options:            options,
+		clock:              realClock{},
+		emitter:            noopEmitter{},
+		configuredLanguage: language,
+		autoDetectLanguage: autoDetect,
 	}, nil
 }
 
@@ -121,6 +132,11 @@ func (t *Transcriber) StartProcessing() error {
 
 	now := t.clock.Now()
 	t.resetSession(now)
+	t.lockedLanguage = ""
+	t.options.Language = t.configuredLanguage
+	if t.model != nil {
+		t.engine = newWhisperEngine(t.model, t.options)
+	}
 	t.stopProcessing = make(chan struct{})
 
 	t.bufferMutex.Unlock()
@@ -304,7 +320,13 @@ func (t *Transcriber) transcribe(audioData []float32) (string, error) {
 		return "", fmt.Errorf("model not initialized")
 	}
 
-	return t.engine.Transcribe(audioData)
+	text, err := t.engine.Transcribe(audioData)
+	if err != nil {
+		return "", err
+	}
+
+	t.lockDetectedLanguage()
+	return text, nil
 }
 
 func (t *Transcriber) finalizeInBackground(snap stopSnapshot) {
@@ -353,9 +375,13 @@ func (t *Transcriber) finalizeInBackground(snap stopSnapshot) {
 
 func (t *Transcriber) newResult(text string, partial bool) *domain.TranscriptionResult {
 	t.ensureDefaults()
+	language := t.options.Language
+	if t.lockedLanguage != "" {
+		language = t.lockedLanguage
+	}
 	return &domain.TranscriptionResult{
 		Text:      text,
-		Language:  t.options.Language,
+		Language:  language,
 		IsPartial: partial,
 		Timestamp: t.clock.Now().Format(time.RFC3339),
 	}
@@ -447,4 +473,42 @@ func (t *Transcriber) eventTargets() (context.Context, transcriptionEmitter) {
 func (t *Transcriber) currentEmitter() transcriptionEmitter {
 	_, emitter := t.eventTargets()
 	return emitter
+}
+
+func (t *Transcriber) lockDetectedLanguage() {
+	if !t.autoDetectLanguage || t.lockedLanguage != "" || t.engine == nil {
+		return
+	}
+
+	detected := strings.TrimSpace(strings.ToLower(t.engine.DetectedLanguage()))
+	if detected == "" || detected == "auto" {
+		return
+	}
+
+	t.lockedLanguage = detected
+	t.options.Language = detected
+	if t.model != nil {
+		t.engine = newWhisperEngine(t.model, t.options)
+	}
+}
+
+func resolveSTTLanguage(config *domain.STTConfig) (string, bool) {
+	if config == nil {
+		return "en", false
+	}
+
+	if strings.Contains(config.ModelName, ".en") {
+		return "en", false
+	}
+
+	language := strings.TrimSpace(strings.ToLower(config.Language))
+	if language == "" {
+		return "en", false
+	}
+
+	if language == "auto" {
+		return "auto", true
+	}
+
+	return language, false
 }

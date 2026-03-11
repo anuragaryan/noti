@@ -9,6 +9,7 @@ import (
 
 type speechEngine interface {
 	Transcribe(audio []float32) (string, error)
+	DetectedLanguage() string
 	Close() error
 }
 
@@ -16,6 +17,7 @@ type whisperEngine struct {
 	model    gowhisper.Model
 	language string
 	threads  uint
+	detected string
 }
 
 func newWhisperEngine(model gowhisper.Model, opts Options) *whisperEngine {
@@ -46,6 +48,8 @@ func (e *whisperEngine) Transcribe(audio []float32) (string, error) {
 		return "", fmt.Errorf("failed to process audio: %w", err)
 	}
 
+	e.detected = strings.ToLower(strings.TrimSpace(ctx.DetectedLanguage()))
+
 	var sb strings.Builder
 	for {
 		segment, err := ctx.NextSegment()
@@ -63,4 +67,8 @@ func (e *whisperEngine) Close() error {
 		return nil
 	}
 	return e.model.Close()
+}
+
+func (e *whisperEngine) DetectedLanguage() string {
+	return e.detected
 }

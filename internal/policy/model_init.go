@@ -9,8 +9,8 @@ func ShouldDeferModelInitOnStartup(isFirstRun bool) bool {
 }
 
 // ShouldInitializeSTTOnSave indicates whether SaveConfig should initialize STT.
-func ShouldInitializeSTTOnSave(oldModel, newModel string, sttAvailable bool) bool {
-	return oldModel != newModel || !sttAvailable
+func ShouldInitializeSTTOnSave(oldModel, newModel, oldLanguage, newLanguage string, sttAvailable bool) bool {
+	return oldModel != newModel || oldLanguage != newLanguage || !sttAvailable
 }
 
 // ShouldInitializeLLMOnSave indicates whether SaveConfig should initialize LLM.

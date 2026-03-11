@@ -145,7 +145,7 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		slog.Error("Cannot load config", "error", err)
 		// Use a default config if loading fails
-		a.config = &domain.Config{ModelName: recommendedSTT}
+		a.config = &domain.Config{ModelName: recommendedSTT, STTLanguage: "en"}
 		a.config.LLM.Provider = "local"
 		a.config.LLM.ModelName = recommendedLLM
 		a.config.Audio = domain.DefaultAudioSettings()
@@ -180,6 +180,7 @@ func (a *App) startup(ctx context.Context) {
 	} else {
 		sttConfig := &domain.STTConfig{
 			ModelName: a.config.ModelName,
+			Language:  a.config.STTLanguage,
 		}
 		if err := a.sttManager.Initialize(sttConfig); err != nil {
 			slog.Error("STT initialization failed", "error", err)
@@ -843,6 +844,9 @@ func (a *App) SaveConfig(config domain.Config) error {
 	if config.ModelName == "" {
 		return fmt.Errorf("STT model name cannot be empty")
 	}
+	if strings.TrimSpace(config.STTLanguage) == "" {
+		return fmt.Errorf("STT language cannot be empty")
+	}
 	if config.LLM.Temperature < 0 || config.LLM.Temperature > 2 {
 		return fmt.Errorf("LLM temperature must be between 0 and 2")
 	}
@@ -862,9 +866,10 @@ func (a *App) SaveConfig(config domain.Config) error {
 	oldConfig := a.config
 
 	// Reinitialize STT if model changed or service is not initialized yet.
-	if policy.ShouldInitializeSTTOnSave(oldConfig.ModelName, config.ModelName, a.sttManager.IsAvailable()) {
+	if policy.ShouldInitializeSTTOnSave(oldConfig.ModelName, config.ModelName, oldConfig.STTLanguage, config.STTLanguage, a.sttManager.IsAvailable()) {
 		sttConfig := &domain.STTConfig{
 			ModelName: config.ModelName,
+			Language:  config.STTLanguage,
 		}
 		if err := a.sttManager.Initialize(sttConfig); err != nil {
 			slog.Warn("STT reinitialization failed", "error", err)

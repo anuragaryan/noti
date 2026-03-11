@@ -674,3 +674,33 @@ func TestStopProcessing_TailUsesSpaceWhenPauseNotLongerThanAverage(t *testing.T)
 		t.Errorf("lastFinalText = %q, want %q", got, want)
 	}
 }
+
+func TestResolveSTTLanguage_DefaultsToEnglish(t *testing.T) {
+	language, auto := resolveSTTLanguage(&domain.STTConfig{ModelName: "large-v3", Language: ""})
+	if language != "en" {
+		t.Fatalf("language = %q, want %q", language, "en")
+	}
+	if auto {
+		t.Fatal("auto detect should be false")
+	}
+}
+
+func TestResolveSTTLanguage_AllowsAutoForMultilingualModels(t *testing.T) {
+	language, auto := resolveSTTLanguage(&domain.STTConfig{ModelName: "large-v3", Language: "auto"})
+	if language != "auto" {
+		t.Fatalf("language = %q, want %q", language, "auto")
+	}
+	if !auto {
+		t.Fatal("auto detect should be true")
+	}
+}
+
+func TestResolveSTTLanguage_ForcesEnglishForEnglishOnlyModels(t *testing.T) {
+	language, auto := resolveSTTLanguage(&domain.STTConfig{ModelName: "small.en-q8_0", Language: "auto"})
+	if language != "en" {
+		t.Fatalf("language = %q, want %q", language, "en")
+	}
+	if auto {
+		t.Fatal("auto detect should be false for .en model")
+	}
+}

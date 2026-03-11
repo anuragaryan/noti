@@ -10,6 +10,23 @@ const RECOMMENDED = {
 
 type SourceOption = 'microphone' | 'system' | 'mixed'
 
+const STT_LANGUAGES: Array<{ code: string; name: string }> = [
+  { code: 'auto', name: 'Auto Detect' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'it', name: 'Italian' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'nl', name: 'Dutch' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ar', name: 'Arabic' },
+]
+
 function labelWithRecommendation(value: string, recommended: string): string {
   return value === recommended ? `${value} (recommended)` : value
 }
@@ -82,6 +99,12 @@ function sttOptionsHtml(sttModels: ModelOption[], selectedModel: string): string
   }).join('')
 }
 
+function sttLanguageOptionsHtml(selectedLanguage: string): string {
+  return STT_LANGUAGES.map((language) => {
+    return `<option value="${escapeHtml(language.code)}" ${language.code === selectedLanguage ? 'selected' : ''}>${escapeHtml(language.name)}</option>`
+  }).join('')
+}
+
 function localModelOptionsHtml(models: ModelOption[], selectedModel: string): string {
   if (models.length === 0) {
     return `<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(selectedModel)}</option>`
@@ -103,6 +126,7 @@ function renderScreen(
   const sortedLLMModels = sortByID(llmModels)
   const currentProvider = config.llm?.provider === 'api' ? 'api' : 'local'
   const currentSTTModel = config.modelName || sortedSTTModels[0]?.code || ''
+  const currentSTTLanguage = config.sttLanguage || 'en'
   const fallbackLocalModel = sortedLLMModels[0]?.code || config.llm?.modelName || ''
   const rememberedModels: Record<string, string> = {
     local: currentProvider === 'local' ? (config.llm?.modelName || fallbackLocalModel) : fallbackLocalModel,
@@ -126,6 +150,12 @@ function renderScreen(
               ${sttOptionsHtml(sortedSTTModels, currentSTTModel)}
             </select>
             <p id="gs-stt-note" class="getting-started-help"></p>
+          </div>
+          <div class="getting-started-field">
+            <span class="getting-started-label">Language</span>
+            <select id="gs-stt-language" class="form-select">
+              ${sttLanguageOptionsHtml(currentSTTLanguage)}
+            </select>
           </div>
         </section>
 
@@ -264,6 +294,7 @@ function renderScreen(
   container.querySelector<HTMLButtonElement>('#gs-start')?.addEventListener('click', async () => {
     const source = (container.querySelector<HTMLButtonElement>('.gs-source-pill.active')?.dataset.source as SourceOption | undefined) ?? selectedSource
     const sttModel = container.querySelector<HTMLSelectElement>('#gs-stt-model')?.value ?? currentSTTModel
+    const sttLanguage = container.querySelector<HTMLSelectElement>('#gs-stt-language')?.value ?? currentSTTLanguage
     const selectedProvider = container.querySelector<HTMLSelectElement>('#gs-llm-provider')?.value === 'api' ? 'api' : 'local'
     const selectedModel = container.querySelector<HTMLInputElement | HTMLSelectElement>('#gs-llm-model')?.value ?? rememberedModels[selectedProvider]
     const endpoint = container.querySelector<HTMLInputElement>('#gs-api-endpoint')?.value ?? config.llm?.apiEndpoint ?? ''
@@ -272,6 +303,7 @@ function renderScreen(
     const nextConfig = domain.Config.createFrom({
       ...config,
       modelName: sttModel,
+      sttLanguage,
       llm: {
         ...(config.llm ?? {}),
         provider: selectedProvider,

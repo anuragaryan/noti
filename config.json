@@ -1,6 +1,7 @@
 {
   "realtimeTranscriptionChunkSeconds": 5,
   "modelName": "large-v3-turbo-q5_0",
+  "sttLanguage": "en",
   "llm": {
     "provider": "local",
     "modelName": "Qwen3.5-4B-UD-Q4_K_XL",

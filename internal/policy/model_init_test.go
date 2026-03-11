@@ -17,15 +17,19 @@ func TestShouldDeferModelInitOnStartup(t *testing.T) {
 }
 
 func TestShouldInitializeSTTOnSave(t *testing.T) {
-	if !ShouldInitializeSTTOnSave("large-v3", "large-v3", false) {
+	if !ShouldInitializeSTTOnSave("large-v3", "large-v3", "en", "en", false) {
 		t.Fatal("expected STT initialization when service unavailable")
 	}
 
-	if !ShouldInitializeSTTOnSave("large-v2", "large-v3", true) {
+	if !ShouldInitializeSTTOnSave("large-v2", "large-v3", "en", "en", true) {
 		t.Fatal("expected STT initialization when model changes")
 	}
 
-	if ShouldInitializeSTTOnSave("large-v3", "large-v3", true) {
+	if !ShouldInitializeSTTOnSave("large-v3", "large-v3", "en", "es", true) {
+		t.Fatal("expected STT initialization when language changes")
+	}
+
+	if ShouldInitializeSTTOnSave("large-v3", "large-v3", "en", "en", true) {
 		t.Fatal("did not expect STT initialization when model unchanged and available")
 	}
 }

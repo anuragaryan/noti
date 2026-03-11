@@ -3,6 +3,7 @@ package domain
 // STTConfig represents STT configuration
 type STTConfig struct {
 	ModelName         string `json:"modelName"`
+	Language          string `json:"language"`
 	ChunkDurationSecs int    `json:"chunkDurationSecs"`
 }
 

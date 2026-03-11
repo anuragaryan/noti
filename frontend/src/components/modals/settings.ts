@@ -49,6 +49,23 @@ function audioSourceNote(source: string): string {
   return 'Captures both microphone and system audio.'
 }
 
+const STT_LANGUAGES: Array<{ code: string; name: string }> = [
+  { code: 'auto', name: 'Auto Detect' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'it', name: 'Italian' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'nl', name: 'Dutch' },
+  { code: 'ru', name: 'Russian' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ar', name: 'Arabic' },
+]
+
 function loadLLMModelByProvider(): Record<string, string> {
   try {
     const raw = localStorage.getItem(LLM_MODEL_BY_PROVIDER_KEY)
@@ -128,6 +145,10 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
 
   const sttNote = noteForModel(sttModels, config.modelName || sttModels[0]?.code || '')
   const llmNote = noteForModel(llmModels, localModelName)
+  const selectedSTTLanguage = config.sttLanguage || 'en'
+  const sttLanguageOptions = STT_LANGUAGES.map((language) => {
+    return `<option value="${escapeHtml(language.code)}" ${selectedSTTLanguage === language.code ? 'selected' : ''}>${escapeHtml(language.name)}</option>`
+  }).join('')
 
   container.innerHTML = `
     <div class="modal-card modal-card-settings">
@@ -146,6 +167,12 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
                 ${sttModelOptions}
               </select>
               <p id="stt-model-note" class="form-note${sttNote ? '' : ' hidden'}">${escapeHtml(sttNote)}</p>
+            </label>
+            <label class="form-label">
+              <span class="form-label-text">Transcription Language</span>
+              <select id="stt-language" class="form-select">
+                ${sttLanguageOptions}
+              </select>
             </label>
           </div>
         </section>
@@ -351,6 +378,7 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     const newConfig = domain.Config.createFrom({
       ...config,
       modelName: (container.querySelector<HTMLSelectElement>('#stt-model')?.value ?? config.modelName),
+      sttLanguage: (container.querySelector<HTMLSelectElement>('#stt-language')?.value ?? config.sttLanguage),
       llm: {
         ...config.llm,
         provider: selectedProvider,
