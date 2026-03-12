@@ -107,6 +107,9 @@ func main() {
 		runtime.Quit(app.ctx)
 	})
 
+	// Native edit menu (Undo/Cut/Copy/Paste/Select All shortcuts)
+	appMenu.Append(menu.EditMenu())
+
 	// Choose the Wails logger based on build type.
 	// In production, route Error/Fatal to Sentry; in debug, pass nil so Wails
 	// uses its built-in logger and errors appear only in the terminal/DevTools.
@@ -117,9 +120,10 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "Noti",
-		Width:  1200,
-		Height: 800,
+		Title:                    "Noti",
+		Width:                    1200,
+		Height:                   800,
+		EnableDefaultContextMenu: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
