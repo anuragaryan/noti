@@ -31,6 +31,7 @@ func (t *Transcriber) updateSpeechState(chunk []float32, now time.Time) {
 
 	t.lastSpeechAt = now
 	t.hasSpeechInSegment = true
+	t.speechDetected = true
 	t.noiseFloorRMS = t.noiseFloorRMS*0.9 + rms*0.1
 	t.speechThresholdRMS = clampSpeechThreshold(t.noiseFloorRMS*t.options.NoiseFloorMultiplier, t.options)
 }

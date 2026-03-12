@@ -9,6 +9,9 @@ type stopSnapshot struct {
 	pauseTotal time.Duration
 	pauseCount int
 	baseText   string
+	speechSeen bool
+	tailSpeech bool
+	threshold  float32
 	isRunning  bool
 }
 
@@ -31,6 +34,7 @@ func (t *Transcriber) resetSession(now time.Time) {
 
 	t.pauseTotal = 0
 	t.pauseCount = 0
+	t.speechDetected = false
 }
 
 // stopSnapshotLocked creates an immutable snapshot for background finalization.
@@ -46,6 +50,9 @@ func (t *Transcriber) stopSnapshotLocked(now time.Time) stopSnapshot {
 		pauseTotal: t.pauseTotal,
 		pauseCount: t.pauseCount,
 		baseText:   t.accumulatedTranscript,
+		speechSeen: t.speechDetected,
+		tailSpeech: t.hasSpeechInSegment,
+		threshold:  t.speechThresholdRMS,
 		isRunning:  t.isProcessing,
 	}
 }

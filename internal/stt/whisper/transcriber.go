@@ -58,6 +58,7 @@ type Transcriber struct {
 	lastSpeechAt       time.Time
 	segmentStartAt     time.Time
 	hasSpeechInSegment bool
+	speechDetected     bool
 	noiseFloorRMS      float32
 	speechThresholdRMS float32
 	baselineBuffer     []float32
@@ -339,24 +340,45 @@ func (t *Transcriber) finalizeInBackground(snap stopSnapshot) {
 	if remain > t.options.MinTailSamples {
 		tailChunk := make([]float32, remain)
 		copy(tailChunk, snap.buffer[snap.processed:])
-
-		tailText, err := t.TranscribeThreadSafe(tailChunk)
-		if err != nil {
-			slog.Error("[stt] tail transcription error", "error", err)
-		} else {
-			tailText = cleanTranscription(tailText)
-			if tailText != "" {
-				text = joinTranscript(text, tailText, joinerFromPause(snap.silence, snap.pauseTotal, snap.pauseCount))
+		hasTailSpeechEvidence, tailRMS, tailThreshold := t.speechEvidence(tailChunk, snap.threshold, snap.tailSpeech)
+		if hasTailSpeechEvidence {
+			tailText, err := t.TranscribeThreadSafe(tailChunk)
+			if err != nil {
+				slog.Error("[stt] tail transcription error", "error", err)
+			} else {
+				tailText = cleanTranscription(tailText)
+				if tailText != "" {
+					text = joinTranscript(text, tailText, joinerFromPause(snap.silence, snap.pauseTotal, snap.pauseCount))
+				}
 			}
+		} else {
+			slog.Debug(
+				"[stt] skipping tail transcription: no speech evidence",
+				"remaining_samples", remain,
+				"tail_rms", tailRMS,
+				"speech_threshold", tailThreshold,
+				"vad_detected", snap.tailSpeech,
+			)
 		}
 	}
 
 	if text == "" && snap.processed == 0 && len(snap.buffer) > t.options.SampleRate {
-		fullText, err := t.TranscribeThreadSafe(snap.buffer)
-		if err != nil {
-			slog.Error("[stt] full-buffer transcription error", "error", err)
+		hasFallbackSpeechEvidence, fullRMS, fullThreshold := t.speechEvidence(snap.buffer, t.options.MinSpeechThresholdRMS, snap.speechSeen)
+		if hasFallbackSpeechEvidence {
+			fullText, err := t.TranscribeThreadSafe(snap.buffer)
+			if err != nil {
+				slog.Error("[stt] full-buffer transcription error", "error", err)
+			} else {
+				text = cleanTranscription(fullText)
+			}
 		} else {
-			text = cleanTranscription(fullText)
+			slog.Debug(
+				"[stt] skipping full-buffer fallback: no speech evidence",
+				"samples", len(snap.buffer),
+				"buffer_rms", fullRMS,
+				"speech_threshold", fullThreshold,
+				"vad_detected", snap.speechSeen,
+			)
 		}
 	}
 
@@ -371,6 +393,20 @@ func (t *Transcriber) finalizeInBackground(snap stopSnapshot) {
 	}
 
 	emitter.EmitDone(*t.newResult(text, false))
+}
+
+func (t *Transcriber) speechEvidence(audio []float32, threshold float32, speechDetected bool) (bool, float32, float32) {
+	if speechDetected {
+		return true, 0, threshold
+	}
+	if len(audio) == 0 {
+		return false, 0, threshold
+	}
+	if threshold < t.options.MinSpeechThresholdRMS {
+		threshold = t.options.MinSpeechThresholdRMS
+	}
+	rms := calculateRMS(audio)
+	return rms > threshold, rms, threshold
 }
 
 func (t *Transcriber) newResult(text string, partial bool) *domain.TranscriptionResult {

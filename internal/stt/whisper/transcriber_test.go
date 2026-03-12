@@ -333,6 +333,7 @@ func TestStopProcessing_ProcessesTailBuffer(t *testing.T) {
 	tr := startProcessingTranscriber(t, modelWithSegments("tail"))
 	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
 	tr.processedSamples = sampleRate
+	tr.hasSpeechInSegment = true
 
 	got, err := stopAndWait(t, tr)
 	if err != nil {
@@ -348,6 +349,7 @@ func TestStopProcessing_FallbackFullBuffer(t *testing.T) {
 	tr := startProcessingTranscriber(t, modelWithSegments("full"))
 	tr.audioBuffer = make([]float32, sampleRate*2)
 	tr.processedSamples = 0
+	tr.speechDetected = true
 
 	got, err := stopAndWait(t, tr)
 	if err != nil {
@@ -355,6 +357,68 @@ func TestStopProcessing_FallbackFullBuffer(t *testing.T) {
 	}
 	if got != "full" {
 		t.Errorf("lastFinalText = %q, want %q", got, "full")
+	}
+}
+
+func TestStopProcessing_FallbackUsesMinThresholdWithoutVAD(t *testing.T) {
+	tr := startProcessingTranscriber(t, modelWithSegments("full"))
+	tr.audioBuffer = make([]float32, sampleRate*2)
+	for i := range tr.audioBuffer {
+		tr.audioBuffer[i] = 0.01
+	}
+	tr.processedSamples = 0
+	tr.speechThresholdRMS = 0.05 // Simulate inflated adaptive threshold.
+
+	got, err := stopAndWait(t, tr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "full" {
+		t.Errorf("lastFinalText = %q, want %q", got, "full")
+	}
+}
+
+func TestStopProcessing_SkipsTailWhenNoSpeechEvidence(t *testing.T) {
+	tailCalled := false
+	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
+		tailCalled = true
+		return &mockContext{segments: []gowhisper.Segment{{Text: "tail"}}}, nil
+	}}
+	tr := startProcessingTranscriber(t, m)
+	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
+	tr.processedSamples = sampleRate
+
+	got, err := stopAndWait(t, tr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tailCalled {
+		t.Fatal("expected tail transcription to be skipped without speech evidence")
+	}
+	if got != "" {
+		t.Errorf("lastFinalText = %q, want empty", got)
+	}
+}
+
+func TestStopProcessing_SkipsFallbackWhenNoSpeechEvidence(t *testing.T) {
+	fullCalled := false
+	m := &mockModel{newContextFn: func() (gowhisper.Context, error) {
+		fullCalled = true
+		return &mockContext{segments: []gowhisper.Segment{{Text: "full"}}}, nil
+	}}
+	tr := startProcessingTranscriber(t, m)
+	tr.audioBuffer = make([]float32, sampleRate*2)
+	tr.processedSamples = 0
+
+	got, err := stopAndWait(t, tr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fullCalled {
+		t.Fatal("expected full-buffer fallback to be skipped without speech evidence")
+	}
+	if got != "" {
+		t.Errorf("lastFinalText = %q, want empty", got)
 	}
 }
 
@@ -541,6 +605,7 @@ func TestStopProcessing_ReturnsCumulativeText(t *testing.T) {
 	tr.accumulatedTranscript = "first chunk"
 	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
 	tr.processedSamples = sampleRate // 1 s processed, 0.8 s tail
+	tr.hasSpeechInSegment = true
 
 	got, err := stopAndWait(t, tr)
 	if err != nil {
@@ -640,6 +705,7 @@ func TestStopProcessing_TailUsesNewlineAfterLongPause(t *testing.T) {
 	tr.accumulatedTranscript = "first line"
 	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
 	tr.processedSamples = sampleRate
+	tr.hasSpeechInSegment = true
 	tr.pauseTotal = 2 * time.Second
 	tr.pauseCount = 2 // avg pause = 1s
 	tr.lastSpeechAt = time.Now().Add(-1500 * time.Millisecond)
@@ -660,6 +726,7 @@ func TestStopProcessing_TailUsesSpaceWhenPauseNotLongerThanAverage(t *testing.T)
 	tr.accumulatedTranscript = "first line"
 	tr.audioBuffer = make([]float32, int(1.8*float64(sampleRate)))
 	tr.processedSamples = sampleRate
+	tr.hasSpeechInSegment = true
 	tr.pauseTotal = 4 * time.Second
 	tr.pauseCount = 2 // avg pause = 2s
 	tr.lastSpeechAt = time.Now().Add(-1 * time.Second)
