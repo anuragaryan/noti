@@ -119,7 +119,7 @@ func (c *SystemAudioCapturer) Initialize() error {
 
 	result := C.SystemAudioCapturer_Initialize()
 	if result != 0 {
-		return fmt.Errorf("failed to initialize system audio capturer: macOS 12.3+ required (error code: %d)", result)
+		return fmt.Errorf("failed to initialize system audio capturer: macOS 13.0+ required (error code: %d)", result)
 	}
 
 	c.initialized = true

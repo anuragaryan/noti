@@ -18,6 +18,6 @@
 
 ## Common Commands
 
-- To test use: ./test.sh --no-cache
-- To build the debug build: ./build.sh debug
-- To build the prod build: ./build.sh
+- To test use: ./scripts/test.sh --no-cache
+- To build the debug build: ./scripts/build.sh debug
+- To build the prod build: ./scripts/build.sh

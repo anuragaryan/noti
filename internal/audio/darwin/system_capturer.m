@@ -6,7 +6,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 
 // ScreenCaptureKit delegate for handling audio output
-API_AVAILABLE(macos(12.3))
+API_AVAILABLE(macos(13.0))
 @interface SystemAudioCapturerDelegate : NSObject <SCStreamDelegate, SCStreamOutput>
 @property (nonatomic, assign) AudioDataCallback audioCallback;
 @property (nonatomic, strong) SCStream *stream;
@@ -29,6 +29,11 @@ API_AVAILABLE(macos(12.3))
 
 - (void)stream:(SCStream *)stream didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer 
         ofType:(SCStreamOutputType)type {
+    if (@available(macOS 13.0, *)) {
+    } else {
+        return;
+    }
+
     // Only process audio samples
     if (type != SCStreamOutputTypeAudio) {
         return;
@@ -114,22 +119,22 @@ API_AVAILABLE(macos(12.3))
 @end
 
 // Global instance
-static SystemAudioCapturerDelegate *g_capturer = nil;
+static SystemAudioCapturerDelegate *g_capturer API_AVAILABLE(macos(13.0)) = nil;
 
 int SystemAudioCapturer_Initialize(void) {
-    if (@available(macOS 12.3, *)) {
+    if (@available(macOS 13.0, *)) {
         if (!g_capturer) {
             g_capturer = [[SystemAudioCapturerDelegate alloc] init];
             NSLog(@"[SystemAudio] Capturer initialized");
         }
         return 0;
     }
-    NSLog(@"[SystemAudio] ScreenCaptureKit requires macOS 12.3 or later");
+    NSLog(@"[SystemAudio] System audio capture requires macOS 13.0 or later");
     return -1; // Not supported on this macOS version
 }
 
 SCPermissionStatus SystemAudioCapturer_CheckPermission(void) {
-    if (@available(macOS 12.3, *)) {
+    if (@available(macOS 13.0, *)) {
         // ScreenCaptureKit uses screen recording permission
         // Check via CGPreflightScreenCaptureAccess (available in macOS 10.15+)
         if (CGPreflightScreenCaptureAccess()) {
@@ -150,7 +155,7 @@ void SystemAudioCapturer_RequestPermission(void) {
 }
 
 int SystemAudioCapturer_Start(int sampleRate, int channels, AudioDataCallback callback) {
-    if (@available(macOS 12.3, *)) {
+    if (@available(macOS 13.0, *)) {
         if (!g_capturer) {
             NSLog(@"[SystemAudio] Capturer not initialized");
             return -1;
@@ -305,7 +310,7 @@ int SystemAudioCapturer_Start(int sampleRate, int channels, AudioDataCallback ca
 }
 
 void SystemAudioCapturer_Stop(void) {
-    if (@available(macOS 12.3, *)) {
+    if (@available(macOS 13.0, *)) {
         if (!g_capturer || !g_capturer.isCapturing) {
             return;
         }

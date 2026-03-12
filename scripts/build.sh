@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 MODE="${1:-production}"
 
 if [[ "$MODE" != "debug" && "$MODE" != "production" ]]; then
@@ -15,10 +19,10 @@ GGML_METAL_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src/ggml-metal"
 GGML_BLAS_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src/ggml-blas"
 
 export CGO_LDFLAGS="-L${WHISPER_LIB_DIR} -L${GGML_LIB_DIR} -L${GGML_METAL_LIB_DIR} -L${GGML_BLAS_LIB_DIR} \
-  -lwhisper -lggml -lggml-metal -lggml-blas -lportaudio \
-  -framework Accelerate -framework Foundation -framework Metal"
+  -mmacosx-version-min=13.0"
 
-export CGO_CFLAGS="-I${WHISPER_PATH}/include -I${WHISPER_PATH}/ggml/include"
+export CGO_CFLAGS="-I${WHISPER_PATH}/include -I${WHISPER_PATH}/ggml/include -mmacosx-version-min=13.0"
+export MACOSX_DEPLOYMENT_TARGET="13.0"
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [[ "$MODE" == "debug" ]]; then

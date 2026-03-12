@@ -33,16 +33,28 @@ bun install --cwd frontend
 ### 3) Build and test
 
 ```bash
-./test.sh
-./build.sh debug
-./build.sh production
+./scripts/test.sh
+./scripts/build.sh debug
+./scripts/build.sh production
 ```
 
 The built app is generated at `build/bin/noti.app`.
 
 ### 4) Important local setup note
 
-Current build/test scripts assume a local `whisper.cpp` checkout and macOS CGO flags are available. If your local path differs, update `build.sh` and `test.sh` before building.
+Current build/test scripts assume a local `whisper.cpp` checkout and macOS CGO flags are available. If your local path differs, update `scripts/build.sh` and `scripts/test.sh` before building.
+
+If build/link errors mention `libwhisper`/`ggml` ABI or deployment target mismatches, rebuild the local whisper artifacts:
+
+```bash
+./scripts/rebuild-whisper.sh
+```
+
+You can pass a custom whisper checkout path:
+
+```bash
+./scripts/rebuild-whisper.sh /absolute/path/to/whisper.cpp
+```
 
 ## Architecture
 
