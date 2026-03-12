@@ -19,6 +19,13 @@ The directory contains the following files:
 
 - `Info.plist` - the main plist file used for Mac builds. It is used when building using `wails build`.
 - `Info.dev.plist` - same as the main plist file but used when building using `wails dev`.
+- `Entitlements.plist` - entitlements used by `build.sh` when signing production builds.
+- `Entitlements.dev.plist` - entitlements used by `build.sh` when signing debug builds.
+
+To sign the macOS app bundle with entitlements, set `NOTI_CODESIGN_IDENTITY` before running `build.sh`.
+Example:
+
+`NOTI_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build.sh`
 
 ## Windows
 

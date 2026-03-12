@@ -72,6 +72,32 @@ else
   wails build -platform darwin/arm64 -clean -ldflags "-s -w -X main.env=production -X main.sentryDSN=https://cf7b9fda532355b2262930ddbb4d85b6@o4510992653877248.ingest.de.sentry.io/4510992659447888"
 fi
 
+# Step 5.1: Optional code signing
+SIGNING_IDENTITY="${NOTI_CODESIGN_IDENTITY:-}"
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+  echo ""
+  echo "🔐 Step 5.1: Signing app bundle..."
+
+  ENTITLEMENTS_FILE="build/darwin/Entitlements.plist"
+  if [[ "$MODE" == "debug" ]]; then
+    ENTITLEMENTS_FILE="build/darwin/Entitlements.dev.plist"
+  fi
+
+  CODESIGN_ARGS=(
+    --force
+    --deep
+    --sign "$SIGNING_IDENTITY"
+    --entitlements "$ENTITLEMENTS_FILE"
+  )
+
+  if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+    CODESIGN_ARGS+=(--options runtime --timestamp)
+  fi
+
+  codesign "${CODESIGN_ARGS[@]}" "build/bin/noti.app"
+  codesign --verify --deep --strict --verbose=2 "build/bin/noti.app"
+fi
+
 # Step 6: Verify the build
 echo ""
 echo "✅ Build complete!"
