@@ -68,28 +68,37 @@ API_AVAILABLE(macos(12.3))
         return;
     }
     
-    // ScreenCaptureKit provides audio in float32 format
-    // Calculate sample count based on format
-    int bytesPerSample = sizeof(float);
-    int sampleCount = (int)(totalLength / bytesPerSample);
-    
-    // If stereo and we need mono, we'll need to mix down
-    if (asbd->mChannelsPerFrame == 2 && self.targetChannels == 1) {
-        // Mix stereo to mono
+    // ScreenCaptureKit provides audio in float32 interleaved format.
+    // totalLength is in bytes; divide by sizeof(float) to get total float values,
+    // then divide by channel count to get the number of frames.
+    int channelCount = (int)asbd->mChannelsPerFrame;
+    if (channelCount <= 0) {
+        NSLog(@"[SystemAudio] Invalid channel count: %d, skipping buffer", channelCount);
+        return;
+    }
+    int totalSamples = (int)(totalLength / sizeof(float));
+    if (totalSamples % channelCount != 0) {
+        NSLog(@"[SystemAudio] Buffer size %d not evenly divisible by channel count %d, truncating",
+              totalSamples, channelCount);
+    }
+    int frameCount = totalSamples / channelCount;
+
+    // If stereo and we need mono, mix down to a mono buffer
+    if (channelCount == 2 && self.targetChannels == 1) {
         float *stereoData = (float *)dataPointer;
-        int stereoSamples = sampleCount / 2;
-        float *monoData = (float *)malloc(stereoSamples * sizeof(float));
-        
-        for (int i = 0; i < stereoSamples; i++) {
+        float *monoData = (float *)malloc(frameCount * sizeof(float));
+
+        for (int i = 0; i < frameCount; i++) {
             monoData[i] = (stereoData[i * 2] + stereoData[i * 2 + 1]) / 2.0f;
         }
-        
-        self.audioCallback(monoData, stereoSamples, (int)asbd->mSampleRate, 1);
+
+        // callback receives frameCount frames, 1 channel
+        self.audioCallback(monoData, frameCount, (int)asbd->mSampleRate, 1);
         free(monoData);
     } else {
-        // Pass through as-is
-        self.audioCallback((float *)dataPointer, sampleCount / asbd->mChannelsPerFrame, 
-                          (int)asbd->mSampleRate, (int)asbd->mChannelsPerFrame);
+        // Pass interleaved buffer as-is; callback receives frameCount frames
+        self.audioCallback((float *)dataPointer, frameCount,
+                          (int)asbd->mSampleRate, channelCount);
     }
 }
 

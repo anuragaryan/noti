@@ -11,11 +11,11 @@ package darwin
 #include <stdlib.h>
 
 // Forward declaration for Go callback
-extern void goAudioCallback(float *data, int sampleCount, int sampleRate, int channels);
+extern void goAudioCallback(float *data, int frameCount, int sampleRate, int channels);
 
 // Bridge function that calls the Go callback
-static void audioCallbackBridge(float *data, int sampleCount, int sampleRate, int channels) {
-    goAudioCallback(data, sampleCount, sampleRate, channels);
+static void audioCallbackBridge(float *data, int frameCount, int sampleRate, int channels) {
+    goAudioCallback(data, frameCount, sampleRate, channels);
 }
 
 // Wrapper to start capture with our bridge callback
@@ -42,7 +42,7 @@ var (
 )
 
 //export goAudioCallback
-func goAudioCallback(data *C.float, sampleCount C.int, sampleRate C.int, channels C.int) {
+func goAudioCallback(data *C.float, frameCount C.int, sampleRate C.int, channels C.int) {
 	callbackMutex.RLock()
 	cb := globalCallback
 	callbackMutex.RUnlock()
@@ -51,24 +51,43 @@ func goAudioCallback(data *C.float, sampleCount C.int, sampleRate C.int, channel
 		return
 	}
 
-	// Convert C float array to Go slice
-	count := int(sampleCount)
-	if count <= 0 {
+	frames := int(frameCount)
+	chans := int(channels)
+	if frames <= 0 || chans <= 0 {
 		return
 	}
 
-	goData := make([]float32, count)
+	// Total number of float32 values in the interleaved buffer
+	totalSamples := frames * chans
+	cSlice := (*[1 << 28]C.float)(unsafe.Pointer(data))[:totalSamples:totalSamples]
 
-	// Use unsafe to access C array efficiently
-	cSlice := (*[1 << 28]C.float)(unsafe.Pointer(data))[:count:count]
-	for i := 0; i < count; i++ {
-		goData[i] = float32(cSlice[i])
+	// The transcriber requires mono audio. If the C layer passed through a
+	// multi-channel buffer (e.g. config.Channels != 1), downmix here so the
+	// chunk is never silently dropped by the transcriber's channel check.
+	var goData []float32
+	outChans := chans
+	if chans > 1 {
+		goData = make([]float32, frames)
+		scale := float32(1.0 / float64(chans))
+		for i := 0; i < frames; i++ {
+			var sum float32
+			for c := 0; c < chans; c++ {
+				sum += float32(cSlice[i*chans+c])
+			}
+			goData[i] = sum * scale
+		}
+		outChans = 1
+	} else {
+		goData = make([]float32, totalSamples)
+		for i := 0; i < totalSamples; i++ {
+			goData[i] = float32(cSlice[i])
+		}
 	}
 
 	chunk := domain.AudioChunk{
 		Data:       goData,
 		SampleRate: int(sampleRate),
-		Channels:   int(channels),
+		Channels:   outChans,
 		Timestamp:  time.Now().UnixMilli(),
 	}
 

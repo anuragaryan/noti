@@ -5,11 +5,11 @@
 #import <Foundation/Foundation.h>
 
 // Callback type for audio data
-// data: pointer to float32 audio samples
-// sampleCount: number of samples in the buffer
+// data: pointer to float32 audio samples (interleaved, frameCount * channels values)
+// frameCount: number of frames (each frame contains one sample per channel)
 // sampleRate: sample rate in Hz
 // channels: number of audio channels
-typedef void (*AudioDataCallback)(float *data, int sampleCount, int sampleRate, int channels);
+typedef void (*AudioDataCallback)(float *data, int frameCount, int sampleRate, int channels);
 
 // Permission status enum
 typedef NS_ENUM(NSInteger, SCPermissionStatus) {
@@ -33,7 +33,8 @@ void SystemAudioCapturer_RequestPermission(void);
 // Start capturing system audio
 // sampleRate: desired sample rate in Hz (e.g., 16000, 44100, 48000)
 // channels: number of channels (1 for mono, 2 for stereo)
-// callback: function to call when audio data is available
+// callback: function to call when audio data is available;
+//           callback receives frameCount (not total sample count)
 // Returns 0 on success, negative value on error
 int SystemAudioCapturer_Start(int sampleRate, int channels, AudioDataCallback callback);
 
