@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NotI - Desktop notes with voice and AI</title>
+    <meta
+      name="description"
+      content="Capture notes quickly, transcribe voice, and edit with AI in one focused desktop app."
+    />
+    <link rel="canonical" href="https://anuragaryan.github.io/noti/" />
+    <meta property="og:title" content="NotI - Desktop notes with voice and AI" />
+    <meta
+      property="og:description"
+      content="Capture notes quickly, transcribe voice, and edit with AI in one focused desktop app."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://anuragaryan.github.io/noti/" />
+    <meta property="og:image" content="https://anuragaryan.github.io/noti/assets/icon.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NotI - Desktop notes with voice and AI" />
+    <meta
+      name="twitter:description"
+      content="Capture notes quickly, transcribe voice, and edit with AI in one focused desktop app."
+    />
+    <meta name="twitter:image" content="https://anuragaryan.github.io/noti/assets/icon.png" />
+    <link rel="icon" type="image/png" href="./assets/icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Instrument+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="ambient ambient-left" aria-hidden="true"></div>
+    <div class="ambient ambient-right" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <nav class="container nav">
+        <a class="brand" href="#top" aria-label="NotI home">
+          <span class="brand-mark" aria-hidden="true">
+            <img src="./assets/icon.png" alt="" />
+          </span>
+          <span class="brand-name">NotI</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#screenshots">Screenshots</a>
+          <a class="nav-download" href="#download">Download</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero-wrap">
+        <div class="container hero">
+          <div class="hero-copy reveal reveal-1">
+            <p class="eyebrow">Built for focused work</p>
+            <h1>Take notes fast. Clean them up without losing your train of thought.</h1>
+            <p class="hero-text">
+              NotI keeps capture, transcription, and AI editing in one place, so you can think clearly and keep moving.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="https://github.com/anuragaryan/noti/releases/latest" target="_blank" rel="noreferrer">
+                Download for macOS
+              </a>
+              <a class="btn btn-secondary" href="#features">See how it works</a>
+            </div>
+            <ul class="hero-metadata" aria-label="Product highlights">
+              <li>
+                <span>Private by default</span>
+                <strong>Your notes stay local</strong>
+              </li>
+              <li>
+                <span>Voice capture</span>
+                <strong>Speak, then edit</strong>
+              </li>
+              <li>
+                <span>AI assistance</span>
+                <strong>Edit in context</strong>
+              </li>
+            </ul>
+          </div>
+
+          <div class="hero-visual reveal reveal-2" aria-label="NotI product preview">
+            <figure class="window window-main">
+              <img
+                class="screenshot-img"
+                src="./assets/screenshots-landing-page.png"
+                alt="NotI main workspace screenshot"
+                loading="eager"
+                fetchpriority="high"
+                decoding="async"
+              />
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="section section-feature">
+        <div class="container feature-layout">
+          <aside class="manifesto reveal reveal-2">
+            <p class="eyebrow">Why people use NotI</p>
+            <h2>From rough thought to finished note.</h2>
+            <p>
+              Built for writers, founders, and operators who draft fast and refine as they go.
+            </p>
+          </aside>
+
+          <div class="feature-grid">
+            <article class="card feature-card reveal reveal-2">
+              <h3>AI writing assistant</h3>
+              <p>Rewrite, summarize, or expand drafts without jumping to another tool.</p>
+            </article>
+            <article class="card feature-card reveal reveal-3">
+              <h3>Voice to text capture</h3>
+              <p>Capture ideas by voice and turn them into editable notes in seconds.</p>
+            </article>
+            <article class="card feature-card reveal reveal-3">
+              <h3>Local-first foundation</h3>
+              <p>Keep your data on-device, with the option to connect external models when needed.</p>
+            </article>
+            <article class="card feature-card reveal reveal-4">
+              <h3>Native desktop speed</h3>
+              <p>Fast startup, smooth typing, and none of the browser drag.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="screenshots" class="section">
+        <div class="container">
+          <div class="section-head reveal reveal-2">
+            <p class="eyebrow">Screenshots</p>
+            <h2>A clean workspace that stays out of your way.</h2>
+          </div>
+          <div class="shots-grid">
+            <figure class="shot-card reveal reveal-2">
+              <img
+                class="shot screenshot-img"
+                src="./assets/screenshots-recording.png"
+                alt="NotI voice recording workflow"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>Record first, organize later.</figcaption>
+            </figure>
+            <figure class="shot-card reveal reveal-3">
+              <img
+                class="shot screenshot-img"
+                src="./assets/screenshots-reasoning.png"
+                alt="NotI AI reasoning and output view"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>See model reasoning when you need transparency.</figcaption>
+            </figure>
+            <figure class="shot-card reveal reveal-4">
+              <img
+                class="shot screenshot-img"
+                src="./assets/screenshots-responding.png"
+                alt="NotI AI response in the editor"
+                loading="lazy"
+                decoding="async"
+              />
+              <figcaption>Get edits and responses right inside your note.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <section id="download" class="section section-download">
+        <div class="container reveal reveal-2">
+          <article class="download-panel">
+            <div>
+              <p class="eyebrow">Download</p>
+              <h2>Start using NotI on macOS.</h2>
+              <p>
+                Install the latest build and start writing in minutes. Windows support is in progress.
+              </p>
+            </div>
+            <div class="download-actions">
+              <a class="btn btn-primary" href="https://github.com/anuragaryan/noti/releases/latest" target="_blank" rel="noreferrer">
+                Download for macOS
+              </a>
+              <span class="coming-soon" aria-label="Windows support status">Windows support in progress</span>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-row">
+        <p>NotI - Note + AI</p>
+        <a href="https://github.com/anuragaryan/noti" target="_blank" rel="noreferrer">GitHub Repository</a>
+      </div>
+    </footer>
+  </body>
+</html>
