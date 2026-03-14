@@ -3,40 +3,40 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NotI - Desktop notes with voice and AI</title>
+    <title>NotI - Audio capture, transcription, and structured notes</title>
     <meta
       name="description"
-      content="Capture notes quickly, transcribe voice, and edit with AI in one focused desktop app."
+      content="Record conversations, review transcripts, and turn spoken context into structured notes and action items in one focused desktop app."
     />
     <link rel="canonical" href="https://anuragaryan.github.io/noti/" />
-    <meta property="og:title" content="NotI - Desktop notes with voice and AI" />
+    <meta property="og:title" content="NotI - Audio capture, transcription, and structured notes" />
     <meta
       property="og:description"
-      content="Capture notes quickly, transcribe voice, and edit with AI in one focused desktop app."
+      content="Record conversations, review transcripts, and turn spoken context into structured notes and action items in one focused desktop app."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://anuragaryan.github.io/noti/" />
     <meta property="og:image" content="https://anuragaryan.github.io/noti/assets/icon.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="NotI - Desktop notes with voice and AI" />
+    <meta name="twitter:title" content="NotI - Audio capture, transcription, and structured notes" />
     <meta
       name="twitter:description"
-      content="Capture notes quickly, transcribe voice, and edit with AI in one focused desktop app."
+      content="Record conversations, review transcripts, and turn spoken context into structured notes and action items in one focused desktop app."
     />
     <meta name="twitter:image" content="https://anuragaryan.github.io/noti/assets/icon.png" />
     <link rel="icon" type="image/png" href="./assets/icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=Instrument+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="grain" aria-hidden="true"></div>
-    <div class="ambient ambient-left" aria-hidden="true"></div>
-    <div class="ambient ambient-right" aria-hidden="true"></div>
+    <div class="page-grid" aria-hidden="true"></div>
+    <div class="signal signal-left" aria-hidden="true"></div>
+    <div class="signal signal-right" aria-hidden="true"></div>
 
     <header class="site-header">
       <nav class="container nav">
@@ -44,11 +44,15 @@
           <span class="brand-mark" aria-hidden="true">
             <img src="./assets/icon.png" alt="" />
           </span>
-          <span class="brand-name">NotI</span>
+          <span class="brand-copy">
+            <span class="brand-name">NotI</span>
+            <span class="brand-tag">Audio note intelligence</span>
+          </span>
         </a>
         <div class="nav-links">
-          <a href="#features">Features</a>
-          <a href="#screenshots">Screenshots</a>
+          <a href="#capabilities">Capabilities</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#screens">Screens</a>
           <a class="nav-download" href="#download">Download</a>
         </div>
       </nav>
@@ -58,87 +62,150 @@
       <section class="hero-wrap">
         <div class="container hero">
           <div class="hero-copy reveal reveal-1">
-            <p class="eyebrow">Built for focused work</p>
-            <h1>Take notes fast. Clean them up without losing your train of thought.</h1>
+            <p class="eyebrow">Audio intelligence for desktop notes</p>
+            <h1>Transcribe, analyze, and structure spoken context.</h1>
             <p class="hero-text">
-              NotI keeps capture, transcription, and AI editing in one place, so you can think clearly and keep moving.
+              NotI turns raw conversations into transcripts, summaries, and action-ready notes without sending you through a maze of tabs, tools, or disconnected workflows.
             </p>
             <div class="hero-actions">
               <a class="btn btn-primary" href="https://github.com/anuragaryan/noti/releases/latest" target="_blank" rel="noreferrer">
                 Download for macOS
               </a>
-              <a class="btn btn-secondary" href="#features">See how it works</a>
+              <a class="btn btn-secondary" href="#workflow">Inspect the workflow</a>
             </div>
-            <ul class="hero-metadata" aria-label="Product highlights">
+            <ul class="hero-metrics" aria-label="Workflow metrics">
               <li>
-                <span>Private by default</span>
-                <strong>Your notes stay local</strong>
+                <span>Input</span>
+                <strong>Voice + typed notes</strong>
               </li>
               <li>
-                <span>Voice capture</span>
-                <strong>Speak, then edit</strong>
+                <span>Output</span>
+                <strong>Transcript, summary, actions</strong>
               </li>
               <li>
-                <span>AI assistance</span>
-                <strong>Edit in context</strong>
+                <span>Model flow</span>
+                <strong>Local-first, provider optional</strong>
               </li>
             </ul>
+            <ol class="workflow-rail" aria-label="Core workflow stages">
+              <li>Capture</li>
+              <li>Transcribe</li>
+              <li>Extract</li>
+              <li>Refine</li>
+            </ol>
           </div>
 
           <div class="hero-visual reveal reveal-2" aria-label="NotI product preview">
-            <figure class="window window-main">
-              <img
-                class="screenshot-img"
-                src="./assets/screenshots-landing-page.png"
-                alt="NotI main workspace screenshot"
-                loading="eager"
-                fetchpriority="high"
-                decoding="async"
-              />
-            </figure>
+            <div class="hero-frame">
+              <div class="hero-frame-top" aria-hidden="true">
+                <span class="hero-chip hero-chip-live">REC 01:14</span>
+                <span class="hero-chip">Transcript sync</span>
+                <span class="hero-chip">Summary ready</span>
+                <span class="hero-chip">AI Copilot</span>
+              </div>
+              <figure class="window window-main">
+                <img
+                  class="screenshot-img"
+                  src="./assets/screenshots-landing-page.png"
+                  alt="NotI main workspace screenshot"
+                  loading="eager"
+                  fetchpriority="high"
+                  decoding="async"
+                />
+              </figure>
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="features" class="section section-feature">
-        <div class="container feature-layout">
-          <aside class="manifesto reveal reveal-2">
-            <p class="eyebrow">Why people use NotI</p>
-            <h2>From rough thought to finished note.</h2>
+      <section id="capabilities" class="section section-capabilities">
+        <div class="container capability-layout">
+          <aside class="pipeline-panel reveal reveal-2">
+            <p class="eyebrow">Processing pipeline</p>
+            <h2>One controlled flow from audio input to usable notes.</h2>
             <p>
-              Built for writers, founders, and operators who draft fast and refine as they go.
+              Capture first, inspect the transcript, extract signal, then refine the final note in the same local workspace.
             </p>
+            <div class="pipeline-readout" aria-hidden="true">
+              <span>transcript.txt</span>
+              <span>summary.md</span>
+            </div>
           </aside>
 
-          <div class="feature-grid">
-            <article class="card feature-card reveal reveal-2">
-              <h3>AI writing assistant</h3>
-              <p>Rewrite, summarize, or expand drafts without jumping to another tool.</p>
+          <div class="capability-grid">
+            <article class="capability-card reveal reveal-2">
+              <span class="capability-meta">audio -> text</span>
+              <h3>Live capture</h3>
+              <p>Record meetings, calls, or quick thoughts without leaving the note workspace.</p>
             </article>
-            <article class="card feature-card reveal reveal-3">
-              <h3>Voice to text capture</h3>
-              <p>Capture ideas by voice and turn them into editable notes in seconds.</p>
+            <article class="capability-card reveal reveal-3">
+              <span class="capability-meta">review -> inspect</span>
+              <h3>Transcript review</h3>
+              <p>Check generated text against the source before you turn it into something final.</p>
             </article>
-            <article class="card feature-card reveal reveal-3">
-              <h3>Local-first foundation</h3>
-              <p>Keep your data on-device, with the option to connect external models when needed.</p>
+            <article class="capability-card reveal reveal-4">
+              <span class="capability-meta">summary -> actions</span>
+              <h3>Structured extraction</h3>
+              <p>Pull decisions, highlights, and next steps out of longer conversations quickly.</p>
             </article>
-            <article class="card feature-card reveal reveal-4">
-              <h3>Native desktop speed</h3>
-              <p>Fast startup, smooth typing, and none of the browser drag.</p>
+            <article class="capability-card reveal reveal-3">
+              <span class="capability-meta">prompt -> refine</span>
+              <h3>Prompt-assisted editing</h3>
+              <p>Rewrite, expand, or condense notes once the important context is already captured.</p>
             </article>
           </div>
         </div>
       </section>
 
-      <section id="screenshots" class="section">
+      <section id="workflow" class="section section-workflow">
         <div class="container">
           <div class="section-head reveal reveal-2">
-            <p class="eyebrow">Screenshots</p>
-            <h2>A clean workspace that stays out of your way.</h2>
+            <p class="eyebrow">Workflow</p>
+            <h2>Signal in. Structure out.</h2>
+            <p class="section-copy">
+              Each stage is built to keep context intact while moving from raw conversation to clean, usable notes.
+            </p>
+          </div>
+          <div class="workflow-grid">
+            <article class="workflow-step reveal reveal-2">
+              <span class="step-index">01</span>
+              <h3>Capture audio</h3>
+              <p>Start with the source material instead of trying to summarize while listening.</p>
+            </article>
+            <article class="workflow-step reveal reveal-3">
+              <span class="step-index">02</span>
+              <h3>Generate transcript</h3>
+              <p>Convert spoken context into searchable text you can inspect and revise.</p>
+            </article>
+            <article class="workflow-step reveal reveal-4">
+              <span class="step-index">03</span>
+              <h3>Extract key points</h3>
+              <p>Identify decisions, summaries, and action items without replaying the full conversation.</p>
+            </article>
+            <article class="workflow-step reveal reveal-4">
+              <span class="step-index">04</span>
+              <h3>Edit final note</h3>
+              <p>Refine the result into a clean note ready for follow-up, archival, or sharing.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="screens" class="section">
+        <div class="container">
+          <div class="section-head reveal reveal-2">
+            <p class="eyebrow">Screens</p>
+            <h2>Inspect each stage of the workflow.</h2>
+            <p class="section-copy">
+              The product stays in one environment while the job changes from capture to analysis to refinement.
+            </p>
           </div>
           <div class="shots-grid">
             <figure class="shot-card reveal reveal-2">
+              <div class="shot-head">
+                <div class="shot-label">01 Capture</div>
+                <span class="shot-meta">audio input</span>
+              </div>
               <img
                 class="shot screenshot-img"
                 src="./assets/screenshots-recording.png"
@@ -146,9 +213,13 @@
                 loading="lazy"
                 decoding="async"
               />
-              <figcaption>Record first, organize later.</figcaption>
+              <figcaption>Record and monitor audio input before processing.</figcaption>
             </figure>
             <figure class="shot-card reveal reveal-3">
+              <div class="shot-head">
+                <div class="shot-label">02 Analyze</div>
+                <span class="shot-meta">model review</span>
+              </div>
               <img
                 class="shot screenshot-img"
                 src="./assets/screenshots-reasoning.png"
@@ -156,9 +227,13 @@
                 loading="lazy"
                 decoding="async"
               />
-              <figcaption>See model reasoning when you need transparency.</figcaption>
+              <figcaption>Inspect transcript context and model-generated reasoning in one view.</figcaption>
             </figure>
             <figure class="shot-card reveal reveal-4">
+              <div class="shot-head">
+                <div class="shot-label">03 Refine</div>
+                <span class="shot-meta">final note</span>
+              </div>
               <img
                 class="shot screenshot-img"
                 src="./assets/screenshots-responding.png"
@@ -166,7 +241,7 @@
                 loading="lazy"
                 decoding="async"
               />
-              <figcaption>Get edits and responses right inside your note.</figcaption>
+              <figcaption>Turn extracted output into final notes without switching tools.</figcaption>
             </figure>
           </div>
         </div>
@@ -177,16 +252,18 @@
           <article class="download-panel">
             <div>
               <p class="eyebrow">Download</p>
-              <h2>Start using NotI on macOS.</h2>
+              <h2>Run NotI locally on macOS.</h2>
               <p>
-                Install the latest build and start writing in minutes. Windows support is in progress.
+                Install the latest desktop build from GitHub Releases and start capturing audio, transcripts, and structured notes in one local workflow.
               </p>
             </div>
             <div class="download-actions">
               <a class="btn btn-primary" href="https://github.com/anuragaryan/noti/releases/latest" target="_blank" rel="noreferrer">
                 Download for macOS
               </a>
-              <span class="coming-soon" aria-label="Windows support status">Windows support in progress</span>
+              <ul class="download-meta" aria-label="Platform details">
+                <li><span>Windows</span><strong>In progress</strong></li>
+              </ul>
             </div>
           </article>
         </div>
@@ -195,7 +272,7 @@
 
     <footer class="site-footer">
       <div class="container footer-row">
-        <p>NotI - Note + AI</p>
+        <p>NotI - Desktop audio notes and AI analysis</p>
         <a href="https://github.com/anuragaryan/noti" target="_blank" rel="noreferrer">GitHub Repository</a>
       </div>
     </footer>
