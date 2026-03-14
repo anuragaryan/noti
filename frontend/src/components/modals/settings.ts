@@ -180,7 +180,7 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     <div class="modal-card modal-card-settings">
       <div class="modal-header">
         <h2 class="modal-heading">Settings</h2>
-        <button id="settings-close" class="btn-icon">${icon('x', 16)}</button>
+        <button id="settings-close-icon" class="btn-icon">${icon('x', 16)}</button>
       </div>
 
       <div class="modal-body">
@@ -262,7 +262,7 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
       </div>
 
       <div class="modal-footer">
-        <button id="settings-cancel" class="btn-secondary">Cancel</button>
+        <button id="settings-close" class="btn-secondary">Close</button>
         <button id="settings-save" class="btn-primary">Save Settings</button>
       </div>
     </div>
@@ -454,8 +454,8 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
 
   // Close buttons
   const close = () => state.closeModal()
+  container.querySelector('#settings-close-icon')?.addEventListener('click', close)
   container.querySelector('#settings-close')?.addEventListener('click', close)
-  container.querySelector('#settings-cancel')?.addEventListener('click', close)
   const saveButton = container.querySelector<HTMLButtonElement>('#settings-save')
 
   function setSaveButtonLoading(loading: boolean): void {
