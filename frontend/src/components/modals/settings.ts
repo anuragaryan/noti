@@ -89,6 +89,19 @@ function saveLLMModelByProvider(modelsByProvider: Record<string, string>): void 
   }
 }
 
+function modelOptionsHtml(models: ModelOption[], selectedValue: string): string {
+  if (models.length === 0) {
+    return `<option value="${escapeHtml(selectedValue)}" selected>${escapeHtml(selectedValue || 'No models available')}</option>`
+  }
+  const exists = models.some((m) => m.code === selectedValue)
+  const withFallback = exists || !selectedValue
+    ? models
+    : [{ id: 0, code: selectedValue, name: selectedValue, isRecommended: false, note: '' }, ...models]
+  return withFallback.map((m) => {
+    return `<option value="${escapeHtml(m.code)}" ${m.code === selectedValue ? 'selected' : ''}>${escapeHtml(modelLabel(m))}</option>`
+  }).join('')
+}
+
 // ─── Icons — see utils/icons.ts ────────────────────
 
 export async function renderSettingsModal(container: HTMLElement): Promise<void> {
@@ -106,6 +119,10 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
   // Fetch model lists in parallel
   let sttModels: ModelOption[] = []
   let llmModels: ModelOption[] = []
+  let apiModels: ModelOption[] = []
+  const initialAPIEndpoint = config.llm?.apiEndpoint || ''
+  const initialAPIKey = config.llm?.apiKey || ''
+  const shouldLoadAPIModels = (config.llm?.provider || 'local') === 'api' && initialAPIEndpoint.trim() !== ''
   try {
     ;[sttModels, llmModels] = await Promise.all([
       AudioAPI.getSTTModels(),
@@ -115,8 +132,17 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     // Fall back to empty lists — inputs will still render
   }
 
+  if (shouldLoadAPIModels) {
+    try {
+      apiModels = await LLMAPI.getAPILLMModels(initialAPIEndpoint, initialAPIKey)
+    } catch {
+      apiModels = []
+    }
+  }
+
   sttModels = sortByID(sttModels)
   llmModels = sortByID(llmModels)
+  apiModels = sortByID(apiModels)
 
   const currentProvider = config.llm?.provider || 'local'
   const isLocal = currentProvider === 'local'
@@ -136,15 +162,14 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
       ).join('')
     : `<option value="${escapeHtml(config.modelName || '')}" selected>${escapeHtml(config.modelName || '')}</option>`
 
-  // Build LLM local model options
-  const llmLocalModelOptions = llmModels.length > 0
-    ? llmModels.map(m =>
-        `<option value="${escapeHtml(m.code)}" ${localModelName === m.code ? 'selected' : ''}>${escapeHtml(modelLabel(m))}</option>`
-      ).join('')
-    : `<option value="${escapeHtml(localModelName)}" selected>${escapeHtml(localModelName)}</option>`
+  const llmLocalModelOptions = modelOptionsHtml(llmModels, localModelName)
+  const llmAPIModelOptions = modelOptionsHtml(apiModels, apiModelName)
 
   const sttNote = noteForModel(sttModels, config.modelName || sttModels[0]?.code || '')
   const llmNote = noteForModel(llmModels, localModelName)
+  const apiModelStatus = currentProvider === 'api' && !shouldLoadAPIModels
+    ? 'Enter API endpoint, then click refresh to load hosted models.'
+    : ''
   const selectedSTTLanguage = config.sttLanguage || 'en'
   const sttLanguageOptions = STT_LANGUAGES.map((language) => {
     return `<option value="${escapeHtml(language.code)}" ${selectedSTTLanguage === language.code ? 'selected' : ''}>${escapeHtml(language.name)}</option>`
@@ -193,10 +218,11 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
               <div id="llm-model-container">
                 ${isLocal
                   ? `<select id="llm-model" class="form-select">${llmLocalModelOptions}</select>`
-                  : `<input id="llm-model" type="text" class="form-input" value="${escapeHtml(apiModelName)}" />`
+                  : `<div class="model-select-row"><select id="llm-model" class="form-select">${llmAPIModelOptions}</select><button id="llm-model-refresh" type="button" class="btn-icon model-refresh-btn" title="Refresh models">${icon('refresh-cw', 14)}</button></div>`
                 }
               </div>
               <p id="llm-model-note" class="form-note${isLocal && llmNote ? '' : ' hidden'}">${escapeHtml(llmNote)}</p>
+              <p id="llm-api-model-status" class="form-note${!isLocal && apiModelStatus ? '' : ' hidden'}">${escapeHtml(apiModelStatus)}</p>
             </label>
             <label id="llm-api-endpoint-label" class="form-label${isLocal ? ' hidden' : ''}">
               <span class="form-label-text">API Endpoint</span>
@@ -265,7 +291,11 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
   const modelContainer = container.querySelector<HTMLElement>('#llm-model-container')
   const sttNoteEl = container.querySelector<HTMLElement>('#stt-model-note')
   const llmNoteEl = container.querySelector<HTMLElement>('#llm-model-note')
+  const apiModelStatusEl = container.querySelector<HTMLElement>('#llm-api-model-status')
   let activeProvider = currentProvider
+  let apiModelOptions = apiModels
+  let apiModelMessage = apiModelStatus
+  let apiModelLoading = false
 
   function renderModelNotes(provider: string): void {
     const sttCode = container.querySelector<HTMLSelectElement>('#stt-model')?.value ?? config?.modelName ?? ''
@@ -275,16 +305,26 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
       sttNoteEl.classList.toggle('hidden', sttText === '')
     }
 
-    if (!llmNoteEl) return
-    if (provider !== 'local') {
-      llmNoteEl.textContent = ''
-      llmNoteEl.classList.add('hidden')
+    if (llmNoteEl) {
+      if (provider !== 'local') {
+        llmNoteEl.textContent = ''
+        llmNoteEl.classList.add('hidden')
+      } else {
+        const llmCode = modelContainer?.querySelector<HTMLInputElement | HTMLSelectElement>('#llm-model')?.value ?? ''
+        const llmText = noteForModel(llmModels, llmCode)
+        llmNoteEl.textContent = llmText
+        llmNoteEl.classList.toggle('hidden', llmText === '')
+      }
+    }
+
+    if (!apiModelStatusEl) return
+    if (provider !== 'api') {
+      apiModelStatusEl.textContent = ''
+      apiModelStatusEl.classList.add('hidden')
       return
     }
-    const llmCode = modelContainer?.querySelector<HTMLInputElement | HTMLSelectElement>('#llm-model')?.value ?? ''
-    const llmText = noteForModel(llmModels, llmCode)
-    llmNoteEl.textContent = llmText
-    llmNoteEl.classList.toggle('hidden', llmText === '')
+    apiModelStatusEl.textContent = apiModelMessage
+    apiModelStatusEl.classList.toggle('hidden', apiModelMessage.trim() === '')
   }
 
   function rememberModel(provider: string, modelName: string): void {
@@ -303,20 +343,59 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     if (!modelContainer) return
     if (provider === 'local') {
       const safeValue = selectedValue || fallbackModelFor('local')
-      if (llmModels.length === 0) {
-        modelContainer.innerHTML = `<select id="llm-model" class="form-select"><option value="${escapeHtml(safeValue)}" selected>${escapeHtml(safeValue)}</option></select>`
-        return
-      }
-      modelContainer.innerHTML = `<select id="llm-model" class="form-select">
-        ${llmModels.map(m =>
-          `<option value="${escapeHtml(m.code)}" ${m.code === safeValue ? 'selected' : ''}>${escapeHtml(modelLabel(m))}</option>`
-        ).join('')}
-      </select>`
+      modelContainer.innerHTML = `<select id="llm-model" class="form-select">${modelOptionsHtml(llmModels, safeValue)}</select>`
       renderModelNotes(provider)
       return
     }
-    modelContainer.innerHTML = `<input id="llm-model" type="text" class="form-input" value="${escapeHtml(selectedValue)}" />`
+    const modelControl = apiModelOptions.length > 0
+      ? `<select id="llm-model" class="form-select">${modelOptionsHtml(apiModelOptions, selectedValue)}</select>`
+      : `<input id="llm-model" type="text" class="form-input" value="${escapeHtml(selectedValue)}" placeholder="gpt-4o-mini" />`
+    modelContainer.innerHTML = `<div class="model-select-row">${modelControl}<button id="llm-model-refresh" type="button" class="btn-icon model-refresh-btn${apiModelLoading ? ' icon-spin' : ''}" title="Refresh models" ${apiModelLoading ? 'disabled' : ''}>${icon('refresh-cw', 14)}</button></div>`
     renderModelNotes(provider)
+  }
+
+  async function refreshAPIModels(): Promise<void> {
+    const endpoint = container.querySelector<HTMLInputElement>('#llm-endpoint')?.value ?? ''
+    const apiKey = container.querySelector<HTMLInputElement>('#llm-apikey')?.value ?? ''
+    if (endpoint.trim() === '') {
+      apiModelMessage = 'Enter API endpoint, then click refresh to load hosted models.'
+      renderModelNotes(activeProvider)
+      return
+    }
+
+    apiModelLoading = true
+    apiModelMessage = 'Loading models...'
+    const currentValue = modelContainer?.querySelector<HTMLSelectElement>('#llm-model')?.value ?? modelsByProvider.api ?? ''
+    if (activeProvider === 'api') {
+      renderModelInput('api', currentValue)
+    }
+
+    try {
+      const fetched = sortByID(await LLMAPI.getAPILLMModels(endpoint, apiKey))
+      apiModelOptions = fetched
+      const fallback = fetched[0]?.code ?? currentValue
+      const nextValue = fetched.some((m) => m.code === currentValue) ? currentValue : fallback
+      rememberModel('api', nextValue)
+      apiModelMessage = fetched.length > 0
+        ? `Loaded ${fetched.length} hosted model${fetched.length === 1 ? '' : 's'}.`
+        : 'No models were returned by this endpoint. Enter a model ID manually.'
+      if (activeProvider === 'api') {
+        renderModelInput('api', nextValue)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      apiModelOptions = []
+      apiModelMessage = `Failed to load API models: ${message}. Enter a model ID manually.`
+      if (activeProvider === 'api') {
+        renderModelNotes('api')
+      }
+    } finally {
+      apiModelLoading = false
+      if (activeProvider === 'api') {
+        const selected = modelContainer?.querySelector<HTMLSelectElement>('#llm-model')?.value ?? modelsByProvider.api ?? ''
+        renderModelInput('api', selected)
+      }
+    }
   }
 
   function updateProviderUI(provider: string): void {
@@ -341,6 +420,9 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     const rememberedValue = modelsByProvider[provider] ?? fallbackModelFor(provider)
     renderModelInput(provider, rememberedValue)
     renderModelNotes(provider)
+    if (provider === 'api' && apiModelOptions.length === 0) {
+      void refreshAPIModels()
+    }
   }
 
   modelContainer?.addEventListener('input', (e) => {
@@ -351,6 +433,12 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
     if (!(e.target instanceof HTMLSelectElement) || e.target.id !== 'llm-model') return
     rememberModel(activeProvider, e.target.value)
     renderModelNotes(activeProvider)
+  })
+  modelContainer?.addEventListener('click', (e) => {
+    if (!(e.target instanceof Element)) return
+    const refreshButton = e.target.closest<HTMLButtonElement>('#llm-model-refresh')
+    if (!refreshButton) return
+    void refreshAPIModels()
   })
 
   container.querySelector<HTMLSelectElement>('#stt-model')?.addEventListener('change', () => {

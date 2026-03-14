@@ -146,6 +146,10 @@ export const LLMAPI = {
     return App.GetLLMModels()
   },
 
+  getAPILLMModels(apiEndpoint: string, apiKey: string): Promise<ModelOption[]> {
+    return App.GetAPILLMModels(apiEndpoint, apiKey)
+  },
+
   getStreamingSupport(): Promise<boolean> {
     return App.GetStreamingSupport()
   },

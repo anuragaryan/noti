@@ -28,6 +28,8 @@ export function GenerateText(arg1:string,arg2:string):Promise<domain.LLMResponse
 
 export function GenerateTextStream(arg1:string,arg2:string):Promise<void>;
 
+export function GetAPILLMModels(arg1:string,arg2:string):Promise<Array<domain.ModelOption>>;
+
 export function GetAllFolders():Promise<Array<domain.Folder>>;
 
 export function GetAllNotes():Promise<Array<domain.Note>>;

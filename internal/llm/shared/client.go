@@ -43,9 +43,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 
 	// Set headers
 	httpReq.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
-	}
+	ApplyAuthHeaders(httpReq.Header, c.apiKey)
 
 	// Send request
 	resp, err := c.httpClient.Do(httpReq)

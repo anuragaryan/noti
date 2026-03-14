@@ -2,6 +2,7 @@ import { domain } from '../../wailsjs/go/models'
 import { AudioAPI, ConfigAPI, LLMAPI, type ModelOption } from '../api'
 import state from '../state'
 import { escapeHtml } from '../utils/html'
+import { icon } from '../utils/icons'
 
 const RECOMMENDED = {
   llmProvider: 'local',
@@ -107,10 +108,15 @@ function sttLanguageOptionsHtml(selectedLanguage: string): string {
 
 function localModelOptionsHtml(models: ModelOption[], selectedModel: string): string {
   if (models.length === 0) {
-    return `<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(selectedModel)}</option>`
+    return `<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(selectedModel || 'No models available')}</option>`
   }
 
-  return models.map((m) => {
+  const exists = models.some((m) => m.code === selectedModel)
+  const withFallback = exists || !selectedModel
+    ? models
+    : [{ id: 0, code: selectedModel, name: selectedModel, isRecommended: false, note: '' }, ...models]
+
+  return withFallback.map((m) => {
     return `<option value="${escapeHtml(m.code)}" ${m.code === selectedModel ? 'selected' : ''}>${escapeHtml(modelLabel(m))}</option>`
   }).join('')
 }
@@ -121,6 +127,7 @@ function renderScreen(
   selectedSource: SourceOption,
   sttModels: ModelOption[],
   llmModels: ModelOption[],
+  initialAPIModels: ModelOption[],
 ): void {
   const sortedSTTModels = sortByID(sttModels)
   const sortedLLMModels = sortByID(llmModels)
@@ -128,11 +135,19 @@ function renderScreen(
   const currentSTTModel = config.modelName || sortedSTTModels[0]?.code || ''
   const currentSTTLanguage = config.sttLanguage || 'en'
   const fallbackLocalModel = sortedLLMModels[0]?.code || config.llm?.modelName || ''
+  const sortedAPIModels = sortByID(initialAPIModels)
   const rememberedModels: Record<string, string> = {
     local: currentProvider === 'local' ? (config.llm?.modelName || fallbackLocalModel) : fallbackLocalModel,
-    api: currentProvider === 'api' ? (config.llm?.modelName || '') : '',
+    api: currentProvider === 'api'
+      ? (config.llm?.modelName || sortedAPIModels[0]?.code || '')
+      : (sortedAPIModels[0]?.code || ''),
   }
   let activeProvider = currentProvider
+  let apiModels = sortedAPIModels
+  let apiModelMessage = currentProvider === 'api' && (config.llm?.apiEndpoint || '').trim() === ''
+    ? 'Enter API endpoint, then click refresh to load hosted models.'
+    : ''
+  let apiModelLoading = false
 
   container.innerHTML = `
     <div class="getting-started-wrap">
@@ -175,11 +190,13 @@ function renderScreen(
             <div class="getting-started-field">
               <span class="getting-started-label">Model</span>
               <div id="gs-llm-model-container">
-                <select id="gs-llm-model" class="form-select">
-                  ${localModelOptionsHtml(sortedLLMModels, rememberedModels.local)}
-                </select>
+                ${currentProvider === 'local'
+                  ? `<select id="gs-llm-model" class="form-select">${localModelOptionsHtml(sortedLLMModels, rememberedModels.local)}</select>`
+                  : `<div class="model-select-row"><select id="gs-llm-model" class="form-select">${localModelOptionsHtml(apiModels, rememberedModels.api)}</select><button id="gs-llm-model-refresh" type="button" class="btn-icon model-refresh-btn" title="Refresh models">${icon('refresh-cw', 14)}</button></div>`
+                }
               </div>
               <p id="gs-llm-note" class="getting-started-help"></p>
+              <p id="gs-api-model-status" class="getting-started-help${currentProvider === 'api' && apiModelMessage ? '' : ' hidden'}">${escapeHtml(apiModelMessage)}</p>
             </div>
           </div>
           <div id="gs-api-extra" class="getting-started-row${currentProvider === 'api' ? '' : ' hidden'}">
@@ -221,6 +238,7 @@ function renderScreen(
   const providerNoteEl = container.querySelector<HTMLElement>('#gs-provider-note')
   const sttNote = container.querySelector<HTMLElement>('#gs-stt-note')
   const llmNote = container.querySelector<HTMLElement>('#gs-llm-note')
+  const apiModelStatusEl = container.querySelector<HTMLElement>('#gs-api-model-status')
 
   const renderNotes = (): void => {
     const sttCode = container.querySelector<HTMLSelectElement>('#gs-stt-model')?.value ?? currentSTTModel
@@ -230,16 +248,26 @@ function renderScreen(
       sttNote.classList.toggle('hidden', sttText === '')
     }
 
-    if (!llmNote) return
-    if (activeProvider !== 'local') {
-      llmNote.textContent = ''
-      llmNote.classList.add('hidden')
+    if (llmNote) {
+      if (activeProvider !== 'local') {
+        llmNote.textContent = ''
+        llmNote.classList.add('hidden')
+      } else {
+        const llmCode = container.querySelector<HTMLInputElement | HTMLSelectElement>('#gs-llm-model')?.value ?? rememberedModels.local
+        const llmText = noteForModel(sortedLLMModels, llmCode)
+        llmNote.textContent = llmText
+        llmNote.classList.toggle('hidden', llmText === '')
+      }
+    }
+
+    if (!apiModelStatusEl) return
+    if (activeProvider !== 'api') {
+      apiModelStatusEl.textContent = ''
+      apiModelStatusEl.classList.add('hidden')
       return
     }
-    const llmCode = container.querySelector<HTMLInputElement | HTMLSelectElement>('#gs-llm-model')?.value ?? rememberedModels.local
-    const llmText = noteForModel(sortedLLMModels, llmCode)
-    llmNote.textContent = llmText
-    llmNote.classList.toggle('hidden', llmText === '')
+    apiModelStatusEl.textContent = apiModelMessage
+    apiModelStatusEl.classList.toggle('hidden', apiModelMessage.trim() === '')
   }
 
   const renderModelInput = (provider: string): void => {
@@ -250,8 +278,49 @@ function renderScreen(
       renderNotes()
       return
     }
-    modelContainer.innerHTML = `<input id="gs-llm-model" type="text" class="form-input" value="${escapeHtml(remembered)}" placeholder="gpt-4o-mini" />`
+    const modelControl = apiModels.length > 0
+      ? `<select id="gs-llm-model" class="form-select">${localModelOptionsHtml(apiModels, remembered)}</select>`
+      : `<input id="gs-llm-model" type="text" class="form-input" value="${escapeHtml(remembered)}" placeholder="gpt-4o-mini" />`
+    modelContainer.innerHTML = `<div class="model-select-row">${modelControl}<button id="gs-llm-model-refresh" type="button" class="btn-icon model-refresh-btn${apiModelLoading ? ' icon-spin' : ''}" title="Refresh models" ${apiModelLoading ? 'disabled' : ''}>${icon('refresh-cw', 14)}</button></div>`
     renderNotes()
+  }
+
+  const refreshAPIModels = async (): Promise<void> => {
+    const endpoint = container.querySelector<HTMLInputElement>('#gs-api-endpoint')?.value ?? ''
+    const apiKey = container.querySelector<HTMLInputElement>('#gs-api-key')?.value ?? ''
+    if (endpoint.trim() === '') {
+      apiModelMessage = 'Enter API endpoint, then click refresh to load hosted models.'
+      renderNotes()
+      return
+    }
+
+    apiModelLoading = true
+    apiModelMessage = 'Loading models...'
+    const selectedValue = modelContainer?.querySelector<HTMLSelectElement>('#gs-llm-model')?.value ?? rememberedModels.api ?? ''
+    if (activeProvider === 'api') {
+      renderModelInput('api')
+    }
+
+    try {
+      const fetched = sortByID(await LLMAPI.getAPILLMModels(endpoint, apiKey))
+      apiModels = fetched
+      const nextValue = fetched.some((m) => m.code === selectedValue)
+        ? selectedValue
+        : (fetched[0]?.code ?? selectedValue)
+      rememberedModels.api = nextValue
+      apiModelMessage = fetched.length > 0
+        ? `Loaded ${fetched.length} hosted model${fetched.length === 1 ? '' : 's'}.`
+        : 'No models were returned by this endpoint. Enter a model ID manually.'
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      apiModels = []
+      apiModelMessage = `Failed to load API models: ${message}. Enter a model ID manually.`
+    } finally {
+      apiModelLoading = false
+      if (activeProvider === 'api') {
+        renderModelInput('api')
+      }
+    }
   }
 
   providerSelect?.addEventListener('change', () => {
@@ -261,6 +330,9 @@ function renderScreen(
     if (providerNoteEl) providerNoteEl.textContent = providerNote(activeProvider)
     apiExtra?.classList.toggle('hidden', activeProvider !== 'api')
     renderModelInput(activeProvider)
+    if (activeProvider === 'api' && apiModels.length === 0) {
+      void refreshAPIModels()
+    }
   })
 
   container.querySelector<HTMLSelectElement>('#gs-stt-model')?.addEventListener('change', () => {
@@ -278,7 +350,17 @@ function renderScreen(
     renderNotes()
   })
 
+  modelContainer?.addEventListener('click', (e) => {
+    if (!(e.target instanceof Element)) return
+    const refreshButton = e.target.closest<HTMLButtonElement>('#gs-llm-model-refresh')
+    if (!refreshButton) return
+    void refreshAPIModels()
+  })
+
   renderNotes()
+  if (activeProvider === 'api' && apiModels.length === 0 && (config.llm?.apiEndpoint || '').trim() !== '') {
+    void refreshAPIModels()
+  }
 
   container.querySelectorAll<HTMLButtonElement>('[data-source]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -339,6 +421,9 @@ export async function renderGettingStarted(container: HTMLElement): Promise<void
 
   let sttModels: ModelOption[] = []
   let llmModels: ModelOption[] = []
+  let apiModels: ModelOption[] = []
+  const apiProviderSelected = (config.llm?.provider || 'local') === 'api'
+  const hasEndpoint = (config.llm?.apiEndpoint || '').trim() !== ''
   try {
     ;[sttModels, llmModels] = await Promise.all([
       AudioAPI.getSTTModels(),
@@ -349,10 +434,18 @@ export async function renderGettingStarted(container: HTMLElement): Promise<void
     llmModels = []
   }
 
+  if (apiProviderSelected && hasEndpoint) {
+    try {
+      apiModels = await LLMAPI.getAPILLMModels(config.llm?.apiEndpoint || '', config.llm?.apiKey || '')
+    } catch {
+      apiModels = []
+    }
+  }
+
   const configuredSource = (config.audio?.defaultSource || 'mixed') as SourceOption
   const selectedSource: SourceOption = configuredSource === 'microphone' || configuredSource === 'system' || configuredSource === 'mixed'
     ? configuredSource
     : 'mixed'
 
-  renderScreen(container, config, selectedSource, sttModels, llmModels)
+  renderScreen(container, config, selectedSource, sttModels, llmModels, apiModels)
 }

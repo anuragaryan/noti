@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -43,6 +47,55 @@ type App struct {
 	llmManager    *service.LLMManager
 	promptService *service.PromptService
 	audioManager  *service.AudioManager
+}
+
+type apiModelsResponse struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+type apiErrorResponse struct {
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func normalizeModelsEndpoint(rawEndpoint string) (string, error) {
+	trimmed := strings.TrimSpace(rawEndpoint)
+	if trimmed == "" {
+		return "", fmt.Errorf("API endpoint is required")
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("invalid API endpoint: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("API endpoint must start with http:// or https://")
+	}
+	if parsed.Host == "" {
+		return "", fmt.Errorf("API endpoint host is required")
+	}
+
+	path := strings.TrimSuffix(parsed.Path, "/")
+	switch {
+	case path == "":
+		path = "/v1/models"
+	case strings.HasSuffix(path, "/chat/completions"):
+		path = strings.TrimSuffix(path, "/chat/completions") + "/models"
+	case strings.HasSuffix(path, "/models"):
+		// Already points to models endpoint.
+	case strings.HasSuffix(path, "/v1"):
+		path = path + "/models"
+	default:
+		path = path + "/v1/models"
+	}
+
+	parsed.Path = path
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
 }
 
 // NewApp creates a new App application struct
@@ -489,6 +542,98 @@ func (a *App) GetLLMModels() []domain.ModelOption {
 	}
 
 	return out
+}
+
+// GetAPILLMModels returns model options discovered from an OpenAI-compatible API domain.
+func (a *App) GetAPILLMModels(apiEndpoint string, apiKey string) ([]domain.ModelOption, error) {
+	modelsEndpoint, err := normalizeModelsEndpoint(apiEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(a.ctx, http.MethodGet, modelsEndpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create models request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	trimmedAPIKey := strings.TrimSpace(apiKey)
+	if trimmedAPIKey != "" {
+		bearer := trimmedAPIKey
+		if !strings.HasPrefix(strings.ToLower(bearer), "bearer ") {
+			bearer = "Bearer " + trimmedAPIKey
+		}
+		req.Header.Set("Authorization", bearer)
+		req.Header.Set("api-key", trimmedAPIKey)
+		req.Header.Set("x-api-key", trimmedAPIKey)
+	}
+
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load API models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read API models response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var apiErr apiErrorResponse
+		if err := json.Unmarshal(body, &apiErr); err == nil && strings.TrimSpace(apiErr.Error.Message) != "" {
+			return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, apiErr.Error.Message)
+		}
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 220 {
+			preview = preview[:220] + "..."
+		}
+		return nil, fmt.Errorf("API models request failed (%d): %s", resp.StatusCode, preview)
+	}
+
+	var decoded apiModelsResponse
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		preview := strings.TrimSpace(string(body))
+		if len(preview) > 220 {
+			preview = preview[:220] + "..."
+		}
+		return nil, fmt.Errorf("failed to decode API models response: %w (response preview: %s)", err, preview)
+	}
+
+	ids := make([]string, 0, len(decoded.Data))
+	seen := make(map[string]struct{}, len(decoded.Data))
+	for _, model := range decoded.Data {
+		id := strings.TrimSpace(model.ID)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+
+	sort.Slice(ids, func(i, j int) bool {
+		left := strings.ToLower(ids[i])
+		right := strings.ToLower(ids[j])
+		if left == right {
+			return ids[i] < ids[j]
+		}
+		return left < right
+	})
+
+	out := make([]domain.ModelOption, 0, len(ids))
+	for idx, id := range ids {
+		out = append(out, domain.ModelOption{
+			ID:            idx + 1,
+			Code:          id,
+			Name:          id,
+			IsRecommended: false,
+			Note:          "",
+		})
+	}
+
+	return out, nil
 }
 
 // UpdateLLMConfig updates LLM configuration and switches provider

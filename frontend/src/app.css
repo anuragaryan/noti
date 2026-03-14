@@ -1310,6 +1310,33 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   width: 100%;
 }
 
+.model-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-select-row .form-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-refresh-btn {
+  flex-shrink: 0;
+}
+
+.model-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.icon-spin svg {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+  display: block;
+}
+
 .form-note {
   margin: 2px 0 0;
   font-family: var(--font-secondary);

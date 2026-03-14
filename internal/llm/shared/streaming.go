@@ -91,9 +91,7 @@ func (c *StreamingClient) StreamChatCompletion(
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("Cache-Control", "no-cache")
 	httpReq.Header.Set("Connection", "keep-alive")
-	if c.apiKey != "" {
-		httpReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
-	}
+	ApplyAuthHeaders(httpReq.Header, c.apiKey)
 
 	// Send request
 	resp, err := c.httpClient.Do(httpReq)

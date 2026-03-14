@@ -54,6 +54,10 @@ export function GenerateTextStream(arg1, arg2) {
   return window['go']['main']['App']['GenerateTextStream'](arg1, arg2);
 }
 
+export function GetAPILLMModels(arg1, arg2) {
+  return window['go']['main']['App']['GetAPILLMModels'](arg1, arg2);
+}
+
 export function GetAllFolders() {
   return window['go']['main']['App']['GetAllFolders']();
 }
