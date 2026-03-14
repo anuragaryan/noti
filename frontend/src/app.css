@@ -10,8 +10,8 @@
   /* Palette */
   --color-background:                #F2F3F0;
   --color-foreground:                #111111;
-  --color-primary:                   #FF8400;
-  --color-primary-foreground:        #111111;
+  --color-primary:                   #4986F4;
+  --color-primary-foreground:        #FFFFFF;
   --color-secondary:                 #E7E8E5;
   --color-secondary-foreground:      #111111;
   --color-card:                      #FFFFFF;
@@ -70,8 +70,8 @@
 .dark {
   --color-background:                #111111;
   --color-foreground:                #FFFFFF;
-  --color-primary:                   #FF8400;
-  --color-primary-foreground:        #111111;
+  --color-primary:                   #4986F4;
+  --color-primary-foreground:        #FFFFFF;
   --color-secondary:                 #2E2E2E;
   --color-secondary-foreground:      #FFFFFF;
   --color-card:                      #1A1A1A;
