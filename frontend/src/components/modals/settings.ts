@@ -7,6 +7,7 @@ import { ConfigAPI, AudioAPI, LLMAPI, type ModelOption } from '../../api'
 import { domain } from '../../../wailsjs/go/models'
 import { escapeHtml } from '../../utils/html'
 import { icon } from '../../utils/icons'
+import { saveConfigWithPending } from '../../utils/config-save'
 
 const LLM_MODEL_BY_PROVIDER_KEY = 'noti-llm-model-by-provider'
 
@@ -105,7 +106,7 @@ function modelOptionsHtml(models: ModelOption[], selectedValue: string): string 
 // ─── Icons — see utils/icons.ts ────────────────────
 
 export async function renderSettingsModal(container: HTMLElement): Promise<void> {
-  let config: domain.Config | null = state.get('config')
+  let config: domain.Config | null = (state.get('pendingConfig') ?? state.get('config')) as domain.Config | null
   if (!config) {
     try {
       config = await ConfigAPI.get()
@@ -455,9 +456,34 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
   const close = () => state.closeModal()
   container.querySelector('#settings-close')?.addEventListener('click', close)
   container.querySelector('#settings-cancel')?.addEventListener('click', close)
+  const saveButton = container.querySelector<HTMLButtonElement>('#settings-save')
+
+  function setSaveButtonLoading(loading: boolean): void {
+    if (!saveButton) return
+    saveButton.disabled = loading
+    if (loading) {
+      saveButton.classList.add('icon-spin')
+      saveButton.innerHTML = `${icon('loader', 14)} Applying...`
+      return
+    }
+    saveButton.classList.remove('icon-spin')
+    saveButton.textContent = 'Save Settings'
+  }
+  setSaveButtonLoading(state.get('isConfigSaving'))
+
+  const unsubscribeConfigSaving = state.subscribe('isConfigSaving', () => {
+    if (!saveButton?.isConnected) return
+    setSaveButtonLoading(state.get('isConfigSaving'))
+  })
+  const unsubscribeModal = state.subscribe('activeModal', () => {
+    if (state.get('activeModal') === 'settings') return
+    unsubscribeConfigSaving()
+    unsubscribeModal()
+  })
 
   // Save
-  container.querySelector('#settings-save')?.addEventListener('click', async () => {
+  saveButton?.addEventListener('click', async () => {
+    if (state.get('isConfigSaving')) return
     if (!config) return
     const selectedProvider = (container.querySelector<HTMLSelectElement>('#llm-provider')?.value ?? config.llm?.provider) as string
     const selectedModelName = (container.querySelector<HTMLInputElement | HTMLSelectElement>('#llm-model')?.value ?? config.llm?.modelName)
@@ -482,8 +508,7 @@ export async function renderSettingsModal(container: HTMLElement): Promise<void>
       }),
     })
     try {
-      await ConfigAPI.save(newConfig)
-      state.setState({ config: newConfig })
+      await saveConfigWithPending(newConfig)
       state.showNotification('Settings saved', 'success')
       state.closeModal()
     } catch (err) {

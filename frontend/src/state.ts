@@ -27,6 +27,8 @@ export interface AppState {
   folders: Folder[]
   prompts: Prompt[]
   config: Config | null
+  pendingConfig: Config | null
+  isConfigSaving: boolean
 
   // Editor
   currentNote: Note | null
@@ -91,6 +93,8 @@ class StateManager {
     folders: [],
     prompts: [],
     config: null,
+    pendingConfig: null,
+    isConfigSaving: false,
 
     currentNote: null,
     currentFolderId: null,

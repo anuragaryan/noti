@@ -158,6 +158,7 @@ function initGoEvents(): void {
   AppEvents.onMenuSettings(() => state.openModal('settings'))
 
   AppEvents.onConfigSaved(() => {
+    if (state.get('isConfigSaving')) return
     void ConfigAPI.get().then(config => state.setState({ config }))
   })
 

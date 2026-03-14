@@ -3,6 +3,7 @@ import { AudioAPI, ConfigAPI, LLMAPI, type ModelOption } from '../api'
 import state from '../state'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
+import { saveConfigWithPending } from '../utils/config-save'
 
 const RECOMMENDED = {
   llmProvider: 'local',
@@ -239,6 +240,30 @@ function renderScreen(
   const sttNote = container.querySelector<HTMLElement>('#gs-stt-note')
   const llmNote = container.querySelector<HTMLElement>('#gs-llm-note')
   const apiModelStatusEl = container.querySelector<HTMLElement>('#gs-api-model-status')
+  const startButton = container.querySelector<HTMLButtonElement>('#gs-start')
+
+  const setStartButtonLoading = (loading: boolean): void => {
+    if (!startButton) return
+    startButton.disabled = loading
+    if (loading) {
+      startButton.classList.add('icon-spin')
+      startButton.innerHTML = `${icon('loader', 14)} Applying...`
+      return
+    }
+    startButton.classList.remove('icon-spin')
+    startButton.textContent = 'Start transcribing'
+  }
+  setStartButtonLoading(state.get('isConfigSaving'))
+
+  const unsubscribeConfigSaving = state.subscribe('isConfigSaving', () => {
+    if (!startButton?.isConnected) return
+    setStartButtonLoading(state.get('isConfigSaving'))
+  })
+  const unsubscribeGettingStarted = state.subscribe('showGettingStarted', () => {
+    if (state.get('showGettingStarted')) return
+    unsubscribeConfigSaving()
+    unsubscribeGettingStarted()
+  })
 
   const renderNotes = (): void => {
     const sttCode = container.querySelector<HTMLSelectElement>('#gs-stt-model')?.value ?? currentSTTModel
@@ -373,7 +398,8 @@ function renderScreen(
     })
   })
 
-  container.querySelector<HTMLButtonElement>('#gs-start')?.addEventListener('click', async () => {
+  startButton?.addEventListener('click', async () => {
+    if (state.get('isConfigSaving')) return
     const source = (container.querySelector<HTMLButtonElement>('.gs-source-pill.active')?.dataset.source as SourceOption | undefined) ?? selectedSource
     const sttModel = container.querySelector<HTMLSelectElement>('#gs-stt-model')?.value ?? currentSTTModel
     const sttLanguage = container.querySelector<HTMLSelectElement>('#gs-stt-language')?.value ?? currentSTTLanguage
@@ -401,9 +427,8 @@ function renderScreen(
     })
 
     try {
-      await ConfigAPI.save(nextConfig)
+      await saveConfigWithPending(nextConfig)
       state.setState({
-        config: nextConfig,
         recordingSource: source,
         showGettingStarted: false,
       })

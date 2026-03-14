@@ -360,6 +360,11 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
 }
 .btn-secondary:hover { background: var(--secondary); }
 
+.btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .btn-danger {
   display: flex;
   align-items: center;
