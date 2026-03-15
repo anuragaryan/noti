@@ -28,6 +28,7 @@ import (
 // App struct
 type App struct {
 	ctx           context.Context
+	eventsEnabled bool
 	streamMu      sync.Mutex
 	streamCancel  context.CancelFunc
 	streamID      uint64
@@ -135,6 +136,7 @@ func NewApp() *App {
 	sttManager.SetAudioManager(audioManager)
 
 	return &App{
+		eventsEnabled: true,
 		basePath:      basePath,
 		structurePath: structurePath,
 		notesPath:     notesPath,
@@ -150,6 +152,13 @@ func NewApp() *App {
 		promptService: promptService,
 		audioManager:  audioManager,
 	}
+}
+
+func (a *App) emitEvent(name string, payload ...interface{}) {
+	if !a.eventsEnabled || a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, name, payload...)
 }
 
 // startup is called when the app starts
@@ -686,9 +695,9 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 			func(chunk *domain.StreamChunk) error {
 				if chunk.Done {
 					seenDone = true
-					runtime.EventsEmit(a.ctx, "llm:stream:done", chunk)
+					a.emitEvent("llm:stream:done", chunk)
 				} else {
-					runtime.EventsEmit(a.ctx, "llm:stream:chunk", chunk)
+					a.emitEvent("llm:stream:chunk", chunk)
 				}
 				return nil
 			})
@@ -696,7 +705,7 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				if !seenDone {
-					runtime.EventsEmit(a.ctx, "llm:stream:done", &domain.StreamChunk{
+					a.emitEvent("llm:stream:done", &domain.StreamChunk{
 						Text:         "",
 						Done:         true,
 						FinishReason: "cancelled",
@@ -705,15 +714,15 @@ func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
 				return
 			}
 			if errors.Is(err, context.DeadlineExceeded) {
-				runtime.EventsEmit(a.ctx, "llm:stream:error", "stream timed out after 5 minutes")
+				a.emitEvent("llm:stream:error", "stream timed out after 5 minutes")
 				return
 			}
-			runtime.EventsEmit(a.ctx, "llm:stream:error", err.Error())
+			a.emitEvent("llm:stream:error", err.Error())
 			return
 		}
 
 		if !seenDone {
-			runtime.EventsEmit(a.ctx, "llm:stream:done", &domain.StreamChunk{
+			a.emitEvent("llm:stream:done", &domain.StreamChunk{
 				Text:         "",
 				Done:         true,
 				FinishReason: "stop",
@@ -761,14 +770,14 @@ func (a *App) ExecutePromptOnNoteStream(promptID, noteID string) error {
 	// Get the prompt
 	prompt, err := a.promptService.Get(promptID)
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:stream:error", fmt.Sprintf("failed to get prompt: %v", err))
+		a.emitEvent("llm:stream:error", fmt.Sprintf("failed to get prompt: %v", err))
 		return fmt.Errorf("failed to get prompt: %w", err)
 	}
 
 	// Get the note
 	note, err := a.noteService.Get(noteID)
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:stream:error", fmt.Sprintf("failed to get note: %v", err))
+		a.emitEvent("llm:stream:error", fmt.Sprintf("failed to get note: %v", err))
 		return fmt.Errorf("failed to get note: %w", err)
 	}
 
@@ -783,7 +792,7 @@ func (a *App) ExecutePromptOnContentStream(promptID, content string) error {
 	// Get the prompt
 	prompt, err := a.promptService.Get(promptID)
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "llm:stream:error", fmt.Sprintf("failed to get prompt: %v", err))
+		a.emitEvent("llm:stream:error", fmt.Sprintf("failed to get prompt: %v", err))
 		return fmt.Errorf("failed to get prompt: %w", err)
 	}
 
@@ -1051,7 +1060,7 @@ func (a *App) SaveConfig(config domain.Config) error {
 	}
 
 	slog.Info("Configuration saved and services reinitialized successfully")
-	runtime.EventsEmit(a.ctx, "config:saved")
+	a.emitEvent("config:saved")
 	return nil
 }
 

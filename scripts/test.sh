@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
@@ -37,4 +39,14 @@ done
 
 echo "🧪 Running tests: $PACKAGE"
 echo "=========================="
+
+echo ""
+echo "🧪 Running frontend checks"
+echo "=========================="
+bun run --cwd frontend typecheck
+bun run --cwd frontend test
+
+echo ""
+echo "🧪 Running Go tests: $PACKAGE"
+echo "============================="
 go test -v -race $NO_CACHE "$PACKAGE"
