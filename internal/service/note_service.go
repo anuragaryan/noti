@@ -17,6 +17,8 @@ import (
 	"noti/internal/util"
 )
 
+const splitStorageSchemaVersion = 2
+
 // NoteService handles all note business logic.
 // All exported methods are safe for concurrent use.
 type NoteService struct {
@@ -24,14 +26,16 @@ type NoteService struct {
 	structureRepo *repository.StructureRepository
 	pathResolver  *repository.PathResolver
 	fileSystem    *repository.FileSystem
-	notesPath     string
 	searchIndex   map[string]searchDocument
 	searchIndexed bool
 }
 
 type searchDocument struct {
-	raw   string
-	lower string
+	markdownRaw      string
+	markdownLower    string
+	transcriptRaw    string
+	transcriptLower  string
+	combinedLowerRaw string
 }
 
 // NewNoteService creates a new NoteService.
@@ -39,19 +43,90 @@ func NewNoteService(
 	structureRepo *repository.StructureRepository,
 	pathResolver *repository.PathResolver,
 	fileSystem *repository.FileSystem,
-	notesPath string,
+	_ string,
 ) *NoteService {
 	return &NoteService{
 		structureRepo: structureRepo,
 		pathResolver:  pathResolver,
 		fileSystem:    fileSystem,
-		notesPath:     notesPath,
 		searchIndex:   make(map[string]searchDocument),
 	}
 }
 
-// Search returns notes whose title or content matches all query terms.
-// Results are ranked by relevance and then by recency.
+// EnsureSplitStorage validates and normalizes split markdown/transcript storage.
+// This operation is idempotent.
+func (s *NoteService) EnsureSplitStorage() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	structure, err := s.structureRepo.Load()
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(s.pathResolver.MarkdownRootPath(), 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(s.pathResolver.TranscriptRootPath(), 0o755); err != nil {
+		return err
+	}
+
+	mutated := false
+	seenStems := make(map[string]struct{}, len(structure.Notes))
+
+	for i := range structure.Notes {
+		note := &structure.Notes[i]
+
+		if strings.TrimSpace(note.FileStem) == "" {
+			note.FileStem = deriveFileStem(note)
+			mutated = true
+		}
+		note.FileStem = ensureUniqueFileStem(note.FileStem, seenStems)
+		seenStems[note.FileStem] = struct{}{}
+
+		markdownPath, err := s.pathResolver.NoteMarkdownPath(note, structure)
+		if err != nil {
+			return err
+		}
+		transcriptPath, err := s.pathResolver.NoteTranscriptPath(note, structure)
+		if err != nil {
+			return err
+		}
+
+		if err := os.MkdirAll(filepath.Dir(markdownPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(transcriptPath), 0o755); err != nil {
+			return err
+		}
+
+		if !fileExists(markdownPath) {
+			if err := os.WriteFile(markdownPath, []byte(note.MarkdownContent), 0o644); err != nil {
+				return err
+			}
+		}
+		if !fileExists(transcriptPath) {
+			if err := os.WriteFile(transcriptPath, []byte(note.TranscriptContent), 0o644); err != nil {
+				return err
+			}
+		}
+
+		mutated = true
+	}
+
+	if structure.SchemaVersion != splitStorageSchemaVersion {
+		structure.SchemaVersion = splitStorageSchemaVersion
+		mutated = true
+	}
+
+	if mutated {
+		return s.structureRepo.Save(structure)
+	}
+
+	return nil
+}
+
+// Search returns notes whose title, markdown, or transcript matches all query terms.
 func (s *NoteService) Search(query string, limit int) ([]domain.SearchMatch, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -89,10 +164,10 @@ func (s *NoteService) Search(query string, limit int) ([]domain.SearchMatch, err
 		title := strings.ToLower(note.Title)
 		doc, ok := s.searchIndex[note.ID]
 		if !ok {
-			var err error
-			doc, err = s.loadSearchDocument(&note, structure)
-			if err != nil {
-				slog.Warn("could not load note content while searching", "id", note.ID, "error", err)
+			var loadErr error
+			doc, loadErr = s.loadSearchDocument(&note, structure)
+			if loadErr != nil {
+				slog.Warn("could not load note content while searching", "id", note.ID, "error", loadErr)
 			}
 			s.searchIndex[note.ID] = doc
 		}
@@ -101,8 +176,9 @@ func (s *NoteService) Search(query string, limit int) ([]domain.SearchMatch, err
 		matchedAll := true
 		for _, token := range tokens {
 			inTitle := strings.Contains(title, token)
-			inContent := strings.Contains(doc.lower, token)
-			if !inTitle && !inContent {
+			inMarkdown := strings.Contains(doc.markdownLower, token)
+			inTranscript := strings.Contains(doc.transcriptLower, token)
+			if !inTitle && !inMarkdown && !inTranscript {
 				matchedAll = false
 				break
 			}
@@ -110,7 +186,9 @@ func (s *NoteService) Search(query string, limit int) ([]domain.SearchMatch, err
 			switch {
 			case inTitle:
 				totalScore += 20
-			case inContent:
+			case inMarkdown:
+				totalScore += 8
+			case inTranscript:
 				totalScore += 5
 			}
 		}
@@ -122,20 +200,20 @@ func (s *NoteService) Search(query string, limit int) ([]domain.SearchMatch, err
 		if strings.Contains(title, fullQuery) {
 			totalScore += 35
 		}
-		if strings.Contains(doc.lower, fullQuery) {
+		if strings.Contains(doc.markdownLower, fullQuery) {
 			totalScore += 10
 		}
-
-		line, snippet := firstMatchingLineAndSnippet(doc.raw, fullQuery, tokens)
-		if snippet == "" {
-			snippet = note.Title
+		if strings.Contains(doc.transcriptLower, fullQuery) {
+			totalScore += 7
 		}
 
+		line, snippet, source := bestSnippet(doc, note.Title, fullQuery, tokens)
 		results = append(results, scored{
 			match: domain.SearchMatch{
-				Note:    note,
-				Line:    line,
-				Snippet: snippet,
+				Note:        note,
+				Line:        line,
+				Snippet:     snippet,
+				SourceLabel: source,
 			},
 			score: totalScore,
 		})
@@ -188,25 +266,20 @@ func (s *NoteService) Get(id string) (*domain.Note, error) {
 		if structure.Notes[i].ID != id {
 			continue
 		}
-		content, err := s.fileSystem.LoadNoteContent(&structure.Notes[i], structure)
+		markdown, transcript, err := s.fileSystem.LoadNoteContentPair(&structure.Notes[i], structure)
 		if err != nil {
-			// File missing is non-fatal; return the note with empty content so
-			// the UI can still display metadata.
 			slog.Warn("could not load content for note", "id", id, "error", err)
-			structure.Notes[i].Content = ""
-		} else {
-			structure.Notes[i].Content = content
 		}
+		structure.Notes[i].MarkdownContent = markdown
+		structure.Notes[i].TranscriptContent = transcript
 		return &structure.Notes[i], nil
 	}
 
 	return nil, fmt.Errorf("note %q not found", id)
 }
 
-// Create adds a new note, writing its content to disk before persisting the
-// structure. If the structure save fails the file is cleaned up so the two
-// stores remain consistent.
-func (s *NoteService) Create(title, content, folderID string) (*domain.Note, error) {
+// Create adds a new note.
+func (s *NoteService) Create(title, markdownContent, folderID string) (*domain.Note, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -215,65 +288,43 @@ func (s *NoteService) Create(title, content, folderID string) (*domain.Note, err
 		return nil, fmt.Errorf("failed to load structure: %w", err)
 	}
 
-	if folderID != "" {
-		if !folderExists(folderID, structure) {
-			return nil, fmt.Errorf("folder %q not found", folderID)
-		}
+	if folderID != "" && !folderExists(folderID, structure) {
+		return nil, fmt.Errorf("folder %q not found", folderID)
 	}
 
 	now := time.Now()
+	fileStem := ensureUniqueFileStem(generateFileStem(title), currentFileStems(structure))
 	note := domain.Note{
-		// Bug 10 fix: use UUID so rapid creation never produces duplicate IDs.
-		ID:         uuid.NewString(),
-		Title:      title,
-		NameOnDisk: util.GenerateNameOnDisk(title) + ".md",
-		FolderID:   folderID,
-		Content:    content,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		// Bug 7 fix: assign order as one past the current maximum so deletions
-		// do not create duplicates.
-		Order: nextNoteOrder(structure),
+		ID:                  uuid.NewString(),
+		Title:               title,
+		FileStem:            fileStem,
+		FolderID:            folderID,
+		TranscriptActivated: false,
+		MarkdownContent:     markdownContent,
+		TranscriptContent:   "",
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		Order:               nextNoteOrder(structure),
 	}
 
-	// Resolve the parent directory.
-	parentPath := s.notesPath
-	if folderID != "" {
-		parentPath, err = s.pathResolver.GetPathFor(folderID, structure)
-		if err != nil {
-			return nil, fmt.Errorf("could not resolve parent path for note: %w", err)
-		}
-	}
-
-	// Bug 9 fix: ensure the directory exists before writing.
-	if err := os.MkdirAll(parentPath, 0755); err != nil {
-		return nil, fmt.Errorf("could not create parent directory: %w", err)
-	}
-
-	notePath := filepath.Join(parentPath, note.NameOnDisk)
-
-	// Bug 3 fix: write the file first, then save the structure. Clean up the
-	// file if the structure save fails so both stores stay in sync.
-	if err := os.WriteFile(notePath, []byte(content), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write note file: %w", err)
+	if err := s.fileSystem.SaveNoteContentPair(&note, note.MarkdownContent, note.TranscriptContent, structure); err != nil {
+		return nil, fmt.Errorf("failed to write note files: %w", err)
 	}
 
 	structure.Notes = append(structure.Notes, note)
 	if err := s.structureRepo.Save(structure); err != nil {
-		// Roll back the file so we do not leave an orphan on disk.
-		_ = os.Remove(notePath)
+		_ = s.fileSystem.DeleteNoteFilePair(&note, structure)
 		return nil, fmt.Errorf("failed to save structure: %w", err)
 	}
 	if s.searchIndexed {
-		s.searchIndex[note.ID] = searchDocument{raw: content, lower: strings.ToLower(content)}
+		s.searchIndex[note.ID] = buildSearchDocument(note.MarkdownContent, note.TranscriptContent)
 	}
 
 	return &note, nil
 }
 
-// Update updates the title and/or content of an existing note. When the title
-// changes the file is renamed on disk before the structure is persisted.
-func (s *NoteService) Update(id, title, content string) error {
+// Update updates title and note contents.
+func (s *NoteService) Update(id, title, markdownContent, transcriptContent string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -288,38 +339,26 @@ func (s *NoteService) Update(id, title, content string) error {
 		}
 
 		if structure.Notes[i].Title != title {
-			oldPath, err := s.pathResolver.GetPathFor(id, structure)
-			if err != nil {
-				return fmt.Errorf("could not resolve current path for note %q: %w", id, err)
+			newStem := renamedFileStem(structure.Notes[i].FileStem, title)
+			if fileStemTakenByAnotherNote(structure, id, newStem) {
+				newStem = ensureUniqueFileStem(newStem, currentFileStems(structure))
 			}
-
-			// Bug 5 fix: extract the timestamp prefix safely.
-			newDiskName := renamedDiskName(structure.Notes[i].NameOnDisk, title) + ".md"
-
-			parentPath := s.notesPath
-			if structure.Notes[i].FolderID != "" {
-				parentPath, err = s.pathResolver.GetPathFor(structure.Notes[i].FolderID, structure)
-				if err != nil {
-					return fmt.Errorf("could not resolve parent path for note %q: %w", id, err)
-				}
+			if err := s.fileSystem.RenameNoteFilePair(&structure.Notes[i], newStem, structure); err != nil {
+				return fmt.Errorf("failed to rename note files: %w", err)
 			}
-			newPath := filepath.Join(parentPath, newDiskName)
-
-			if err := os.Rename(oldPath, newPath); err != nil {
-				return fmt.Errorf("failed to rename note file: %w", err)
-			}
-			structure.Notes[i].NameOnDisk = newDiskName
+			structure.Notes[i].FileStem = newStem
 		}
 
 		structure.Notes[i].Title = title
 		structure.Notes[i].UpdatedAt = time.Now()
+		structure.Notes[i].MarkdownContent = markdownContent
+		structure.Notes[i].TranscriptContent = transcriptContent
 
-		// Save content to the (potentially renamed) path.
-		if err := s.fileSystem.SaveNoteContent(&structure.Notes[i], content, structure); err != nil {
-			return fmt.Errorf("failed to save note content: %w", err)
+		if err := s.fileSystem.SaveNoteContentPair(&structure.Notes[i], markdownContent, transcriptContent, structure); err != nil {
+			return fmt.Errorf("failed to save note contents: %w", err)
 		}
 		if s.searchIndexed {
-			s.searchIndex[structure.Notes[i].ID] = searchDocument{raw: content, lower: strings.ToLower(content)}
+			s.searchIndex[structure.Notes[i].ID] = buildSearchDocument(markdownContent, transcriptContent)
 		}
 
 		return s.structureRepo.Save(structure)
@@ -328,9 +367,32 @@ func (s *NoteService) Update(id, title, content string) error {
 	return fmt.Errorf("note %q not found", id)
 }
 
-// Move relocates a note to a different folder (or to the root when
-// targetFolderID is empty). The file is moved on disk before the structure is
-// updated so a save failure can be detected and the move rolled back.
+// MarkTranscriptActivated enables transcript pane visibility for a note.
+func (s *NoteService) MarkTranscriptActivated(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	structure, err := s.structureRepo.Load()
+	if err != nil {
+		return err
+	}
+
+	for i := range structure.Notes {
+		if structure.Notes[i].ID != id {
+			continue
+		}
+		if structure.Notes[i].TranscriptActivated {
+			return nil
+		}
+		structure.Notes[i].TranscriptActivated = true
+		structure.Notes[i].UpdatedAt = time.Now()
+		return s.structureRepo.Save(structure)
+	}
+
+	return fmt.Errorf("note %q not found", id)
+}
+
+// Move relocates a note to a different folder.
 func (s *NoteService) Move(noteID, targetFolderID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -350,7 +412,6 @@ func (s *NoteService) Move(noteID, targetFolderID string) error {
 		}
 		oldFolderID := structure.Notes[i].FolderID
 
-		// Bug 3 fix: move the file first, roll back on structure save failure.
 		if err := s.moveNoteFile(&structure.Notes[i], oldFolderID, targetFolderID, structure); err != nil {
 			return err
 		}
@@ -359,7 +420,6 @@ func (s *NoteService) Move(noteID, targetFolderID string) error {
 		structure.Notes[i].UpdatedAt = time.Now()
 
 		if err := s.structureRepo.Save(structure); err != nil {
-			// Roll back the file move so disk and structure stay in sync.
 			_ = s.moveNoteFile(&structure.Notes[i], targetFolderID, oldFolderID, structure)
 			return fmt.Errorf("failed to save structure after move: %w", err)
 		}
@@ -369,9 +429,7 @@ func (s *NoteService) Move(noteID, targetFolderID string) error {
 	return fmt.Errorf("note %q not found", noteID)
 }
 
-// Delete removes a note from disk and from the structure. The file is deleted
-// first; if that succeeds but the structure save fails the note is re-added to
-// the structure to preserve consistency.
+// Delete removes a note files and metadata.
 func (s *NoteService) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -393,20 +451,13 @@ func (s *NoteService) Delete(id string) error {
 	}
 
 	noteToDelete := structure.Notes[noteIndex]
-
-	// Bug 3 fix: delete the file first. If the structure save later fails we
-	// restore the note in the structure (best-effort) so the user can retry.
 	if err := s.deleteNoteFile(&noteToDelete, structure); err != nil {
-		return fmt.Errorf("failed to delete note file: %w", err)
+		return fmt.Errorf("failed to delete note files: %w", err)
 	}
 
-	// Remove the note from the slice.
 	structure.Notes = append(structure.Notes[:noteIndex], structure.Notes[noteIndex+1:]...)
-
 	if err := s.structureRepo.Save(structure); err != nil {
-		// Best-effort rollback: re-add the note to the in-memory structure so
-		// the caller knows the operation was not fully committed.
-		return fmt.Errorf("note file deleted but structure save failed (data may be inconsistent): %w", err)
+		return fmt.Errorf("note files deleted but structure save failed (data may be inconsistent): %w", err)
 	}
 	if s.searchIndexed {
 		delete(s.searchIndex, noteToDelete.ID)
@@ -439,11 +490,50 @@ func (s *NoteService) rebuildSearchIndexLocked(structure *domain.FolderStructure
 }
 
 func (s *NoteService) loadSearchDocument(note *domain.Note, structure *domain.FolderStructure) (searchDocument, error) {
-	content, err := s.fileSystem.LoadNoteContent(note, structure)
+	markdown, transcript, err := s.fileSystem.LoadNoteContentPair(note, structure)
 	if err != nil {
 		return searchDocument{}, err
 	}
-	return searchDocument{raw: content, lower: strings.ToLower(content)}, nil
+	return buildSearchDocument(markdown, transcript), nil
+}
+
+func buildSearchDocument(markdown, transcript string) searchDocument {
+	return searchDocument{
+		markdownRaw:      markdown,
+		markdownLower:    strings.ToLower(markdown),
+		transcriptRaw:    transcript,
+		transcriptLower:  strings.ToLower(transcript),
+		combinedLowerRaw: strings.ToLower(markdown + "\n" + transcript),
+	}
+}
+
+func bestSnippet(doc searchDocument, title, fullQuery string, tokens []string) (int, string, string) {
+	line, snippet := firstMatchingLineAndSnippet(doc.markdownRaw, fullQuery, tokens)
+	markdownMatched := snippet != ""
+
+	tLine, tSnippet := firstMatchingLineAndSnippet(doc.transcriptRaw, fullQuery, tokens)
+	transcriptMatched := tSnippet != ""
+
+	source := "Title"
+	if markdownMatched && transcriptMatched {
+		source = "Both"
+	} else if markdownMatched {
+		source = "Markdown"
+	} else if transcriptMatched {
+		source = "Transcript"
+	}
+
+	if markdownMatched {
+		return line, snippet, source
+	}
+	if transcriptMatched {
+		return tLine, tSnippet, source
+	}
+
+	if strings.TrimSpace(title) == "" {
+		return 0, "", source
+	}
+	return 0, title, source
 }
 
 func firstMatchingLineAndSnippet(content, fullQuery string, tokens []string) (int, string) {
@@ -478,6 +568,7 @@ func buildSnippet(line string, matchStart, matchLen int) string {
 		return ""
 	}
 	trimmedLeft := strings.TrimLeft(line, " \t")
+
 	leftDelta := len(line) - len(trimmedLeft)
 	if matchStart >= leftDelta {
 		matchStart -= leftDelta
@@ -531,17 +622,14 @@ func tokenizeSearchQuery(query string) []string {
 
 // ── internal helpers ──────────────────────────────────────────────────────────
 
-// moveNoteFile delegates to the filesystem layer.
 func (s *NoteService) moveNoteFile(note *domain.Note, oldFolderID, newFolderID string, structure *domain.FolderStructure) error {
-	return s.fileSystem.MoveNoteFile(note, oldFolderID, newFolderID, structure, s.notesPath)
+	return s.fileSystem.MoveNoteFilePair(note, oldFolderID, newFolderID, structure)
 }
 
-// deleteNoteFile delegates to the filesystem layer.
 func (s *NoteService) deleteNoteFile(note *domain.Note, structure *domain.FolderStructure) error {
-	return s.fileSystem.DeleteNoteFile(note, structure)
+	return s.fileSystem.DeleteNoteFilePair(note, structure)
 }
 
-// folderExists reports whether a folder with the given ID is present in the structure.
 func folderExists(id string, structure *domain.FolderStructure) bool {
 	for _, f := range structure.Folders {
 		if f.ID == id {
@@ -551,8 +639,6 @@ func folderExists(id string, structure *domain.FolderStructure) bool {
 	return false
 }
 
-// nextNoteOrder returns an order value that is one greater than the current
-// maximum, so deletions never cause two notes to share the same order.
 func nextNoteOrder(structure *domain.FolderStructure) int {
 	max := -1
 	for _, n := range structure.Notes {
@@ -563,15 +649,70 @@ func nextNoteOrder(structure *domain.FolderStructure) int {
 	return max + 1
 }
 
-// renamedDiskName builds a new NameOnDisk (without extension) by preserving
-// the timestamp prefix of the old name and replacing the title portion.
-//
-// Bug 5 fix: if the old name contains no dash (unexpected format) the entire
-// old name is used as the prefix so we never panic on a missing index.
-func renamedDiskName(oldNameOnDisk, newTitle string) string {
-	prefix := oldNameOnDisk
-	if idx := strings.Index(oldNameOnDisk, "-"); idx != -1 {
-		prefix = oldNameOnDisk[:idx]
+func generateFileStem(title string) string {
+	return fmt.Sprintf("%d-%s-%s", time.Now().Unix(), uuid.NewString()[:8], util.SanitizeName(title))
+}
+
+func deriveFileStem(note *domain.Note) string {
+	if strings.TrimSpace(note.FileStem) != "" {
+		return note.FileStem
 	}
-	return fmt.Sprintf("%s-%s", prefix, util.SanitizeName(newTitle))
+	return generateFileStem(note.Title)
+}
+
+func currentFileStems(structure *domain.FolderStructure) map[string]struct{} {
+	stems := make(map[string]struct{}, len(structure.Notes))
+	for _, note := range structure.Notes {
+		if strings.TrimSpace(note.FileStem) == "" {
+			continue
+		}
+		stems[note.FileStem] = struct{}{}
+	}
+	return stems
+}
+
+func ensureUniqueFileStem(stem string, existing map[string]struct{}) string {
+	candidate := strings.TrimSpace(stem)
+	if candidate == "" {
+		candidate = uuid.NewString()
+	}
+	if _, exists := existing[candidate]; !exists {
+		return candidate
+	}
+	for i := 1; ; i++ {
+		next := fmt.Sprintf("%s-%d", candidate, i)
+		if _, exists := existing[next]; !exists {
+			return next
+		}
+	}
+}
+
+func fileStemTakenByAnotherNote(structure *domain.FolderStructure, noteID, fileStem string) bool {
+	for _, note := range structure.Notes {
+		if note.ID == noteID {
+			continue
+		}
+		if note.FileStem == fileStem {
+			return true
+		}
+	}
+	return false
+}
+
+func renamedFileStem(oldFileStem, newTitle string) string {
+	base := strings.TrimSpace(oldFileStem)
+	newName := util.SanitizeName(newTitle)
+	if base == "" {
+		return generateFileStem(newTitle)
+	}
+	parts := strings.SplitN(base, "-", 3)
+	if len(parts) < 2 {
+		return fmt.Sprintf("%s-%s", base, newName)
+	}
+	return fmt.Sprintf("%s-%s-%s", parts[0], parts[1], newName)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

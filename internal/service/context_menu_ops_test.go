@@ -33,7 +33,7 @@ func TestContextMenu_RenameNote_UpdatesTitle(t *testing.T) {
 		t.Fatalf("Get before rename: %v", err)
 	}
 
-	if err := h.service.Update(note.ID, "Final Report", full.Content); err != nil {
+	if err := h.service.Update(note.ID, "Final Report", full.MarkdownContent, full.TranscriptContent); err != nil {
 		t.Fatalf("Update (rename): %v", err)
 	}
 
@@ -44,8 +44,8 @@ func TestContextMenu_RenameNote_UpdatesTitle(t *testing.T) {
 	if got.Title != "Final Report" {
 		t.Errorf("title: got %q, want %q", got.Title, "Final Report")
 	}
-	if got.Content != "some content" {
-		t.Errorf("content changed unexpectedly: got %q", got.Content)
+	if got.MarkdownContent != "some content" {
+		t.Errorf("content changed unexpectedly: got %q", got.MarkdownContent)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestContextMenu_RenameNote_SameTitle_Succeeds(t *testing.T) {
 	}
 
 	// Rename to the same title — should succeed silently.
-	if err := h.service.Update(note.ID, "Same Title", full.Content); err != nil {
+	if err := h.service.Update(note.ID, "Same Title", full.MarkdownContent, full.TranscriptContent); err != nil {
 		t.Fatalf("Update (same title): %v", err)
 	}
 }
@@ -79,7 +79,7 @@ func TestContextMenu_RenameNote_InsideFolder_NoteStillAccessible(t *testing.T) {
 	note, _ := h.service.Create("Draft", "hello", folder.ID)
 	full, _ := h.service.Get(note.ID)
 
-	if err := h.service.Update(note.ID, "Polished", full.Content); err != nil {
+	if err := h.service.Update(note.ID, "Polished", full.MarkdownContent, full.TranscriptContent); err != nil {
 		t.Fatalf("Update inside folder: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestContextMenu_RenameNote_InsideFolder_NoteStillAccessible(t *testing.T) {
 		t.Errorf("FolderID changed: got %q, want %q", got.FolderID, folder.ID)
 	}
 	// The new file must be inside the folder directory.
-	newPath := filepath.Join(h.notesPath, folder.NameOnDisk, got.NameOnDisk)
+	newPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, got.FileStem+".md")
 	if _, err := os.Stat(newPath); err != nil {
 		t.Errorf("renamed file should be inside the folder directory: %v", err)
 	}
@@ -123,8 +123,8 @@ func TestContextMenu_RenameFolder_NoteInsideStillReadable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get note after folder rename: %v", err)
 	}
-	if got.Content != "content here" {
-		t.Errorf("note content changed: got %q", got.Content)
+	if got.MarkdownContent != "content here" {
+		t.Errorf("note content changed: got %q", got.MarkdownContent)
 	}
 }
 
@@ -190,8 +190,8 @@ func TestContextMenu_MoveNote_BetweenFolders(t *testing.T) {
 		if got.FolderID != step.dest {
 			t.Errorf("move (%s): FolderID = %q, want %q", step.label, got.FolderID, step.dest)
 		}
-		if got.Content != "data" {
-			t.Errorf("move (%s): content changed to %q", step.label, got.Content)
+		if got.MarkdownContent != "data" {
+			t.Errorf("move (%s): content changed to %q", step.label, got.MarkdownContent)
 		}
 	}
 }
@@ -218,8 +218,8 @@ func TestContextMenu_MoveFolder_ToNewParent_NotesInsideStillAccessible(t *testin
 	if err != nil {
 		t.Fatalf("Get note after folder move: %v", err)
 	}
-	if got.Content != "important" {
-		t.Errorf("note content changed after folder move: %q", got.Content)
+	if got.MarkdownContent != "important" {
+		t.Errorf("note content changed after folder move: %q", got.MarkdownContent)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestContextMenu_DeleteNote_WhileItIsCurrentNote(t *testing.T) {
 	h := newNoteServiceHarness(t)
 
 	note, _ := h.service.Create("Active Note", "body", "")
-	filePath := filepath.Join(h.notesPath, note.NameOnDisk)
+	filePath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 
 	if err := h.service.Delete(note.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -296,7 +296,7 @@ func TestContextMenu_DeleteFolder_PreservingNotes(t *testing.T) {
 	if got.FolderID != "" {
 		t.Errorf("note.FolderID should be empty after folder delete, got %q", got.FolderID)
 	}
-	if got.Content != "keep this" {
-		t.Errorf("note content changed: %q", got.Content)
+	if got.MarkdownContent != "keep this" {
+		t.Errorf("note content changed: %q", got.MarkdownContent)
 	}
 }

@@ -49,9 +49,11 @@ function resetState(): void {
     currentNote: {
       id: 'n1',
       title: 'Note 1',
-      content: 'existing body',
+      markdownContent: 'existing body',
+      transcriptContent: 'captured transcript',
+      fileStem: 'note-1',
       folderId: '',
-      nameOnDisk: 'note-1.md',
+      transcriptActivated: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       order: 0,

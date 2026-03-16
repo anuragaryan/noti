@@ -9,60 +9,113 @@ import (
 
 // PathResolver resolves the absolute filesystem path for any note or folder ID.
 type PathResolver struct {
-	notesPath string
+	notesPath      string
+	markdownRoot   string
+	transcriptRoot string
 }
 
 // NewPathResolver creates a PathResolver rooted at notesPath.
 func NewPathResolver(notesPath string) *PathResolver {
-	return &PathResolver{notesPath: notesPath}
+	return &PathResolver{
+		notesPath:      notesPath,
+		markdownRoot:   filepath.Join(notesPath, "markdown"),
+		transcriptRoot: filepath.Join(notesPath, "transcripts"),
+	}
 }
 
-// GetPathFor returns the absolute disk path for the given folder or note ID.
-//
-// It walks up the parent chain recursively. A visited set is kept at every
-// call site so that a corrupted structure with circular parent references
-// causes a clear error instead of an infinite recursion / stack overflow.
+func (r *PathResolver) MarkdownRootPath() string {
+	return r.markdownRoot
+}
+
+func (r *PathResolver) TranscriptRootPath() string {
+	return r.transcriptRoot
+
+}
+
+// GetPathFor resolves note or folder absolute paths from the split storage model.
 func (r *PathResolver) GetPathFor(id string, structure *domain.FolderStructure) (string, error) {
-	return r.resolvePath(id, structure, make(map[string]bool))
+	if id == "" {
+		return r.notesPath, nil
+	}
+	for i := range structure.Notes {
+		if structure.Notes[i].ID == id {
+			if structure.Notes[i].FileStem == "" {
+				return "", fmt.Errorf("note %q missing file stem", id)
+			}
+			return r.NoteMarkdownPath(&structure.Notes[i], structure)
+		}
+	}
+	rel, err := r.FolderRelativePath(id, structure)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(r.notesPath, rel), nil
 }
 
-// resolvePath is the internal recursive implementation. visited tracks every
-// ID seen on the current call stack to detect cycles.
-func (r *PathResolver) resolvePath(id string, structure *domain.FolderStructure, visited map[string]bool) (string, error) {
-	if visited[id] {
-		return "", fmt.Errorf("circular reference detected for ID %q: the parent chain forms a cycle", id)
+func (r *PathResolver) FolderPathInMarkdownRoot(folderID string, structure *domain.FolderStructure) (string, error) {
+	rel, err := r.folderRelativePath(folderID, structure, make(map[string]bool))
+	if err != nil {
+		return "", err
 	}
-	visited[id] = true
-
-	// Check notes first.
-	for _, note := range structure.Notes {
-		if note.ID != id {
-			continue
-		}
-		if note.FolderID == "" {
-			return filepath.Join(r.notesPath, note.NameOnDisk), nil
-		}
-		parentPath, err := r.resolvePath(note.FolderID, structure, visited)
-		if err != nil {
-			return "", fmt.Errorf("could not resolve parent folder %q for note %q: %w", note.FolderID, id, err)
-		}
-		return filepath.Join(parentPath, note.NameOnDisk), nil
+	if rel == "" {
+		return r.markdownRoot, nil
 	}
+	return filepath.Join(r.markdownRoot, rel), nil
+}
 
-	// Check folders.
+func (r *PathResolver) FolderPathInTranscriptRoot(folderID string, structure *domain.FolderStructure) (string, error) {
+	rel, err := r.folderRelativePath(folderID, structure, make(map[string]bool))
+	if err != nil {
+		return "", err
+	}
+	if rel == "" {
+		return r.transcriptRoot, nil
+	}
+	return filepath.Join(r.transcriptRoot, rel), nil
+}
+
+func (r *PathResolver) NoteMarkdownPath(note *domain.Note, structure *domain.FolderStructure) (string, error) {
+	parent, err := r.FolderPathInMarkdownRoot(note.FolderID, structure)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, fmt.Sprintf("%s.md", note.FileStem)), nil
+}
+
+func (r *PathResolver) NoteTranscriptPath(note *domain.Note, structure *domain.FolderStructure) (string, error) {
+	parent, err := r.FolderPathInTranscriptRoot(note.FolderID, structure)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, fmt.Sprintf("%s.transcript.txt", note.FileStem)), nil
+}
+
+func (r *PathResolver) FolderRelativePath(folderID string, structure *domain.FolderStructure) (string, error) {
+	return r.folderRelativePath(folderID, structure, make(map[string]bool))
+}
+
+func (r *PathResolver) folderRelativePath(folderID string, structure *domain.FolderStructure, visited map[string]bool) (string, error) {
+	if folderID == "" {
+		return "", nil
+	}
+	if visited[folderID] {
+		return "", fmt.Errorf("circular reference detected for folder %q", folderID)
+	}
+	visited[folderID] = true
+
 	for _, folder := range structure.Folders {
-		if folder.ID != id {
+		if folder.ID != folderID {
 			continue
 		}
 		if folder.ParentID == "" {
-			return filepath.Join(r.notesPath, folder.NameOnDisk), nil
+			return folder.NameOnDisk, nil
 		}
-		parentPath, err := r.resolvePath(folder.ParentID, structure, visited)
+		parentRel, err := r.folderRelativePath(folder.ParentID, structure, visited)
 		if err != nil {
-			return "", fmt.Errorf("could not resolve parent folder %q for folder %q: %w", folder.ParentID, id, err)
+			return "", err
 		}
-		return filepath.Join(parentPath, folder.NameOnDisk), nil
+		return filepath.Join(parentRel, folder.NameOnDisk), nil
 	}
 
-	return "", fmt.Errorf("ID %q not found in structure", id)
+	return "", fmt.Errorf("folder ID %q not found", folderID)
 }

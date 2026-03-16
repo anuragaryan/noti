@@ -74,7 +74,7 @@ func TestNoteService_Create_CreatesFileAndStructureEntry(t *testing.T) {
 	}
 
 	// File must exist on disk with correct content.
-	filePath := filepath.Join(h.notesPath, note.NameOnDisk)
+	filePath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("note file should exist on disk: %v", err)
@@ -146,7 +146,7 @@ func TestNoteService_Create_IDsAreUnique(t *testing.T) {
 
 	seen := map[string]bool{}
 	for i := 0; i < 20; i++ {
-		// Use distinct titles so NameOnDisk never collides.
+		// Use distinct titles so generated stems stay distinct.
 		title := strings.Repeat("x", i+1)
 		note, err := h.service.Create(title, "", "")
 		if err != nil {
@@ -169,7 +169,7 @@ func TestNoteService_Create_InsideFolder_PlacesFileInFolderDirectory(t *testing.
 		t.Fatalf("Create: %v", err)
 	}
 
-	filePath := filepath.Join(h.notesPath, folder.NameOnDisk, note.NameOnDisk)
+	filePath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, note.FileStem+".md")
 	if _, err := os.Stat(filePath); err != nil {
 		t.Errorf("note file should be inside folder directory: %v", err)
 	}
@@ -186,8 +186,8 @@ func TestNoteService_Get_ReturnsNoteWithContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: unexpected error: %v", err)
 	}
-	if got.Content != "the content" {
-		t.Errorf("content: got %q, want %q", got.Content, "the content")
+	if got.MarkdownContent != "the content" {
+		t.Errorf("content: got %q, want %q", got.MarkdownContent, "the content")
 	}
 }
 
@@ -214,7 +214,7 @@ func TestNoteService_Get_FileMissingOnDisk_ReturnsNoteWithEmptyContent(t *testin
 	}
 
 	// Remove the file from disk to simulate data loss / manual deletion.
-	if err := os.Remove(filepath.Join(h.notesPath, note.NameOnDisk)); err != nil {
+	if err := os.Remove(filepath.Join(h.notesPath, "markdown", note.FileStem+".md")); err != nil {
 		t.Fatalf("setup: could not remove file: %v", err)
 	}
 
@@ -226,8 +226,8 @@ func TestNoteService_Get_FileMissingOnDisk_ReturnsNoteWithEmptyContent(t *testin
 	if got == nil {
 		t.Fatal("Get returned nil note")
 	}
-	if got.Content != "" {
-		t.Errorf("expected empty content for file-missing note, got %q", got.Content)
+	if got.MarkdownContent != "" {
+		t.Errorf("expected empty content for file-missing note, got %q", got.MarkdownContent)
 	}
 	if got.ID != note.ID {
 		t.Errorf("note ID: got %q, want %q", got.ID, note.ID)
@@ -337,13 +337,13 @@ func TestNoteService_Update_ChangesContentOnDisk(t *testing.T) {
 	h := newNoteServiceHarness(t)
 
 	note, _ := h.service.Create("Original", "old content", "")
-	if err := h.service.Update(note.ID, "Original", "new content"); err != nil {
+	if err := h.service.Update(note.ID, "Original", "new content", ""); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
 	got, _ := h.service.Get(note.ID)
-	if got.Content != "new content" {
-		t.Errorf("content after update: got %q, want %q", got.Content, "new content")
+	if got.MarkdownContent != "new content" {
+		t.Errorf("content after update: got %q, want %q", got.MarkdownContent, "new content")
 	}
 }
 
@@ -352,14 +352,14 @@ func TestNoteService_Update_TitleChange_RenamesFileOnDisk(t *testing.T) {
 	h := newNoteServiceHarness(t)
 
 	note, _ := h.service.Create("Old Title", "content", "")
-	oldDiskName := note.NameOnDisk
+	oldDiskName := note.FileStem + ".md"
 
-	if err := h.service.Update(note.ID, "New Title", "content"); err != nil {
+	if err := h.service.Update(note.ID, "New Title", "content", ""); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
 	// Old file must be gone.
-	if _, err := os.Stat(filepath.Join(h.notesPath, oldDiskName)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(h.notesPath, "markdown", oldDiskName)); !os.IsNotExist(err) {
 		t.Error("old file should have been removed after rename")
 	}
 
@@ -384,14 +384,14 @@ func TestNoteService_Update_TitleChange_InsideFolder_RenamesFileCorrectly(t *tes
 	if err != nil {
 		t.Fatalf("Create in folder: %v", err)
 	}
-	oldDiskName := note.NameOnDisk
+	oldDiskName := note.FileStem + ".md"
 
-	if err := h.service.Update(note.ID, "Final", "content"); err != nil {
+	if err := h.service.Update(note.ID, "Final", "content", ""); err != nil {
 		t.Fatalf("Update inside folder: %v", err)
 	}
 
 	// Old file inside the folder must be gone.
-	oldPath := filepath.Join(h.notesPath, folder.NameOnDisk, oldDiskName)
+	oldPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, oldDiskName)
 	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
 		t.Error("old file inside folder should have been removed after rename")
 	}
@@ -404,40 +404,45 @@ func TestNoteService_Update_TitleChange_InsideFolder_RenamesFileCorrectly(t *tes
 	if got.Title != "Final" {
 		t.Errorf("title: got %q, want %q", got.Title, "Final")
 	}
-	newPath := filepath.Join(h.notesPath, folder.NameOnDisk, got.NameOnDisk)
+	newPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, got.FileStem+".md")
 	if _, err := os.Stat(newPath); err != nil {
 		t.Errorf("renamed file should exist inside folder: %v", err)
 	}
 }
 
-// TestNoteService_Update_NameOnDiskWithNoDash_DoesNotPanic verifies that Update
-// handles a NameOnDisk that contains no dash without panicking.
-func TestNoteService_Update_NameOnDiskWithNoDash_DoesNotPanic(t *testing.T) {
+// TestNoteService_Update_FileStemWithNoDash_DoesNotPanic verifies that Update
+// handles a FileStem that contains no dash without panicking.
+func TestNoteService_Update_FileStemWithNoDash_DoesNotPanic(t *testing.T) {
 	t.Parallel()
 	h := newNoteServiceHarness(t)
 
-	// Create a note normally, then manually overwrite its NameOnDisk with a
-	// no-dash name directly on disk and in the structure.
+	// Create a note normally, then manually overwrite its FileStem with a
+	// no-dash value directly in structure and on disk.
 	note, err := h.service.Create("Original", "content", "")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
 	// Rename the file on disk to have no dash.
-	oldPath := filepath.Join(h.notesPath, note.NameOnDisk)
-	noDashPath := filepath.Join(h.notesPath, "nodash.md")
+	oldPath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
+	oldTranscriptPath := filepath.Join(h.notesPath, "transcripts", note.FileStem+".transcript.txt")
+	noDashPath := filepath.Join(h.notesPath, "markdown", "nodash.md")
+	noDashTranscriptPath := filepath.Join(h.notesPath, "transcripts", "nodash.transcript.txt")
 	if err := os.Rename(oldPath, noDashPath); err != nil {
 		t.Fatalf("setup rename: %v", err)
 	}
+	if err := os.Rename(oldTranscriptPath, noDashTranscriptPath); err != nil {
+		t.Fatalf("setup transcript rename: %v", err)
+	}
 
-	// Update the structure entry to reflect the no-dash name.
+	// Update the structure entry to reflect the no-dash file stem.
 	structure, err := h.structureRepo.Load()
 	if err != nil {
 		t.Fatalf("setup load: %v", err)
 	}
 	for i := range structure.Notes {
 		if structure.Notes[i].ID == note.ID {
-			structure.Notes[i].NameOnDisk = "nodash.md"
+			structure.Notes[i].FileStem = "nodash"
 		}
 	}
 	if err := h.structureRepo.Save(structure); err != nil {
@@ -445,8 +450,8 @@ func TestNoteService_Update_NameOnDiskWithNoDash_DoesNotPanic(t *testing.T) {
 	}
 
 	// Must not panic, and must succeed.
-	if err := h.service.Update(note.ID, "New Name", "content"); err != nil {
-		t.Fatalf("Update with no-dash NameOnDisk: %v", err)
+	if err := h.service.Update(note.ID, "New Name", "content", ""); err != nil {
+		t.Fatalf("Update with no-dash FileStem: %v", err)
 	}
 }
 
@@ -454,7 +459,7 @@ func TestNoteService_Update_UnknownID_ReturnsError(t *testing.T) {
 	t.Parallel()
 	h := newNoteServiceHarness(t)
 
-	err := h.service.Update("ghost", "Title", "Content")
+	err := h.service.Update("ghost", "Title", "Content", "")
 	if err == nil {
 		t.Fatal("expected error for unknown note ID, got nil")
 	}
@@ -502,11 +507,11 @@ func TestNoteService_Move_ToRoot_MovesFileOnDisk(t *testing.T) {
 	}
 
 	// Verify the file is physically at root, not still inside the old folder.
-	rootFilePath := filepath.Join(h.notesPath, note.NameOnDisk)
+	rootFilePath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 	if _, err := os.Stat(rootFilePath); err != nil {
 		t.Errorf("file should exist at notes root after move: %v", err)
 	}
-	folderFilePath := filepath.Join(h.notesPath, folder.NameOnDisk, note.NameOnDisk)
+	folderFilePath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, note.FileStem+".md")
 	if _, err := os.Stat(folderFilePath); !os.IsNotExist(err) {
 		t.Error("file should no longer exist inside the old folder directory")
 	}
@@ -563,11 +568,11 @@ func TestNoteService_Move_RollsBackFileOnSaveFailure(t *testing.T) {
 
 	// After rollback the file must be back at its original location (root),
 	// not inside the destination folder.
-	originalPath := filepath.Join(h.notesPath, note.NameOnDisk)
+	originalPath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 	if _, err := os.Stat(originalPath); err != nil {
 		t.Errorf("file should have been rolled back to original location: %v", err)
 	}
-	movedPath := filepath.Join(h.notesPath, folder.NameOnDisk, note.NameOnDisk)
+	movedPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, note.FileStem+".md")
 	if _, err := os.Stat(movedPath); !os.IsNotExist(err) {
 		t.Error("file should not remain in destination after rollback")
 	}
@@ -580,7 +585,7 @@ func TestNoteService_Delete_RemovesFileAndStructureEntry(t *testing.T) {
 	h := newNoteServiceHarness(t)
 
 	note, _ := h.service.Create("ToDelete", "content", "")
-	filePath := filepath.Join(h.notesPath, note.NameOnDisk)
+	filePath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 
 	if err := h.service.Delete(note.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -626,7 +631,7 @@ func TestNoteService_ConcurrentCreates_NoDuplicateIDs(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			// Use distinct titles so NameOnDisk never collides.
+			// Use distinct titles so generated stems stay distinct.
 			note, err := h.service.Create(strings.Repeat("t", i+1), "", "")
 			if err != nil {
 				results <- result{err: err}
@@ -656,7 +661,7 @@ func TestNoteService_ConcurrentCreates_NoDuplicateIDs(t *testing.T) {
 
 // plantNoteInStructure inserts a note directly into the persisted structure
 // and writes its file to disk. Used when we need fine-grained control over
-// the note's NameOnDisk (e.g. to test edge cases like no-dash filenames).
+// the note's FileStem (e.g. to test edge cases like no-dash filenames).
 func (h *noteServiceHarness) plantNoteInStructure(t *testing.T, note domain.Note, fileContent string) {
 	t.Helper()
 
@@ -665,9 +670,13 @@ func (h *noteServiceHarness) plantNoteInStructure(t *testing.T, note domain.Note
 		t.Fatalf("plantNote load: %v", err)
 	}
 
-	filePath := filepath.Join(h.notesPath, note.NameOnDisk)
+	filePath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 	if err := os.WriteFile(filePath, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("plantNote write: %v", err)
+	}
+	transcriptPath := filepath.Join(h.notesPath, "transcripts", note.FileStem+".transcript.txt")
+	if err := os.WriteFile(transcriptPath, []byte(""), 0644); err != nil {
+		t.Fatalf("plantNote transcript write: %v", err)
 	}
 
 	note.CreatedAt = time.Now()

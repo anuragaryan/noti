@@ -8,6 +8,11 @@ const mockAudioAPI = {
   stopRecording: vi.fn(),
 }
 
+const mockNotesAPI = {
+  update: vi.fn(),
+  markTranscriptActivated: vi.fn(),
+}
+
 const recordingListeners = {
   partial: [] as Array<(payload: { isPartial: boolean; text: string }) => void>,
   done: [] as Array<(payload: { text: string }) => void>,
@@ -15,6 +20,7 @@ const recordingListeners = {
 
 vi.mock('../api', () => ({
   AudioAPI: mockAudioAPI,
+  NotesAPI: mockNotesAPI,
 }))
 
 vi.mock('../events', () => ({
@@ -43,6 +49,32 @@ function resetState(): void {
     recordingSource: 'microphone',
     partialTranscript: '',
     sttAvailable: true,
+    currentNote: {
+      id: 'n1',
+      title: 'Note 1',
+      markdownContent: 'existing text',
+      transcriptContent: '',
+      fileStem: 'n1',
+      folderId: '',
+      transcriptActivated: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: 0,
+    } as any,
+    notes: [
+      {
+        id: 'n1',
+        title: 'Note 1',
+        markdownContent: 'existing text',
+        transcriptContent: '',
+        fileStem: 'n1',
+        folderId: '',
+        transcriptActivated: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        order: 0,
+      } as any,
+    ],
     notification: null,
   })
 }
@@ -57,6 +89,8 @@ describe('recording integration', () => {
     mockAudioAPI.requestPermissions.mockReset()
     mockAudioAPI.startRecordingWithSource.mockReset()
     mockAudioAPI.stopRecording.mockReset()
+    mockNotesAPI.update.mockReset()
+    mockNotesAPI.markTranscriptActivated.mockReset()
   })
 
   it('starts recording and updates live transcript lifecycle', async () => {
@@ -66,25 +100,23 @@ describe('recording integration', () => {
     mockAudioAPI.startRecordingWithSource.mockResolvedValue(undefined)
     mockAudioAPI.stopRecording.mockResolvedValue({})
 
-    const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-    if (!textarea) throw new Error('textarea missing')
-    textarea.value = 'existing text'
-
     initRecording()
 
     await startRecording()
 
     expect(state.get('isRecording')).toBe(true)
     expect(mockAudioAPI.startRecordingWithSource).toHaveBeenCalledWith('microphone')
+    expect(mockNotesAPI.markTranscriptActivated).toHaveBeenCalledWith('n1')
 
     recordingListeners.partial[0]({ isPartial: true, text: 'partial words' })
-    expect(textarea.value).toContain('partial words')
+    expect(state.get('partialTranscript')).toContain('partial words')
 
     await stopRecording()
     expect(state.get('isRecording')).toBe(false)
 
-    recordingListeners.done[0]({ text: '' })
-    expect(textarea.value).toBe('existing text')
+    recordingListeners.done[0]({ text: 'final words' })
+    await Promise.resolve()
+    expect(mockNotesAPI.update).toHaveBeenCalled()
   })
 
   it('shows error and does not start when permission denied', async () => {

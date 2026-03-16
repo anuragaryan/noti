@@ -4,9 +4,8 @@
  */
 
 import state from '../state'
-import { AudioAPI } from '../api'
+import { AudioAPI, NotesAPI } from '../api'
 import { AppEvents } from '../events'
-import { isNearBottom, scrollToBottom } from '../utils/scroll'
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
 
@@ -38,25 +37,15 @@ function updateTimerDisplay(): void {
   if (el) el.textContent = formatDuration(state.get('recordingDuration'))
 }
 
-// ─── Live transcript in textarea ─────────────────────────────────────────────
+// ─── Live transcript state ───────────────────────────────────────────────────
 
-// Content that existed in the textarea before recording started.
-// The live transcript is appended after this base, separated by '\n\n'.
-let preRecordingContent = ''
+let preRecordingTranscript = ''
 
-// Write the running transcript into the textarea, always replacing the
-// previous partial so the text doesn't duplicate.
-function setLiveTranscript(text: string): void {
-  const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-  if (!textarea) return
-  const shouldAutoScroll = isNearBottom(textarea)
-  const separator = preRecordingContent ? '\n\n' : ''
-  textarea.value = preRecordingContent + separator + text
-  if (shouldAutoScroll) {
-    scrollToBottom(textarea)
-  }
-  // Trigger auto-save debounce
-  textarea.dispatchEvent(new Event('input'))
+function mergedTranscript(base: string, live: string): string {
+  const trimmedLive = live.trim()
+  if (!trimmedLive) return base
+  const separator = base.trim() ? '\n\n' : ''
+  return `${base}${separator}${trimmedLive}`
 }
 
 // ─── Recording Bar ────────────────────────────────────────────────────────────
@@ -125,9 +114,27 @@ export async function startRecording(): Promise<void> {
       return
     }
 
-    // Snapshot what's already in the editor so we can append without clobbering it.
-    const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-    preRecordingContent = textarea?.value ?? ''
+    const note = state.get('currentNote')
+    preRecordingTranscript = note?.transcriptContent ?? ''
+
+    if (note && !note.transcriptActivated) {
+      try {
+        await NotesAPI.markTranscriptActivated(note.id)
+      } catch (err) {
+        console.error('Failed to persist transcript activation:', err)
+      }
+
+      const notes = state.get('notes').map((n) =>
+        n.id === note.id ? { ...n, transcriptActivated: true } : n,
+      ) as any
+      state.setState({
+        notes,
+        currentNote: {
+          ...note,
+          transcriptActivated: true,
+        } as any,
+      })
+    }
 
     await AudioAPI.startRecordingWithSource(source)
     state.setState({ isRecording: true, partialTranscript: '' })
@@ -160,6 +167,35 @@ export async function stopRecording(): Promise<void> {
   }
 }
 
+async function persistTranscript(liveTranscript: string): Promise<void> {
+  const note = state.get('currentNote')
+  if (!note) return
+
+  const nextTranscript = mergedTranscript(preRecordingTranscript, liveTranscript)
+  const titleInput = document.querySelector<HTMLInputElement>('#note-title-input')
+  const markdownInput = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+  const title = titleInput?.value ?? note.title ?? ''
+  const markdownContent = markdownInput?.value ?? note.markdownContent ?? ''
+
+  await NotesAPI.update(note.id, title, markdownContent, nextTranscript)
+
+  const notes = state.get('notes').map((n) =>
+    n.id === note.id
+      ? { ...n, title, markdownContent, transcriptContent: nextTranscript }
+      : n
+  ) as any
+
+  state.setState({
+    notes,
+    currentNote: {
+      ...note,
+      title,
+      markdownContent,
+      transcriptContent: nextTranscript,
+    } as any,
+  })
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function initRecording(): void {
@@ -175,20 +211,23 @@ export function initRecording(): void {
   AppEvents.onTranscriptionPartial((result) => {
     if (result.isPartial && state.get('isRecording')) {
       state.setState({ partialTranscript: result.text })
-      setLiveTranscript(result.text)
     }
   })
 
   // Handle final transcription result from async background processing
   AppEvents.onTranscriptionDone((result) => {
-    if (result.text) {
-      setLiveTranscript(result.text)
-      state.showNotification('Transcription complete', 'success')
-    } else {
-      // Nothing transcribed — restore pre-recording content as-is.
-      const textarea = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-      if (textarea) textarea.value = preRecordingContent
+    if (!result.text) {
+      return
     }
+
+    void persistTranscript(result.text)
+      .then(() => {
+        state.showNotification('Transcription complete', 'success')
+      })
+      .catch((err) => {
+        console.error('Failed to persist transcript:', err)
+        state.showNotification('Failed to save transcript', 'error')
+      })
   })
 
   // Wire the record button in editor header via event delegation.

@@ -26,7 +26,7 @@ func TestStructureRepository_SaveAndLoad_RoundTrip(t *testing.T) {
 			{ID: "f1", Name: "Work", NameOnDisk: "work", ParentID: "", Order: 0, CreatedAt: time.Now().Truncate(time.Second)},
 		},
 		Notes: []domain.Note{
-			{ID: "n1", Title: "Todo", NameOnDisk: "todo.md", FolderID: "f1", Order: 0, CreatedAt: time.Now().Truncate(time.Second)},
+			{ID: "n1", Title: "Todo", FileStem: "todo", FolderID: "f1", Order: 0, CreatedAt: time.Now().Truncate(time.Second)},
 		},
 	}
 

@@ -153,8 +153,10 @@ async function runPrompt(): Promise<void> {
         return
       }
 
-      const noteContent = note.content || '(No content)'
-      const systemPrompt = `You are a helpful AI assistant. Analyze the user's note below and respond to their request.\n\nNote content:\n${noteContent}`
+      const markdownContent = note.markdownContent || ''
+      const transcriptContent = note.transcriptContent || ''
+      const noteContext = `## Markdown\n${markdownContent}\n\n## Transcript\n${transcriptContent}`
+      const systemPrompt = `You are a helpful AI assistant. Analyze the user's note below and respond to their request.\n\nNote content:\n${noteContext}`
 
       await LLMAPI.generateStream(customText, systemPrompt)
     }

@@ -68,6 +68,8 @@ export function IsFirstRun():Promise<boolean>;
 
 export function IsRecording():Promise<boolean>;
 
+export function MarkTranscriptActivated(arg1:string):Promise<void>;
+
 export function MoveNote(arg1:string,arg2:string):Promise<void>;
 
 export function RequestAudioPermissions(arg1:string):Promise<void>;
@@ -92,6 +94,6 @@ export function UpdateFolder(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function UpdateLLMConfig(arg1:domain.LLMConfig):Promise<void>;
 
-export function UpdateNote(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function UpdateNote(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function UpdatePrompt(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;

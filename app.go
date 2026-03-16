@@ -270,12 +270,17 @@ func (a *App) startup(ctx context.Context) {
 	// Create structure.json if it doesn't exist
 	if _, err := os.Stat(a.structurePath); os.IsNotExist(err) {
 		if err := a.structureRepo.Save(&domain.FolderStructure{
-			Folders: []domain.Folder{},
-			Notes:   []domain.Note{},
+			SchemaVersion: 2,
+			Folders:       []domain.Folder{},
+			Notes:         []domain.Note{},
 		}); err != nil {
 			slog.Error("Cannot create structure.json", "error", err)
 			return
 		}
+	}
+
+	if err := a.noteService.EnsureSplitStorage(); err != nil {
+		slog.Error("Failed to initialize split note storage", "error", err)
 	}
 }
 
@@ -782,7 +787,7 @@ func (a *App) ExecutePromptOnNoteStream(promptID, noteID string) error {
 	}
 
 	// Replace {{content}} placeholder in user prompt
-	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", note.Content)
+	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", buildNoteAIContext(note))
 
 	return a.GenerateTextStream(userPrompt, prompt.SystemPrompt)
 }
@@ -858,7 +863,8 @@ func (a *App) ExecutePromptOnNote(promptID, noteID string) (*domain.PromptExecut
 	}
 
 	// Replace {{content}} placeholder in user prompt
-	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", note.Content)
+	contextContent := buildNoteAIContext(note)
+	userPrompt := strings.ReplaceAll(prompt.UserPrompt, "{{content}}", contextContent)
 
 	// Execute the prompt
 	request := &domain.LLMRequest{
@@ -874,7 +880,7 @@ func (a *App) ExecutePromptOnNote(promptID, noteID string) (*domain.PromptExecut
 	// Create execution result
 	result := &domain.PromptExecutionResult{
 		PromptName:  prompt.Name,
-		Input:       note.Content,
+		Input:       contextContent,
 		Output:      response.Text,
 		TokensUsed:  response.TokensUsed,
 		ExecutedAt:  time.Now(),
@@ -955,12 +961,16 @@ func (a *App) GetNote(id string) (*domain.Note, error) {
 	return a.noteService.Get(id)
 }
 
-func (a *App) CreateNote(title string, content string, folderID string) (*domain.Note, error) {
-	return a.noteService.Create(title, content, folderID)
+func (a *App) CreateNote(title string, markdownContent string, folderID string) (*domain.Note, error) {
+	return a.noteService.Create(title, markdownContent, folderID)
 }
 
-func (a *App) UpdateNote(id string, title string, content string) error {
-	return a.noteService.Update(id, title, content)
+func (a *App) UpdateNote(id string, title string, markdownContent string, transcriptContent string) error {
+	return a.noteService.Update(id, title, markdownContent, transcriptContent)
+}
+
+func (a *App) MarkTranscriptActivated(noteID string) error {
+	return a.noteService.MarkTranscriptActivated(noteID)
 }
 
 func (a *App) MoveNote(noteID string, targetFolderID string) error {
@@ -973,6 +983,13 @@ func (a *App) DeleteNote(id string) error {
 
 func (a *App) SearchNotes(query string, limit int) ([]domain.SearchMatch, error) {
 	return a.noteService.Search(query, limit)
+}
+
+func buildNoteAIContext(note *domain.Note) string {
+	if note == nil {
+		return ""
+	}
+	return fmt.Sprintf("## Markdown\n%s\n\n## Transcript\n%s", note.MarkdownContent, note.TranscriptContent)
 }
 
 // ============================================================================

@@ -8,6 +8,7 @@ import { NotesAPI, FoldersAPI } from '../api'
 import { renderMarkdownPreview } from '../utils/markdown'
 import { escapeHtml } from '../utils/html'
 import { icon } from '../utils/icons'
+import { scrollToBottom } from '../utils/scroll'
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,8 @@ function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T 
 function updateNoteInState(
   noteId: string,
   title: string,
-  content: string,
+  markdownContent: string,
+  transcriptContent: string,
   options?: { updateCurrentNote?: boolean }
 ): void {
   const currentNote = state.get('currentNote')
@@ -37,7 +39,7 @@ function updateNoteInState(
   const shouldUpdateCurrentNote = options?.updateCurrentNote ?? true
 
   const updatedNotes = notes.map(n =>
-    n.id === noteId ? { ...n, title, content } : n
+    n.id === noteId ? { ...n, title, markdownContent, transcriptContent } : n
   ) as Note[]
 
   const shouldSyncCurrentNoteTitleOnly =
@@ -48,9 +50,9 @@ function updateNoteInState(
   state.setState({
     isDirty: false,
     lastSaved: new Date(),
-    notes: updatedNotes,
-    ...(shouldUpdateCurrentNote && currentNote?.id === noteId
-      ? { currentNote: { ...currentNote, title, content } as Note }
+      notes: updatedNotes,
+      ...(shouldUpdateCurrentNote && currentNote?.id === noteId
+      ? { currentNote: { ...currentNote, title, markdownContent, transcriptContent } as Note }
       : shouldSyncCurrentNoteTitleOnly
         ? { currentNote: { ...currentNote, title } as Note }
       : {})
@@ -127,6 +129,9 @@ function renderEditorHeader(): void {
   const existingTitleInput = document.querySelector<HTMLInputElement>('#note-title-input')
   const hasMatchingInput = existingTitleInput?.dataset.noteId === note.id
   const titleValue = hasMatchingInput ? (existingTitleInput?.value ?? '') : (note.title || '')
+  const wasFocused = document.activeElement === existingTitleInput
+  const selectionStart = existingTitleInput?.selectionStart ?? null
+  const selectionEnd = existingTitleInput?.selectionEnd ?? null
 
   const isRecording = state.get('isRecording')
   const isPreview = state.get('isPreviewMode')
@@ -166,6 +171,16 @@ function renderEditorHeader(): void {
 
   attachTitleInputHandler()
   attachPreviewButtonHandler()
+
+  if (wasFocused) {
+    const newInput = document.querySelector<HTMLInputElement>('#note-title-input')
+    if (newInput) {
+      newInput.focus()
+      if (selectionStart !== null && selectionEnd !== null) {
+        newInput.setSelectionRange(selectionStart, selectionEnd)
+      }
+    }
+  }
 }
 
 function attachTitleInputHandler(): void {
@@ -178,10 +193,10 @@ function attachTitleInputHandler(): void {
 
     const currentTitle = titleInput.value
     const contentEl = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-    const currentContent = contentEl ? contentEl.value : latestNote.content || ''
+    const currentContent = contentEl ? contentEl.value : latestNote.markdownContent || ''
 
     state.setState({ isDirty: true })
-    void autoSave(latestNote.id, currentTitle, currentContent)
+    void autoSave(latestNote.id, currentTitle, currentContent, getTranscriptEditorContent())
   }, DEBOUNCE_DELAY_MS))
 }
 
@@ -198,12 +213,14 @@ function attachPreviewButtonHandler(): void {
 
       const previewTitleInput = document.querySelector<HTMLInputElement>('#note-title-input')
       const contentInput = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+      const transcriptInput = document.querySelector<HTMLTextAreaElement>('#transcript-content-textarea')
       const title = previewTitleInput?.value ?? currentNote.title ?? ''
-      const content = contentInput?.value ?? currentNote.content ?? ''
+      const markdownContent = contentInput?.value ?? currentNote.markdownContent ?? ''
+      const transcriptContent = transcriptInput?.value ?? currentNote.transcriptContent ?? ''
 
       try {
-        await NotesAPI.update(currentNote.id, title, content)
-        updateNoteInState(currentNote.id, title, content)
+        await NotesAPI.update(currentNote.id, title, markdownContent, transcriptContent)
+        updateNoteInState(currentNote.id, title, markdownContent, transcriptContent)
       } catch (err) {
         console.error('Preview save failed:', err)
         state.showNotification('Failed to save before preview', 'error')
@@ -216,6 +233,63 @@ function attachPreviewButtonHandler(): void {
 }
 
 // ─── Editor Content Area ──────────────────────────────────────────────────────
+
+type TranscriptPanelState = {
+	isRecording: boolean
+	subtitle: string
+	bodyHtml: string
+}
+
+function getTranscriptEditorContent(): string {
+	const transcriptEl = document.querySelector<HTMLTextAreaElement>('#transcript-content-textarea')
+	if (transcriptEl) {
+		return transcriptEl.value
+	}
+	return state.get('currentNote')?.transcriptContent || ''
+}
+
+function buildTranscriptPanelState(note: Note): TranscriptPanelState {
+	const isRecording = state.get('isRecording')
+	const partialTranscript = isRecording ? (state.get('partialTranscript') || '') : ''
+	const transcriptSuffix = partialTranscript.trim()
+	const transcriptBase = note.transcriptContent || ''
+	const transcriptDisplay = transcriptSuffix
+		? `${transcriptBase}${transcriptBase.trim() ? '\n\n' : ''}${transcriptSuffix}`
+		: transcriptBase
+
+	return {
+		isRecording,
+		subtitle: isRecording ? '.transcript.txt · live capture' : '.transcript.txt · captured',
+		bodyHtml: isRecording
+			? (transcriptDisplay.trim()
+				? `<pre class="transcript-content">${escapeHtml(transcriptDisplay)}</pre>`
+				: `<div class="transcript-empty">Transcript will appear here after recording starts.</div>`)
+			: `<textarea id="transcript-content-textarea" class="transcript-textarea" placeholder="Transcript…">${escapeHtml(transcriptBase)}</textarea>`,
+	}
+}
+
+function updateTranscriptPanel(): void {
+	if (!state.get('isRecording')) return
+
+	const note = state.get('currentNote')
+	if (!note) return
+
+	const panel = document.getElementById('transcript-panel')
+	if (!panel) return
+
+	const subtitleEl = document.getElementById('transcript-panel-subtitle')
+	const liveChipEl = document.getElementById('transcript-panel-live-chip')
+	const bodyEl = document.getElementById('transcript-panel-body')
+	if (!subtitleEl || !liveChipEl || !bodyEl) return
+
+	const transcriptState = buildTranscriptPanelState(note)
+	panel.classList.toggle('content-panel-transcript-live', transcriptState.isRecording)
+	panel.classList.toggle('content-panel-transcript-captured', !transcriptState.isRecording)
+	subtitleEl.textContent = transcriptState.subtitle
+	liveChipEl.innerHTML = transcriptState.isRecording ? '<span class="transcript-live-chip">LIVE</span>' : ''
+	bodyEl.innerHTML = transcriptState.bodyHtml
+	scrollToBottom(bodyEl)
+}
 
 function renderEditorArea(): void {
   const editorArea = document.getElementById('editor-area')
@@ -231,45 +305,105 @@ function renderEditorArea(): void {
   editorArea.classList.remove('hidden')
 
   const isPreview = state.get('isPreviewMode')
+	const isRecording = state.get('isRecording')
+	const transcriptActivated = Boolean(note.transcriptActivated)
+	const shouldShowTranscript = transcriptActivated || isRecording
+	const transcriptState = buildTranscriptPanelState(note)
 
-  if (isPreview) {
-    editorArea.innerHTML = `
-      <div id="preview-content" class="preview-content">
-        ${renderMarkdownPreview(note.content || '')}
-      </div>
-    `
-  } else {
-    editorArea.innerHTML = `
-      <textarea
-        id="note-content-textarea"
-        class="editor-textarea"
-        placeholder="Start writing…"
-      >${escapeHtml(note.content || '')}</textarea>
-    `
+	if (!shouldShowTranscript) {
+		editorArea.innerHTML = isPreview
+			? `
+	      <div id="preview-content" class="preview-content">
+	        ${renderMarkdownPreview(note.markdownContent || '')}
+	      </div>
+	    `
+			: `
+	      <textarea
+	        id="note-content-textarea"
+	        class="editor-textarea"
+	        placeholder="Start writing…"
+	      >${escapeHtml(note.markdownContent || '')}</textarea>
+	    `
+	} else {
+		editorArea.innerHTML = `
+	    <div class="content-workspace ${isRecording ? 'content-workspace-recording' : 'content-workspace-stopped'}">
+	      <section class="content-panel content-panel-markdown">
+	        <header class="content-panel-header">
+	          <div class="content-panel-title-group">
+	            <div class="content-panel-title">Final Note</div>
+	            <div class="content-panel-subtitle">.md · primary workspace</div>
+	          </div>
+	        </header>
+	        <div class="content-panel-body">
+	          ${isPreview
+			? `<div id="preview-content" class="preview-content preview-content-panel">${renderMarkdownPreview(note.markdownContent || '')}</div>`
+			: `<textarea id="note-content-textarea" class="editor-textarea editor-textarea-panel" placeholder="Start writing…">${escapeHtml(note.markdownContent || '')}</textarea>`
+		}
+	        </div>
+	      </section>
 
-    const textarea = editorArea.querySelector<HTMLTextAreaElement>('#note-content-textarea')
-    if (textarea) {
-      const targetLine = state.get('editorFocusLine')
-      if (targetLine && targetLine > 0) {
-        requestAnimationFrame(() => {
-          focusTextareaAtLine(textarea, targetLine)
-          state.setState({ editorFocusLine: null })
-        })
-      }
+	      <section id="transcript-panel" class="content-panel content-panel-transcript ${transcriptState.isRecording ? 'content-panel-transcript-live' : 'content-panel-transcript-captured'}">
+	        <header class="content-panel-header">
+	          <div class="content-panel-title-group">
+	            <div class="content-panel-title">Transcript</div>
+	            <div id="transcript-panel-subtitle" class="content-panel-subtitle">${transcriptState.subtitle}</div>
+	          </div>
+	          <div id="transcript-panel-live-chip">${transcriptState.isRecording ? '<span class="transcript-live-chip">LIVE</span>' : ''}</div>
+	        </header>
+	        <div id="transcript-panel-body" class="content-panel-body transcript-body">
+	          ${transcriptState.bodyHtml}
+	        </div>
+	      </section>
+	    </div>
+	  `
+	}
 
-      textarea.addEventListener('input', debounce(() => {
-        const latestNote = state.get('currentNote')
-        if (!latestNote) return
+	if (shouldShowTranscript && isRecording) {
+		const transcriptBody = document.getElementById('transcript-panel-body')
+		if (transcriptBody) {
+			scrollToBottom(transcriptBody)
+		}
+	}
 
-        const titleInput = document.querySelector<HTMLInputElement>('#note-title-input')
-        const currentTitle = titleInput?.value ?? latestNote.title ?? ''
-        const currentContent = textarea.value
+	const textarea = editorArea.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+	if (textarea) {
+		const targetLine = state.get('editorFocusLine')
+		if (targetLine && targetLine > 0) {
+			requestAnimationFrame(() => {
+				focusTextareaAtLine(textarea, targetLine)
+				state.setState({ editorFocusLine: null })
+			})
+		}
 
-        state.setState({ isDirty: true })
-        void autoSave(latestNote.id, currentTitle, currentContent)
-      }, DEBOUNCE_DELAY_MS))
-    }
-  }
+		textarea.addEventListener('input', debounce(() => {
+			const latestNote = state.get('currentNote')
+			if (!latestNote) return
+
+			const titleInput = document.querySelector<HTMLInputElement>('#note-title-input')
+			const currentTitle = titleInput?.value ?? latestNote.title ?? ''
+			const currentContent = textarea.value
+
+			state.setState({ isDirty: true })
+			void autoSave(latestNote.id, currentTitle, currentContent, getTranscriptEditorContent())
+		}, DEBOUNCE_DELAY_MS))
+	}
+
+	const transcriptTextarea = editorArea.querySelector<HTMLTextAreaElement>('#transcript-content-textarea')
+	if (transcriptTextarea) {
+		transcriptTextarea.addEventListener('input', debounce(() => {
+			const latestNote = state.get('currentNote')
+			if (!latestNote) return
+
+			const titleInput = document.querySelector<HTMLInputElement>('#note-title-input')
+			const markdownInput = document.querySelector<HTMLTextAreaElement>('#note-content-textarea')
+			const currentTitle = titleInput?.value ?? latestNote.title ?? ''
+			const currentMarkdown = markdownInput?.value ?? latestNote.markdownContent ?? ''
+			const currentTranscript = transcriptTextarea.value
+
+			state.setState({ isDirty: true })
+			void autoSave(latestNote.id, currentTitle, currentMarkdown, currentTranscript)
+		}, DEBOUNCE_DELAY_MS))
+	}
 }
 
 function focusTextareaAtLine(textarea: HTMLTextAreaElement, lineNumber: number): void {
@@ -309,14 +443,14 @@ function cancelPendingSave(): void {
   }
 }
 
-async function autoSave(noteId: string, title: string, content: string): Promise<void> {
+async function autoSave(noteId: string, title: string, markdownContent: string, transcriptContent: string): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
     saveTimer = null
     try {
       state.setState({ isSaving: true })
-      await NotesAPI.update(noteId, title, content)
-      updateNoteInState(noteId, title, content, { updateCurrentNote: false })
+      await NotesAPI.update(noteId, title, markdownContent, transcriptContent)
+      updateNoteInState(noteId, title, markdownContent, transcriptContent, { updateCurrentNote: false })
       state.setState({ isSaving: false })
       void renderTopBar()
     } catch (err) {
@@ -340,14 +474,15 @@ export async function saveCurrentNote(): Promise<void> {
   const note = state.get('currentNote')
   if (!note) return
 
-  const title = getEditorTitle()
-  const content = getEditorContent()
+	const title = getEditorTitle()
+	const markdownContent = getEditorContent()
+	const transcriptContent = getTranscriptEditorContent()
 
   try {
     state.setState({ isSaving: true })
-    await NotesAPI.update(note.id, title, content)
+    await NotesAPI.update(note.id, title, markdownContent, transcriptContent)
     state.setState({ isSaving: false })
-    updateNoteInState(note.id, title, content)
+    updateNoteInState(note.id, title, markdownContent, transcriptContent)
     void renderTopBar()
   } catch (err) {
     console.error('Save failed:', err)
@@ -373,7 +508,11 @@ export function initEditor(): void {
     renderEditorHeader()
     renderEditorArea()
   })
-  state.subscribe('isRecording', () => renderEditorHeader())
+  state.subscribe('isRecording', () => {
+    renderEditorHeader()
+    renderEditorArea()
+  })
+	state.subscribe('partialTranscript', () => updateTranscriptPanel())
   state.subscribe('isDirty', () => void renderTopBar())
   state.subscribe('isSaving', () => void renderTopBar())
   state.subscribe('theme', () => void renderTopBar())

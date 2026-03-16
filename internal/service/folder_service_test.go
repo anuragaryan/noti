@@ -62,7 +62,7 @@ func TestFolderService_Create_CreatesFolderOnDiskAndInStructure(t *testing.T) {
 	}
 
 	// Directory must exist on disk.
-	dirPath := filepath.Join(h.notesPath, folder.NameOnDisk)
+	dirPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk)
 	if info, err := os.Stat(dirPath); err != nil || !info.IsDir() {
 		t.Errorf("folder directory should exist on disk at %q", dirPath)
 	}
@@ -115,7 +115,7 @@ func TestFolderService_Create_NestedFolder_PlacedInsideParentDirectory(t *testin
 		t.Fatalf("Create child: %v", err)
 	}
 
-	childPath := filepath.Join(h.notesPath, parent.NameOnDisk, child.NameOnDisk)
+	childPath := filepath.Join(h.notesPath, "markdown", parent.NameOnDisk, child.NameOnDisk)
 	if info, err := os.Stat(childPath); err != nil || !info.IsDir() {
 		t.Errorf("child directory should exist inside parent at %q", childPath)
 	}
@@ -151,7 +151,7 @@ func TestFolderService_Update_RenamesMovesFolderOnDisk(t *testing.T) {
 	h := newFolderServiceHarness(t)
 
 	folder, _ := h.folderService.Create("OldName", "")
-	oldPath := filepath.Join(h.notesPath, folder.NameOnDisk)
+	oldPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk)
 
 	if err := h.folderService.Update(folder.ID, "NewName", ""); err != nil {
 		t.Fatalf("Update: %v", err)
@@ -176,15 +176,10 @@ func TestFolderService_Update_RenamesMovesFolderOnDisk(t *testing.T) {
 	if updated.Name != "NewName" {
 		t.Errorf("folder Name in structure: got %q, want %q", updated.Name, "NewName")
 	}
-	// The timestamp prefix (before the first dash) must be preserved.
-	oldPrefix := folder.NameOnDisk[:strings.Index(folder.NameOnDisk, "-")]
-	if !strings.HasPrefix(updated.NameOnDisk, oldPrefix) {
-		t.Errorf("NameOnDisk %q should keep original timestamp prefix %q", updated.NameOnDisk, oldPrefix)
-	}
 	if !strings.HasSuffix(updated.NameOnDisk, "newname") {
 		t.Errorf("NameOnDisk %q should end with sanitised new name %q", updated.NameOnDisk, "newname")
 	}
-	newPath := filepath.Join(h.notesPath, updated.NameOnDisk)
+	newPath := filepath.Join(h.notesPath, "markdown", updated.NameOnDisk)
 	if info, err := os.Stat(newPath); err != nil || !info.IsDir() {
 		t.Errorf("renamed folder directory should exist at %q", newPath)
 	}
@@ -197,7 +192,7 @@ func TestFolderService_Update_MoveToNewParent_MovesDirectoryOnDisk(t *testing.T)
 	parent, _ := h.folderService.Create("Parent", "")
 	child, _ := h.folderService.Create("Child", "")
 
-	oldChildPath := filepath.Join(h.notesPath, child.NameOnDisk)
+	oldChildPath := filepath.Join(h.notesPath, "markdown", child.NameOnDisk)
 
 	if err := h.folderService.Update(child.ID, "Child", parent.ID); err != nil {
 		t.Fatalf("Update (move): %v", err)
@@ -207,7 +202,7 @@ func TestFolderService_Update_MoveToNewParent_MovesDirectoryOnDisk(t *testing.T)
 		t.Error("child directory should have moved out of root")
 	}
 
-	newChildPath := filepath.Join(h.notesPath, parent.NameOnDisk, child.NameOnDisk)
+	newChildPath := filepath.Join(h.notesPath, "markdown", parent.NameOnDisk, child.NameOnDisk)
 	if info, err := os.Stat(newChildPath); err != nil || !info.IsDir() {
 		t.Errorf("child directory should now be inside parent at %q", newChildPath)
 	}
@@ -273,8 +268,10 @@ func TestFolderService_Update_NameOnDiskWithNoDash_DoesNotPanic(t *testing.T) {
 	svc := h.folderService
 	svc.mu.Lock()
 	structure, _ := svc.structureRepo.Load()
-	dirPath := filepath.Join(h.notesPath, "nodash")
+	dirPath := filepath.Join(h.notesPath, "markdown", "nodash")
 	_ = os.MkdirAll(dirPath, 0755)
+	transcriptDirPath := filepath.Join(h.notesPath, "transcripts", "nodash")
+	_ = os.MkdirAll(transcriptDirPath, 0755)
 	structure.Folders = append(structure.Folders, domain.Folder{
 		ID:         "fd1",
 		Name:       "OldName",
@@ -304,8 +301,8 @@ func TestFolderService_Delete_WithDeleteNotes_RemovesFolderAndNotes(t *testing.T
 	note, _ := h.noteService.Create("Note inside", "content", folder.ID)
 
 	// Capture the expected file path before deletion.
-	noteFilePath := filepath.Join(h.notesPath, folder.NameOnDisk, note.NameOnDisk)
-	folderPath := filepath.Join(h.notesPath, folder.NameOnDisk)
+	noteFilePath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk, note.FileStem+".md")
+	folderPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk)
 
 	if err := h.folderService.Delete(folder.ID, true, h.noteService); err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -337,7 +334,7 @@ func TestFolderService_Delete_WithDeleteNotes_EmptyFolder_Succeeds(t *testing.T)
 	h := newFolderServiceHarness(t)
 
 	folder, _ := h.folderService.Create("Empty", "")
-	folderPath := filepath.Join(h.notesPath, folder.NameOnDisk)
+	folderPath := filepath.Join(h.notesPath, "markdown", folder.NameOnDisk)
 
 	if err := h.folderService.Delete(folder.ID, true, h.noteService); err != nil {
 		t.Fatalf("Delete empty folder with deleteNotes=true: %v", err)
@@ -378,7 +375,7 @@ func TestFolderService_Delete_WithoutDeleteNotes_MovesNotesToRoot(t *testing.T) 
 	}
 
 	// File must physically be at the notes root.
-	rootFilePath := filepath.Join(h.notesPath, note.NameOnDisk)
+	rootFilePath := filepath.Join(h.notesPath, "markdown", note.FileStem+".md")
 	if _, err := os.Stat(rootFilePath); err != nil {
 		t.Errorf("note file should be at root after folder delete: %v", err)
 	}

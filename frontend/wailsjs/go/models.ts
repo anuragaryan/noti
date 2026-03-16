@@ -211,9 +211,11 @@ export namespace domain {
 	export class Note {
 	    id: string;
 	    title: string;
-	    nameOnDisk: string;
+	    fileStem: string;
 	    folderId: string;
-	    content: string;
+	    transcriptActivated: boolean;
+	    markdownContent: string;
+	    transcriptContent: string;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -228,9 +230,11 @@ export namespace domain {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.title = source["title"];
-	        this.nameOnDisk = source["nameOnDisk"];
+	        this.fileStem = source["fileStem"];
 	        this.folderId = source["folderId"];
-	        this.content = source["content"];
+	        this.transcriptActivated = source["transcriptActivated"];
+	        this.markdownContent = source["markdownContent"];
+	        this.transcriptContent = source["transcriptContent"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	        this.order = source["order"];
@@ -343,6 +347,7 @@ export namespace domain {
 	    note: Note;
 	    line: number;
 	    snippet: string;
+	    sourceLabel: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SearchMatch(source);
@@ -353,6 +358,7 @@ export namespace domain {
 	        this.note = this.convertValues(source["note"], Note);
 	        this.line = source["line"];
 	        this.snippet = source["snippet"];
+	        this.sourceLabel = source["sourceLabel"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,23 +75,34 @@ func (s *FolderService) Create(name, parentID string) (*domain.Folder, error) {
 		Order: nextFolderOrder(structure),
 	}
 
-	parentPath := s.notesPath
-	if parentID != "" {
-		parentPath, err = s.pathResolver.GetPathFor(parentID, structure)
-		if err != nil {
-			return nil, fmt.Errorf("could not resolve parent path: %w", err)
-		}
+	if parentID == "" && isReservedRootFolderName(folder.NameOnDisk) {
+		return nil, fmt.Errorf("folder name %q is reserved", name)
 	}
 
-	newFolderPath := filepath.Join(parentPath, folder.NameOnDisk)
-	if err := os.MkdirAll(newFolderPath, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create folder directory: %w", err)
+	markdownParentPath, err := s.pathResolver.FolderPathInMarkdownRoot(parentID, structure)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve markdown parent path: %w", err)
+	}
+	transcriptParentPath, err := s.pathResolver.FolderPathInTranscriptRoot(parentID, structure)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve transcript parent path: %w", err)
+	}
+
+	newMarkdownFolderPath := filepath.Join(markdownParentPath, folder.NameOnDisk)
+	if err := os.MkdirAll(newMarkdownFolderPath, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create markdown folder directory: %w", err)
+	}
+	newTranscriptFolderPath := filepath.Join(transcriptParentPath, folder.NameOnDisk)
+	if err := os.MkdirAll(newTranscriptFolderPath, 0o755); err != nil {
+		_ = os.Remove(newMarkdownFolderPath)
+		return nil, fmt.Errorf("failed to create transcript folder directory: %w", err)
 	}
 
 	structure.Folders = append(structure.Folders, folder)
 	if err := s.structureRepo.Save(structure); err != nil {
 		// Roll back the directory so we do not leave an orphan on disk.
-		_ = os.Remove(newFolderPath)
+		_ = os.Remove(newMarkdownFolderPath)
+		_ = os.Remove(newTranscriptFolderPath)
 		return nil, fmt.Errorf("failed to save structure: %w", err)
 	}
 
@@ -136,40 +148,58 @@ func (s *FolderService) Update(id, name, parentID string) error {
 
 		if nameChanged || parentChanged {
 			// We need the old absolute path before touching the struct.
-			oldPath, err := s.pathResolver.GetPathFor(id, structure)
+			oldMarkdownPath, err := s.pathResolver.FolderPathInMarkdownRoot(id, structure)
 			if err != nil {
-				return fmt.Errorf("could not resolve current path for folder %q: %w", id, err)
+				return fmt.Errorf("could not resolve current markdown path for folder %q: %w", id, err)
+			}
+			oldTranscriptPath, err := s.pathResolver.FolderPathInTranscriptRoot(id, structure)
+			if err != nil {
+				return fmt.Errorf("could not resolve current transcript path for folder %q: %w", id, err)
 			}
 
 			// Compute the new NameOnDisk.
 			newDiskName := structure.Folders[i].NameOnDisk
 			if nameChanged {
-				// Bug 5 fix: safe prefix extraction.
-				newDiskName = renamedDiskName(structure.Folders[i].NameOnDisk, name)
+				newDiskName = util.GenerateNameOnDisk(name)
+			}
+			if parentID == "" && isReservedRootFolderName(newDiskName) {
+				return fmt.Errorf("folder name %q is reserved", name)
 			}
 
 			// Resolve the new parent directory.
-			newParentPath := s.notesPath
+			newMarkdownParentPath := s.pathResolver.MarkdownRootPath()
+			newTranscriptParentPath := s.pathResolver.TranscriptRootPath()
 			targetParentID := parentID
 			if !parentChanged {
 				targetParentID = currentParentID
 			}
 			if targetParentID != "" {
-				newParentPath, err = s.pathResolver.GetPathFor(targetParentID, structure)
+				newMarkdownParentPath, err = s.pathResolver.FolderPathInMarkdownRoot(targetParentID, structure)
 				if err != nil {
-					return fmt.Errorf("could not resolve new parent path for folder %q: %w", id, err)
+					return fmt.Errorf("could not resolve new markdown parent path for folder %q: %w", id, err)
+				}
+				newTranscriptParentPath, err = s.pathResolver.FolderPathInTranscriptRoot(targetParentID, structure)
+				if err != nil {
+					return fmt.Errorf("could not resolve new transcript parent path for folder %q: %w", id, err)
 				}
 			}
 
-			newPath := filepath.Join(newParentPath, newDiskName)
+			newMarkdownPath := filepath.Join(newMarkdownParentPath, newDiskName)
+			newTranscriptPath := filepath.Join(newTranscriptParentPath, newDiskName)
 
-			// Bug 2 fix: actually move the directory on disk when anything changes.
-			if oldPath != newPath {
-				if err := os.MkdirAll(newParentPath, 0755); err != nil {
-					return fmt.Errorf("could not create new parent directory: %w", err)
+			if oldMarkdownPath != newMarkdownPath || oldTranscriptPath != newTranscriptPath {
+				if err := os.MkdirAll(newMarkdownParentPath, 0o755); err != nil {
+					return fmt.Errorf("could not create new markdown parent directory: %w", err)
 				}
-				if err := os.Rename(oldPath, newPath); err != nil {
-					return fmt.Errorf("failed to move/rename folder on disk: %w", err)
+				if err := os.MkdirAll(newTranscriptParentPath, 0o755); err != nil {
+					return fmt.Errorf("could not create new transcript parent directory: %w", err)
+				}
+				if err := os.Rename(oldMarkdownPath, newMarkdownPath); err != nil {
+					return fmt.Errorf("failed to move/rename markdown folder on disk: %w", err)
+				}
+				if err := os.Rename(oldTranscriptPath, newTranscriptPath); err != nil {
+					_ = os.Rename(newMarkdownPath, oldMarkdownPath)
+					return fmt.Errorf("failed to move/rename transcript folder on disk: %w", err)
 				}
 			}
 
@@ -200,9 +230,13 @@ func (s *FolderService) Delete(id string, deleteNotes bool, noteService *NoteSer
 
 	// Capture the folder path before we touch the structure so path resolution
 	// still works (the folder is still in the slice at this point).
-	folderPath, pathErr := s.pathResolver.GetPathFor(id, structure)
+	markdownFolderPath, pathErr := s.pathResolver.FolderPathInMarkdownRoot(id, structure)
 	if pathErr != nil {
-		return fmt.Errorf("cannot resolve path for folder %q: %w", id, pathErr)
+		return fmt.Errorf("cannot resolve markdown path for folder %q: %w", id, pathErr)
+	}
+	transcriptFolderPath, transcriptPathErr := s.pathResolver.FolderPathInTranscriptRoot(id, structure)
+	if transcriptPathErr != nil {
+		return fmt.Errorf("cannot resolve transcript path for folder %q: %w", id, transcriptPathErr)
 	}
 
 	// Refuse to delete a folder that still has sub-folders.
@@ -266,8 +300,11 @@ func (s *FolderService) Delete(id string, deleteNotes bool, noteService *NoteSer
 	}
 
 	// Finally, remove the (now-empty) directory from disk.
-	if err := os.RemoveAll(folderPath); err != nil {
-		return fmt.Errorf("failed to remove folder directory %q: %w", folderPath, err)
+	if err := os.RemoveAll(markdownFolderPath); err != nil {
+		return fmt.Errorf("failed to remove markdown folder directory %q: %w", markdownFolderPath, err)
+	}
+	if err := os.RemoveAll(transcriptFolderPath); err != nil {
+		return fmt.Errorf("failed to remove transcript folder directory %q: %w", transcriptFolderPath, err)
 	}
 
 	return nil
@@ -365,4 +402,9 @@ func (s *FolderService) validateMove(folderID, newParentID string, structure *do
 	}
 
 	return nil
+}
+
+func isReservedRootFolderName(nameOnDisk string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(nameOnDisk))
+	return normalized == "markdown" || normalized == "transcripts"
 }

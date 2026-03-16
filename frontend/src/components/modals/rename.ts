@@ -67,9 +67,14 @@ export function renderRenameModal(container: HTMLElement): void {
 
     try {
       if (ctx.type === 'note') {
-        // UpdateNote keeps existing content; pass empty string — backend only renames when title differs
+        // Keep current markdown/transcript while updating title.
         const fullNote = await NotesAPI.get(ctx.id)
-        await NotesAPI.update(ctx.id, newName, fullNote.content ?? '')
+        await NotesAPI.update(
+          ctx.id,
+          newName,
+          fullNote.markdownContent ?? '',
+          fullNote.transcriptContent ?? '',
+        )
         const notes = await NotesAPI.getAll()
         const currentNote = state.get('currentNote')
         state.setState({

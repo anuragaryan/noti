@@ -14,6 +14,7 @@ type Folder struct {
 
 // FolderStructure represents the folder/note organization
 type FolderStructure struct {
-	Folders []Folder `json:"folders"`
-	Notes   []Note   `json:"notes"`
+	SchemaVersion int      `json:"schemaVersion"`
+	Folders       []Folder `json:"folders"`
+	Notes         []Note   `json:"notes"`
 }

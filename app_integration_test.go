@@ -367,7 +367,7 @@ func TestNotesFoldersFlow_CreateMoveSearchAndDelete(t *testing.T) {
 		t.Fatalf("MoveNote: %v", err)
 	}
 
-	if err := app.UpdateNote(note.ID, "Roadmap Updated", "content with zebra and llama"); err != nil {
+	if err := app.UpdateNote(note.ID, "Roadmap Updated", "content with zebra and llama", ""); err != nil {
 		t.Fatalf("UpdateNote: %v", err)
 	}
 

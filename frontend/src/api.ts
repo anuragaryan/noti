@@ -26,12 +26,16 @@ export const NotesAPI = {
     return App.GetNote(id)
   },
 
-  create(title: string, content: string, folderId: string = ''): Promise<Note> {
-    return App.CreateNote(title, content, folderId)
+  create(title: string, markdownContent: string, folderId: string = ''): Promise<Note> {
+    return App.CreateNote(title, markdownContent, folderId)
   },
 
-  update(id: string, title: string, content: string): Promise<void> {
-    return App.UpdateNote(id, title, content)
+  update(id: string, title: string, markdownContent: string, transcriptContent: string): Promise<void> {
+    return App.UpdateNote(id, title, markdownContent, transcriptContent)
+  },
+
+  markTranscriptActivated(id: string): Promise<void> {
+    return App.MarkTranscriptActivated(id)
   },
 
   delete(id: string): Promise<void> {

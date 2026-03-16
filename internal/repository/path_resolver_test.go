@@ -18,14 +18,14 @@ func TestGetPathFor_RootNote(t *testing.T) {
 	t.Parallel()
 	r := NewPathResolver("/notes")
 	structure := makeStructure(nil, []domain.Note{
-		{ID: "n1", NameOnDisk: "note.md", FolderID: ""},
+		{ID: "n1", FileStem: "note", FolderID: ""},
 	})
 
 	got, err := r.GetPathFor("n1", structure)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := filepath.Join("/notes", "note.md")
+	want := filepath.Join("/notes", "markdown", "note.md")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -39,7 +39,7 @@ func TestGetPathFor_NoteInsideFolder(t *testing.T) {
 			{ID: "f1", NameOnDisk: "work", ParentID: ""},
 		},
 		[]domain.Note{
-			{ID: "n1", NameOnDisk: "todo.md", FolderID: "f1"},
+			{ID: "n1", FileStem: "todo", FolderID: "f1"},
 		},
 	)
 
@@ -47,7 +47,7 @@ func TestGetPathFor_NoteInsideFolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := filepath.Join("/notes", "work", "todo.md")
+	want := filepath.Join("/notes", "markdown", "work", "todo.md")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -62,7 +62,7 @@ func TestGetPathFor_NoteInsideNestedFolders(t *testing.T) {
 			{ID: "f2", NameOnDisk: "q1", ParentID: "f1"},
 		},
 		[]domain.Note{
-			{ID: "n1", NameOnDisk: "report.md", FolderID: "f2"},
+			{ID: "n1", FileStem: "report", FolderID: "f2"},
 		},
 	)
 
@@ -70,7 +70,7 @@ func TestGetPathFor_NoteInsideNestedFolders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := filepath.Join("/notes", "work", "q1", "report.md")
+	want := filepath.Join("/notes", "markdown", "work", "q1", "report.md")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -134,7 +134,7 @@ func TestGetPathFor_NoteFolderIDPointsToMissingFolder_ReturnsError(t *testing.T)
 	structure := makeStructure(
 		nil,
 		[]domain.Note{
-			{ID: "n1", NameOnDisk: "note.md", FolderID: "missing"},
+			{ID: "n1", FileStem: "note", FolderID: "missing"},
 		},
 	)
 

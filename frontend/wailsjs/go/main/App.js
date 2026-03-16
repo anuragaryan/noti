@@ -134,6 +134,10 @@ export function IsRecording() {
   return window['go']['main']['App']['IsRecording']();
 }
 
+export function MarkTranscriptActivated(arg1) {
+  return window['go']['main']['App']['MarkTranscriptActivated'](arg1);
+}
+
 export function MoveNote(arg1, arg2) {
   return window['go']['main']['App']['MoveNote'](arg1, arg2);
 }
@@ -182,8 +186,8 @@ export function UpdateLLMConfig(arg1) {
   return window['go']['main']['App']['UpdateLLMConfig'](arg1);
 }
 
-export function UpdateNote(arg1, arg2, arg3) {
-  return window['go']['main']['App']['UpdateNote'](arg1, arg2, arg3);
+export function UpdateNote(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateNote'](arg1, arg2, arg3, arg4);
 }
 
 export function UpdatePrompt(arg1, arg2, arg3, arg4, arg5) {

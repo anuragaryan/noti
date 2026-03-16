@@ -632,11 +632,14 @@ function renderNoteList(): void {
         <div class="note-row-body">
           <div class="note-row-title ${isActive ? 'active' : 'inactive'}">${escapeHtml(note.title || 'Untitled')}</div>
           <div class="note-row-subtitle">${escapeHtml(location)}${updatedAt ? ` · ${updatedAt}` : ''}</div>
-          <div class="note-row-snippet">${result.line > 0 ? `L${result.line}: ` : ''}${escapeHtml(result.snippet || '')}</div>
+          <div class="note-row-snippet">${escapeHtml(result.sourceLabel || '')}${result.sourceLabel ? ' · ' : ''}${result.line > 0 ? `L${result.line}: ` : ''}${escapeHtml(result.snippet || '')}</div>
         </div>
       `
 
-      row.addEventListener('click', () => handleNoteSelect(note, result.line > 0 ? result.line : undefined))
+      const targetLine = result.sourceLabel === 'Markdown' || result.sourceLabel === 'Both'
+        ? (result.line > 0 ? result.line : undefined)
+        : undefined
+      row.addEventListener('click', () => handleNoteSelect(note, targetLine))
       container.appendChild(row)
     }
     return
