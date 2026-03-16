@@ -44,7 +44,12 @@ bun install --cwd frontend
 
 ### 4) Important local setup note
 
-Current build/test scripts assume a local `whisper.cpp` checkout and macOS CGO flags are available. If your local path differs, update `scripts/build.sh` and `scripts/test.sh` before building.
+Current build/test scripts assume a local `whisper.cpp` checkout and macOS CGO flags are available. If your local path differs, set `WHISPER_PATH` before building/testing.
+
+```bash
+WHISPER_PATH=/absolute/path/to/whisper.cpp ./scripts/test.sh
+WHISPER_PATH=/absolute/path/to/whisper.cpp ./scripts/build.sh production
+```
 
 If build/link errors mention `libwhisper`/`ggml` ABI or deployment target mismatches, rebuild the local whisper artifacts:
 
@@ -57,6 +62,13 @@ You can pass a custom whisper checkout path:
 ```bash
 ./scripts/rebuild-whisper.sh /absolute/path/to/whisper.cpp
 ```
+
+## Releases
+
+Pushing a tag matching `v*` (for example `v1.2.3`) triggers GitHub Actions to build unsigned DMGs for both macOS architectures and attach them to the GitHub release:
+
+- `noti-macos-intel.dmg`
+- `noti-macos-apple-silicon.dmg`
 
 ## Architecture
 

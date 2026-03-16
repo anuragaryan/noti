@@ -7,7 +7,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 # ── Whisper / CGO environment ────────────────────────────────────────────────
-WHISPER_PATH="/Users/a.aryan/Documents/go/github.com/ggerganov/whisper.cpp"
+WHISPER_PATH="${WHISPER_PATH:-/Users/a.aryan/Documents/go/github.com/ggerganov/whisper.cpp}"
 WHISPER_LIB_DIR="${WHISPER_PATH}/build_go/src"
 GGML_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src"
 GGML_METAL_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src/ggml-metal"

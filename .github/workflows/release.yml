@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  WHISPER_CPP_REF: 19ceec8eac980403b714d603e5ca31653cd42a3f
+
+jobs:
+  build-macos:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Intel
+            runner: macos-15-intel
+            platform: darwin/amd64
+            dmg_name: noti-macos-intel.dmg
+          - name: macOS Apple Silicon
+            runner: macos-latest
+            platform: darwin/arm64
+            dmg_name: noti-macos-apple-silicon.dmg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.10"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Install native build dependencies
+        run: brew install pkg-config portaudio create-dmg
+
+      - name: Configure pkg-config path for PortAudio
+        run: |
+          BREW_PREFIX="$(brew --prefix)"
+          PORTAUDIO_PREFIX="$(brew --prefix portaudio)"
+          {
+            printf 'PKG_CONFIG_PATH=%s/lib/pkgconfig:%s/lib/pkgconfig:%s\n' "$PORTAUDIO_PREFIX" "$BREW_PREFIX" "${PKG_CONFIG_PATH:-}"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify PortAudio pkg-config metadata
+        run: pkg-config --modversion portaudio-2.0
+
+      - name: Cache Go modules and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/Library/Caches/go-build
+          key: ${{ runner.os }}-${{ matrix.platform }}-go-${{ hashFiles('go.sum') }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: ${{ runner.os }}-${{ matrix.platform }}-bun-${{ hashFiles('frontend/bun.lock', 'frontend/package.json') }}
+
+      - name: Checkout whisper.cpp
+        uses: actions/checkout@v4
+        with:
+          repository: ggerganov/whisper.cpp
+          ref: ${{ env.WHISPER_CPP_REF }}
+          path: whisper.cpp
+
+      - name: Build whisper.cpp static libraries
+        env:
+          WHISPER_PATH: ${{ github.workspace }}/whisper.cpp
+        run: ./scripts/rebuild-whisper.sh
+
+      - name: Build production DMG
+        env:
+          WHISPER_PATH: ${{ github.workspace }}/whisper.cpp
+          NOTI_BUILD_PLATFORM: ${{ matrix.platform }}
+          NOTI_DMG_NAME: ${{ matrix.dmg_name }}
+          NOTI_CODESIGN_IDENTITY: "-"
+        run: ./scripts/build.sh production
+
+      - name: Verify DMG exists
+        run: test -f "build/bin/${{ matrix.dmg_name }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.dmg_name }}
+          path: build/bin/${{ matrix.dmg_name }}
+
+  publish-release:
+    name: Publish GitHub release assets
+    runs-on: ubuntu-latest
+    needs: build-macos
+
+    steps:
+      - name: Download all DMG artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Upload DMGs to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/noti-macos-intel.dmg/noti-macos-intel.dmg
+            dist/noti-macos-apple-silicon.dmg/noti-macos-apple-silicon.dmg

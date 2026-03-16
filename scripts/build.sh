@@ -1,18 +1,32 @@
 #!/bin/bash
 
+set -euo pipefail
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 MODE="${1:-production}"
+NOTI_BUILD_PLATFORM="${NOTI_BUILD_PLATFORM:-darwin/arm64}"
+NOTI_DMG_NAME="${NOTI_DMG_NAME:-noti.dmg}"
 
 if [[ "$MODE" != "debug" && "$MODE" != "production" ]]; then
   echo "Usage: $0 [debug|production]"
   exit 1
 fi
 
+case "$NOTI_BUILD_PLATFORM" in
+  darwin/amd64|darwin/arm64)
+    ;;
+  *)
+    echo "Unsupported NOTI_BUILD_PLATFORM: $NOTI_BUILD_PLATFORM"
+    echo "Expected one of: darwin/amd64, darwin/arm64"
+    exit 1
+    ;;
+esac
+
 # ── Whisper / CGO environment ────────────────────────────────────────────────
-WHISPER_PATH="/Users/a.aryan/Documents/go/github.com/ggerganov/whisper.cpp"
+WHISPER_PATH="${WHISPER_PATH:-/Users/a.aryan/Documents/go/github.com/ggerganov/whisper.cpp}"
 WHISPER_LIB_DIR="${WHISPER_PATH}/build_go/src"
 GGML_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src"
 GGML_METAL_LIB_DIR="${WHISPER_PATH}/build_go/ggml/src/ggml-metal"
@@ -32,6 +46,7 @@ else
   echo "🔨 Building Noti Production App"
   echo "================================"
 fi
+echo "🎯 Target platform: $NOTI_BUILD_PLATFORM"
 
 # Step 1: Clean previous builds
 echo ""
@@ -71,9 +86,9 @@ echo ""
 echo "🚀 Step 5: Building $MODE app..."
 if [[ "$MODE" == "debug" ]]; then
   # The -debug flag enables the inspector (DevTools)
-  wails build -platform darwin/arm64 -clean -debug
+  wails build -platform "$NOTI_BUILD_PLATFORM" -clean -debug
 else
-  wails build -platform darwin/arm64 -clean -ldflags "-s -w -X main.env=production -X main.sentryDSN=https://cf7b9fda532355b2262930ddbb4d85b6@o4510992653877248.ingest.de.sentry.io/4510992659447888"
+  wails build -platform "$NOTI_BUILD_PLATFORM" -clean -ldflags "-s -w -X main.env=production -X main.sentryDSN=https://cf7b9fda532355b2262930ddbb4d85b6@o4510992653877248.ingest.de.sentry.io/4510992659447888"
 fi
 
 # Step 5.1: Optional code signing
@@ -110,7 +125,7 @@ if [[ "$MODE" == "production" ]]; then
 
   APP_BUNDLE_NAME="noti.app"
   APP_BUNDLE_PATH="build/bin/${APP_BUNDLE_NAME}"
-  DMG_NAME="noti.dmg"
+  DMG_NAME="$NOTI_DMG_NAME"
   DMG_PATH="build/bin/${DMG_NAME}"
   DMG_STAGING_DIR="build/bin/dmg-root"
   VOLUME_NAME="Noti"
@@ -163,7 +178,7 @@ if [[ "$MODE" == "debug" ]]; then
 else
   echo "📍 Data will be stored in: ~/Documents/noti/"
   echo ""
-  echo "📍 Installer location: build/bin/noti.dmg"
+  echo "📍 Installer location: build/bin/$NOTI_DMG_NAME"
   echo ""
   echo "To test, run:"
   echo "  ./build/bin/noti.app/Contents/MacOS/noti"
@@ -172,5 +187,5 @@ else
   echo "  open build/bin/noti.app"
   echo ""
   echo "Or open the installer:"
-  echo "  open build/bin/noti.dmg"
+  echo "  open build/bin/$NOTI_DMG_NAME"
 fi
