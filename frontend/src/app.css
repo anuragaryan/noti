@@ -988,6 +988,14 @@ button   { cursor: pointer; border: none; background: none; font-family: inherit
   padding-left: 22px;
 }
 
+.markdown-body ul {
+  list-style-type: disc;
+}
+
+.markdown-body ol {
+  list-style-type: decimal;
+}
+
 .markdown-body li {
   margin: 2px 0;
 }
