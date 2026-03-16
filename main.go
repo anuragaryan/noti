@@ -19,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/menu/keys"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -124,6 +125,9 @@ func main() {
 		Width:                    1200,
 		Height:                   800,
 		EnableDefaultContextMenu: true,
+		Mac: &mac.Options{
+			TitleBar: mac.TitleBarDefault(),
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
