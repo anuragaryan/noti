@@ -137,7 +137,6 @@ function renderAIChat(): void {
         <div class="chat-message-block">
           <div class="chat-message-head">
             <span class="chat-message-role">Assistant</span>
-            <button class="chat-copy-btn" data-chat-copy-id="${message.id}">${icon('copy', 12)} Copy</button>
           </div>
           ${(message.reasoning?.trim() || '') ? `
             <div class="chat-thinking">
@@ -221,17 +220,6 @@ function renderAIChat(): void {
 
   container.querySelector('#ai-chat-clear')?.addEventListener('click', () => {
     clearAIChat()
-  })
-
-  container.querySelectorAll<HTMLButtonElement>('[data-chat-copy-id]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset.chatCopyId
-      if (!id) return
-      const message = state.get('chatMessages').find(m => m.id === id)
-      if (!message) return
-      void navigator.clipboard.writeText(message.content)
-      state.showNotification('Copied to clipboard', 'success')
-    })
   })
 
   container.querySelectorAll<HTMLButtonElement>('[data-chat-thinking-toggle-id]').forEach((btn) => {
