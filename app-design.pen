@@ -3026,7 +3026,7 @@
                   "type": "frame",
                   "id": "zMWoh",
                   "name": "Empty Actions",
-                  "gap": 12,
+                  "gap": 10,
                   "alignItems": "center",
                   "children": [
                     {
@@ -3099,6 +3099,46 @@
                           "name": "newFolderLabel",
                           "fill": "$--foreground",
                           "content": "New Folder",
+                          "fontFamily": "$--font-primary",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ZfP9i",
+                      "name": "AI Chat Btn",
+                      "height": 40,
+                      "cornerRadius": "$--radius-pill",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$--border"
+                      },
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        20
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "oMZTD",
+                          "name": "aiChatIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "sparkles",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "BBCK7",
+                          "name": "aiChatLabel",
+                          "fill": "$--foreground",
+                          "content": "AI Chat",
                           "fontFamily": "$--font-primary",
                           "fontSize": 14,
                           "fontWeight": "500"
@@ -13324,8 +13364,15 @@
                     {
                       "type": "frame",
                       "id": "8wEW0",
-                      "name": "aiLabel",
+                      "name": "AI Chat Link",
+                      "height": 28,
+                      "fill": "$--secondary",
+                      "cornerRadius": "$--radius-pill",
                       "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
                       "alignItems": "center",
                       "children": [
                         {
@@ -13343,7 +13390,7 @@
                           "id": "uvNfT",
                           "name": "aiTxt",
                           "fill": "$--primary",
-                          "content": "AI",
+                          "content": "AI Chat",
                           "fontFamily": "$--font-primary",
                           "fontSize": 13,
                           "fontWeight": "700"
@@ -13549,8 +13596,15 @@
                     {
                       "type": "frame",
                       "id": "bJgTp",
-                      "name": "aiLabel",
+                      "name": "AI Chat Link",
+                      "height": 28,
+                      "fill": "$--secondary",
+                      "cornerRadius": "$--radius-pill",
                       "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
                       "alignItems": "center",
                       "children": [
                         {
@@ -13568,7 +13622,7 @@
                           "id": "fOygn",
                           "name": "aiTxt",
                           "fill": "$--primary",
-                          "content": "AI",
+                          "content": "AI Chat",
                           "fontFamily": "$--font-primary",
                           "fontSize": 13,
                           "fontWeight": "700"
@@ -20455,6 +20509,1308 @@
                           "fontFamily": "Geist",
                           "fontSize": 13,
                           "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "k3fJ9",
+      "x": 3900,
+      "y": 7000,
+      "name": "14 — AI Chat (Light)",
+      "theme": {
+        "Mode": "Light"
+      },
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$--background",
+      "children": [
+        {
+          "type": "frame",
+          "id": "yOukd",
+          "name": "Sidebar",
+          "width": 260,
+          "height": "fill_container",
+          "fill": "$--sidebar",
+          "stroke": {
+            "align": "inside",
+            "thickness": {
+              "right": 1
+            },
+            "fill": "$--sidebar-border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "tGBOy",
+              "name": "Sidebar Header",
+              "width": "fill_container",
+              "height": 64,
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "bottom": 1
+                },
+                "fill": "$--sidebar-border"
+              },
+              "padding": [
+                0,
+                24
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "bcWvY",
+                  "name": "logo",
+                  "fill": "$--sidebar-accent-foreground",
+                  "content": "noti",
+                  "fontFamily": "$--font-primary",
+                  "fontSize": 20,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "K3Lee",
+              "name": "Search Wrapper",
+              "width": "fill_container",
+              "padding": [
+                12,
+                16
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "PTZu0",
+                  "name": "Search Input",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "$--sidebar-accent",
+                  "cornerRadius": "$--radius-pill",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "D6w0D",
+                      "name": "searchIcon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "search",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mVQAt",
+                      "name": "searchText",
+                      "fill": "$--muted-foreground",
+                      "content": "Search notes…",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "mWijO",
+              "name": "Action Bar",
+              "width": "fill_container",
+              "height": 28,
+              "fill": "$--sidebar-accent",
+              "cornerRadius": 8,
+              "gap": 4,
+              "padding": [
+                0,
+                8
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "IPcAB",
+                  "name": "s7n",
+                  "width": 24,
+                  "height": 24,
+                  "fill": "$--sidebar",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "DLJVv",
+                      "name": "s7nI",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "file-plus",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DfSTa",
+                  "name": "s7f",
+                  "width": 24,
+                  "height": 24,
+                  "fill": "$--sidebar",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "qRBdp",
+                      "name": "s7fI",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "folder-plus",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "y4GYE",
+                  "name": "s7s",
+                  "width": 24,
+                  "height": 24,
+                  "fill": "$--sidebar",
+                  "cornerRadius": 6,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "IvVhi",
+                      "name": "s7sI",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "arrow-up-down",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "104EJ",
+              "name": "Folder List",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 1,
+              "padding": [
+                2,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "poE2M",
+                  "name": "Folder Item",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "KStTZ",
+                      "name": "f7aT",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "chevron-right",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "QdfdN",
+                      "name": "f7aI",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "folder",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "bvC54",
+                      "name": "f7aL",
+                      "fill": "$--sidebar-foreground",
+                      "content": "Work",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "7ejtk",
+                  "name": "Folder Item",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "INobg",
+                      "name": "f7bT",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "chevron-right",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "kkZNr",
+                      "name": "f7bI",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "folder",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "6hRaF",
+                      "name": "f7bL",
+                      "fill": "$--sidebar-foreground",
+                      "content": "Personal",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jy7tH",
+                  "name": "Folder Item",
+                  "width": "fill_container",
+                  "height": 32,
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "zDSAY",
+                      "name": "f7cT",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "chevron-right",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "2T8Sp",
+                      "name": "f7cI",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "folder",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "vWvCr",
+                      "name": "f7cL",
+                      "fill": "$--sidebar-foreground",
+                      "content": "Archive",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "oCL9f",
+              "name": "Note List",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 1,
+              "padding": [
+                2,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "nIS5h",
+                  "name": "Note Item Active",
+                  "width": "fill_container",
+                  "fill": "$--sidebar-accent",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": {
+                      "left": 3
+                    },
+                    "fill": "$--primary"
+                  },
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "3wDqv",
+                      "name": "noteActiveTitle",
+                      "fill": "$--sidebar-accent-foreground",
+                      "content": "HongJoo — 1:1 Meeting",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "s8aNT",
+                      "name": "noteActiveDate",
+                      "fill": "$--primary",
+                      "content": "Jan 21, 2026 · Voice note",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YzJ1X",
+                  "name": "Note Item",
+                  "width": "fill_container",
+                  "cornerRadius": 8,
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "IrIvX",
+                      "name": "note1Title",
+                      "fill": "$--sidebar-foreground",
+                      "content": "Rolling in deep",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "1gYMu",
+                      "name": "note1Date",
+                      "fill": "$--muted-foreground",
+                      "content": "Jan 15, 2026",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "wa2nm",
+                  "name": "Note Item",
+                  "width": "fill_container",
+                  "cornerRadius": 8,
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "MxCCd",
+                      "name": "note2Title",
+                      "fill": "$--sidebar-foreground",
+                      "content": "Parthi — Sprint Planning",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ubusS",
+                      "name": "note2Date",
+                      "fill": "$--muted-foreground",
+                      "content": "Jan 15, 2026",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ujVXo",
+                  "name": "Note Item",
+                  "width": "fill_container",
+                  "cornerRadius": 8,
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "0G1jH",
+                      "name": "note3Title",
+                      "fill": "$--sidebar-foreground",
+                      "content": "Ryan — Epic Review",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "9JbBr",
+                      "name": "note3Date",
+                      "fill": "$--muted-foreground",
+                      "content": "Jan 22, 2026",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "gO8SZ",
+              "name": "Sidebar Footer",
+              "width": "fill_container",
+              "height": 56,
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "top": 1
+                },
+                "fill": "$--sidebar-border"
+              },
+              "padding": [
+                0,
+                20
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "85ymG",
+                  "name": "Footer Left",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "WXLLP",
+                      "name": "settingsIcon",
+                      "width": 18,
+                      "height": 18,
+                      "iconFontName": "settings",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Lpqxt",
+                      "name": "settingsLabel",
+                      "fill": "$--muted-foreground",
+                      "content": "Settings",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pmGjb",
+                  "name": "Theme Toggle",
+                  "height": 28,
+                  "fill": "$--sidebar-accent",
+                  "cornerRadius": 14,
+                  "gap": 2,
+                  "padding": 2,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "CRMaq",
+                      "name": "Dark Inactive",
+                      "width": 24,
+                      "height": 24,
+                      "cornerRadius": 12,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "QvR5m",
+                          "name": "moonIcon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "moon",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--muted-foreground"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "vJJPK",
+                      "name": "Light Active",
+                      "width": 24,
+                      "height": 24,
+                      "fill": "$--primary",
+                      "cornerRadius": 12,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "ge4OO",
+                          "name": "sunIcon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "sun",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--primary-foreground"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "e4Kv4",
+          "name": "Main Content",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "sGYZw",
+              "name": "Top Bar",
+              "width": "fill_container",
+              "height": 48,
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "bottom": 1
+                },
+                "fill": "$--border"
+              },
+              "padding": [
+                0,
+                24
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "UeBwI",
+                  "name": "Breadcrumb",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "EbtJn",
+                      "name": "bc1",
+                      "fill": "$--muted-foreground",
+                      "content": "All Notes",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "eXpRY",
+                      "name": "bcSep",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "chevron-right",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Yp4We",
+                      "name": "bc2",
+                      "fill": "$--foreground",
+                      "content": "HongJoo — 1:1 Meeting",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "x73PQ",
+                  "name": "Top Bar Right",
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "RZI9n",
+                      "name": "Status Pill",
+                      "height": 24,
+                      "fill": "$--color-success",
+                      "cornerRadius": 12,
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "gAJkr",
+                          "name": "statusDot",
+                          "fill": "$--color-success-foreground",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "tf4kO",
+                          "name": "statusText",
+                          "fill": "$--color-success-foreground",
+                          "content": "Saved",
+                          "fontFamily": "$--font-secondary",
+                          "fontSize": 11,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "6cq2t",
+              "name": "Editor Header",
+              "width": "fill_container",
+              "height": 72,
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "bottom": 1
+                },
+                "fill": "$--border"
+              },
+              "padding": [
+                0,
+                32
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "oP8VO",
+                  "name": "Title Area",
+                  "layout": "vertical",
+                  "gap": 2,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "2Mo6s",
+                      "name": "noteTitle",
+                      "fill": "$--foreground",
+                      "content": "AI Chat",
+                      "fontFamily": "$--font-primary",
+                      "fontSize": 22,
+                      "fontWeight": "700",
+                      "letterSpacing": -0.5
+                    },
+                    {
+                      "type": "text",
+                      "id": "QngVg",
+                      "name": "noteMeta",
+                      "fill": "$--muted-foreground",
+                      "content": "Ask anything about this note in a scrollable chat",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "VznQc",
+                  "name": "Action Buttons",
+                  "enabled": false,
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Xfv1i",
+                      "name": "Record Btn",
+                      "height": 36,
+                      "fill": "$--secondary",
+                      "cornerRadius": "$--radius-pill",
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        16
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "LqMtV",
+                          "name": "voiceIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "mic",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--secondary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "dIk73",
+                          "name": "voiceLabel",
+                          "fill": "$--secondary-foreground",
+                          "content": "Record",
+                          "fontFamily": "$--font-primary",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "3Ptps",
+                      "name": "Preview Btn",
+                      "height": 36,
+                      "cornerRadius": "$--radius-pill",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$--border"
+                      },
+                      "gap": 8,
+                      "padding": [
+                        0,
+                        16
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "SAzQQ",
+                          "name": "moveIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "eye",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "jJVp8",
+                          "name": "moveLabel",
+                          "fill": "$--foreground",
+                          "content": "Preview",
+                          "fontFamily": "$--font-primary",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "VsuxS",
+              "name": "Chat Context Bar",
+              "width": "fill_container",
+              "height": 48,
+              "fill": "$--card",
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "bottom": 1
+                },
+                "fill": "$--border"
+              },
+              "gap": 12,
+              "padding": [
+                0,
+                32
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "aK6bc",
+                  "name": "aiLabel",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "DpLUZ",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "sparkles",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--primary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "XUIVh",
+                      "fill": "$--primary",
+                      "content": "AI Chat",
+                      "fontFamily": "$--font-primary",
+                      "fontSize": 13,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "j74n3",
+                  "height": 30,
+                  "fill": "$--secondary",
+                  "cornerRadius": "$--radius-pill",
+                  "padding": [
+                    0,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "mkO6g",
+                      "fill": "$--secondary-foreground",
+                      "content": "Using current note: HongJoo — 1:1 Meeting",
+                      "fontFamily": "$--font-secondary",
+                      "fontSize": 12,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "7gOiu",
+                  "width": "fill_container",
+                  "height": 1
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "wEh1G",
+              "name": "AI Chat Workspace",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                20,
+                24
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "iCPyU",
+                  "name": "Chat Thread",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$--card",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$--border"
+                  },
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "bM5KP",
+                      "fill": "$--foreground",
+                      "content": "Conversation",
+                      "fontFamily": "$--font-primary",
+                      "fontSize": 14,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "9JrBW",
+                      "name": "Messages Scroll",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "jzvCP",
+                          "name": "Assistant Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "i3nSs",
+                              "width": "fill_container",
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "nC9Lo",
+                                  "fill": "$--muted-foreground",
+                                  "content": "Assistant",
+                                  "fontFamily": "$--font-secondary",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "HOs17",
+                                  "height": 24,
+                                  "cornerRadius": "$--radius-pill",
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "$--border"
+                                  },
+                                  "gap": 6,
+                                  "padding": [
+                                    0,
+                                    10
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "cke37",
+                                      "width": 12,
+                                      "height": 12,
+                                      "iconFontName": "copy",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "$--muted-foreground"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "HaxwZ",
+                                      "fill": "$--muted-foreground",
+                                      "content": "Copy",
+                                      "fontFamily": "$--font-secondary",
+                                      "fontSize": 11,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "MdT1D",
+                              "width": "fill_container",
+                              "fill": "$--secondary",
+                              "cornerRadius": 10,
+                              "padding": [
+                                10,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ucgRe",
+                                  "fill": "$--secondary-foreground",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Here is a quick summary: roadmap priorities are aligned, voice transcription ships by Feb 15, and LLM beta begins in March.",
+                                  "lineHeight": 1.6,
+                                  "fontFamily": "$--font-secondary",
+                                  "fontSize": 14,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "SvkqH",
+                          "name": "User Message",
+                          "width": "fill_container",
+                          "justifyContent": "end",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "35s8w",
+                              "width": 460,
+                              "fill": "$--primary",
+                              "cornerRadius": 10,
+                              "padding": [
+                                10,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ai0er",
+                                  "fill": "$--primary-foreground",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Can you turn this into concise action items and owners?",
+                                  "lineHeight": 1.6,
+                                  "fontFamily": "$--font-secondary",
+                                  "fontSize": 14,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mbfCc",
+                          "name": "Assistant Message",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "7Cx9n",
+                              "width": "fill_container",
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "9Ffdq",
+                                  "fill": "$--muted-foreground",
+                                  "content": "Assistant",
+                                  "fontFamily": "$--font-secondary",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "cfezQ",
+                                  "height": 24,
+                                  "cornerRadius": "$--radius-pill",
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "$--border"
+                                  },
+                                  "gap": 6,
+                                  "padding": [
+                                    0,
+                                    10
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "C8LDR",
+                                      "width": 12,
+                                      "height": 12,
+                                      "iconFontName": "copy",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "$--muted-foreground"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "XfmmO",
+                                      "fill": "$--muted-foreground",
+                                      "content": "Copy",
+                                      "fontFamily": "$--font-secondary",
+                                      "fontSize": 11,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "PvilS",
+                              "width": "fill_container",
+                              "fill": "$--secondary",
+                              "cornerRadius": 10,
+                              "padding": [
+                                10,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "CyWzy",
+                                  "fill": "$--secondary-foreground",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Action items:\n• Finalize Whisper model selection — Anurag\n• Build audio capture test suite — Team\n• Schedule Q2 planning sync — HongJoo",
+                                  "lineHeight": 1.6,
+                                  "fontFamily": "$--font-secondary",
+                                  "fontSize": 14,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "MqFcc",
+                  "name": "Composer",
+                  "width": "fill_container",
+                  "height": 56,
+                  "fill": "$--card",
+                  "cornerRadius": "$--radius-pill",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$--border"
+                  },
+                  "gap": 8,
+                  "padding": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "HLeSQ",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$--muted",
+                      "cornerRadius": "$--radius-pill",
+                      "padding": [
+                        0,
+                        16
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "QsRP5",
+                          "fill": "$--muted-foreground",
+                          "content": "Ask AI about this note...",
+                          "fontFamily": "$--font-secondary",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "7USi3",
+                      "height": "fill_container",
+                      "fill": "$--primary",
+                      "cornerRadius": "$--radius-pill",
+                      "gap": 6,
+                      "padding": [
+                        0,
+                        16
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "1UJq5",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "send",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--primary-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "jWo6w",
+                          "fill": "$--primary-foreground",
+                          "content": "Send",
+                          "fontFamily": "$--font-primary",
+                          "fontSize": 13,
+                          "fontWeight": "600"
                         }
                       ]
                     }

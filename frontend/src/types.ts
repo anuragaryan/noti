@@ -46,6 +46,17 @@ export interface StreamingState {
   selectedPromptId: string | null
 }
 
+export type MainView = 'default' | 'ai-chat'
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  reasoning?: string
+  showThinking?: boolean
+  reasoningComplete?: boolean
+}
+
 // Event payload types
 export interface StreamChunkPayload {
   text: string

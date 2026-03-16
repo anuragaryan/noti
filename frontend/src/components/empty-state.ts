@@ -5,6 +5,7 @@
 import state from '../state'
 import { NotesAPI } from '../api'
 import { icon } from '../utils/icons'
+import { openAIChat } from './ai-chat'
 
 // ─── Lucide icons — see utils/icons.ts ─────────────────────────────────────────────────────────
 
@@ -32,6 +33,10 @@ export function renderEmptyState(container: HTMLElement): void {
         ${icon('folder-plus', 16)}
         New Folder
       </button>
+      <button id="empty-ai-chat" class="btn-secondary btn-primary-lg">
+        ${icon('sparkles', 16)}
+        AI Chat
+      </button>
     </div>
   `
 
@@ -47,5 +52,9 @@ export function renderEmptyState(container: HTMLElement): void {
 
   container.querySelector('#empty-new-folder')?.addEventListener('click', () => {
     state.openModal('create-folder')
+  })
+
+  container.querySelector('#empty-ai-chat')?.addEventListener('click', () => {
+    openAIChat()
   })
 }

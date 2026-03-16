@@ -6,9 +6,10 @@
 import './app.css'
 import { initTheme } from './components/theme-toggle'
 import { initSidebar } from './components/sidebar'
-import { initEditor, saveCurrentNote, getEditorTitle, getEditorContent } from './components/editor'
+import { initEditor, saveCurrentNote } from './components/editor'
 import { initToolbar, loadPrompts } from './components/toolbar'
 import { initRecording } from './components/recording'
+import { initAIChat } from './components/ai-chat'
 import { renderEmptyState } from './components/empty-state'
 import { renderGettingStarted } from './components/getting-started'
 import { renderSettingsModal } from './components/modals/settings'
@@ -241,38 +242,43 @@ function initEmptyState(): void {
 
   renderPlaceholder()
 
-  state.subscribe('currentNote', () => {
-    const emptyEl = document.getElementById('empty-state')
-    const editorArea = document.getElementById('editor-area')
-    const note = state.get('currentNote')
-    const showGettingStarted = state.get('showGettingStarted')
+  state.subscribe('currentNote', renderPlaceholder)
+  state.subscribe('showGettingStarted', renderPlaceholder)
+}
 
-    if (note && !showGettingStarted) {
-      emptyEl?.classList.add('hidden')
-      if (editorArea) editorArea.classList.remove('hidden')
-    } else {
-      emptyEl?.classList.remove('hidden')
-      if (editorArea) editorArea.classList.add('hidden')
-      if (emptyEl) renderPlaceholder()
-    }
-  })
+function syncMainContentVisibility(): void {
+  const emptyEl = document.getElementById('empty-state')
+  const editorArea = document.getElementById('editor-area')
+  const aiChat = document.getElementById('ai-chat-screen')
 
-  state.subscribe('showGettingStarted', () => {
-    const emptyEl = document.getElementById('empty-state')
-    const editorArea = document.getElementById('editor-area')
-    const note = state.get('currentNote')
-    const showGettingStarted = state.get('showGettingStarted')
+  if (!emptyEl || !editorArea || !aiChat) return
 
-    if (showGettingStarted || !note) {
-      emptyEl?.classList.remove('hidden')
-      editorArea?.classList.add('hidden')
-      if (emptyEl) renderPlaceholder()
-      return
-    }
+  const showGettingStarted = state.get('showGettingStarted')
+  const note = state.get('currentNote')
+  const mainView = state.get('mainView')
 
-    emptyEl?.classList.add('hidden')
-    editorArea?.classList.remove('hidden')
-  })
+  if (showGettingStarted) {
+    emptyEl.classList.remove('hidden')
+    editorArea.classList.add('hidden')
+    aiChat.classList.add('hidden')
+    return
+  }
+
+  if (mainView === 'ai-chat') {
+    emptyEl.classList.add('hidden')
+    editorArea.classList.add('hidden')
+    aiChat.classList.remove('hidden')
+    return
+  }
+
+  aiChat.classList.add('hidden')
+  if (note) {
+    emptyEl.classList.add('hidden')
+    editorArea.classList.remove('hidden')
+  } else {
+    emptyEl.classList.remove('hidden')
+    editorArea.classList.add('hidden')
+  }
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -285,6 +291,7 @@ async function boot(): Promise<void> {
   initSidebar()
   initEditor()
   initToolbar()
+  initAIChat()
   initRecording()
   initEmptyState()
   initModalSystem()
@@ -297,13 +304,12 @@ async function boot(): Promise<void> {
   // 4. Load data (triggers state updates which re-render components)
   await loadInitialData()
 
-  // 5. Show empty state initially (no note selected)
-  const emptyEl = document.getElementById('empty-state')
-  const editorArea = document.getElementById('editor-area')
-  if (state.get('showGettingStarted') || !state.get('currentNote')) {
-    emptyEl?.classList.remove('hidden')
-    editorArea?.classList.add('hidden')
-  }
+  // 5. Sync main content visibility for current app state
+  syncMainContentVisibility()
+
+  state.subscribe('currentNote', syncMainContentVisibility)
+  state.subscribe('showGettingStarted', syncMainContentVisibility)
+  state.subscribe('mainView', syncMainContentVisibility)
 }
 
 window.addEventListener('DOMContentLoaded', () => {

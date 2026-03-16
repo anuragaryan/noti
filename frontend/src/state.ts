@@ -16,6 +16,8 @@ import type {
 	CreateFolderContext,
 	RenameContext,
 	MoveContext,
+	MainView,
+	ChatMessage,
 	DownloadEventPayload,
 	DownloadItem,
 	SearchMatch,
@@ -61,6 +63,13 @@ export interface AppState {
   showAIPanel: boolean
   aiMode: 'preset' | 'custom'
   customPromptText: string
+  activeStreamTarget: 'toolbar' | 'ai-chat' | null
+
+  // AI Chat
+  mainView: MainView
+  chatInput: string
+  chatMessages: ChatMessage[]
+  chatIsStreaming: boolean
 
   // Availability
   sttAvailable: boolean
@@ -123,6 +132,12 @@ class StateManager {
     showAIPanel: false,
     aiMode: 'preset',
     customPromptText: '',
+    activeStreamTarget: null,
+
+    mainView: 'default',
+    chatInput: '',
+    chatMessages: [],
+    chatIsStreaming: false,
 
     sttAvailable: false,
     llmAvailable: false,

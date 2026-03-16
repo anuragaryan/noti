@@ -66,8 +66,9 @@ async function renderTopBar(): Promise<void> {
   if (!container) return
 
   const note = state.get('currentNote')
+  const mainView = state.get('mainView')
 
-  if (!note) {
+  if (!note || mainView === 'ai-chat') {
     container.innerHTML = ''
     container.classList.add('hidden')
     return
@@ -118,7 +119,8 @@ function renderEditorHeader(): void {
   if (!container) return
 
   const note = state.get('currentNote')
-  if (!note) {
+  const mainView = state.get('mainView')
+  if (!note || mainView === 'ai-chat') {
     container.classList.add('hidden')
     container.innerHTML = ''
     return
@@ -294,10 +296,11 @@ function updateTranscriptPanel(): void {
 function renderEditorArea(): void {
   const editorArea = document.getElementById('editor-area')
   const note = state.get('currentNote')
+  const mainView = state.get('mainView')
 
   if (!editorArea) return
 
-  if (!note) {
+  if (!note || mainView === 'ai-chat') {
     editorArea.classList.add('hidden')
     return
   }
@@ -516,4 +519,9 @@ export function initEditor(): void {
   state.subscribe('isDirty', () => void renderTopBar())
   state.subscribe('isSaving', () => void renderTopBar())
   state.subscribe('theme', () => void renderTopBar())
+  state.subscribe('mainView', () => {
+    void renderTopBar()
+    renderEditorHeader()
+    renderEditorArea()
+  })
 }

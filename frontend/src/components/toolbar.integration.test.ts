@@ -79,6 +79,11 @@ function resetState(): void {
     streamingReasoningComplete: false,
     showThinkingWidget: true,
     showAIPanel: false,
+    activeStreamTarget: null,
+    mainView: 'default',
+    chatInput: '',
+    chatMessages: [],
+    chatIsStreaming: false,
     notification: null,
   })
 }
@@ -216,5 +221,16 @@ describe('toolbar integration', () => {
 
     expect(mockLLMAPI.stopStream).toHaveBeenCalledTimes(1)
     expect(state.get('streamingStatus')).toBe('cancelled')
+  })
+
+  it('opens AI chat when sparkle label is clicked', async () => {
+    const { initToolbar } = await import('./toolbar')
+    initToolbar()
+
+    const openBtn = document.querySelector<HTMLButtonElement>('#open-ai-chat-btn')
+    if (!openBtn) throw new Error('ai chat open button missing')
+
+    openBtn.click()
+    expect(state.get('mainView')).toBe('ai-chat')
   })
 })
