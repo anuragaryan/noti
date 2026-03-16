@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  WHISPER_CPP_REF: 19ceec8eac980403b714d603e5ca31653cd42a3f
+
 jobs:
   build-macos:
     name: Build ${{ matrix.name }}
@@ -43,6 +46,17 @@ jobs:
       - name: Install native build dependencies
         run: brew install pkg-config portaudio create-dmg
 
+      - name: Configure pkg-config path for PortAudio
+        run: |
+          BREW_PREFIX="$(brew --prefix)"
+          PORTAUDIO_PREFIX="$(brew --prefix portaudio)"
+          {
+            printf 'PKG_CONFIG_PATH=%s/lib/pkgconfig:%s/lib/pkgconfig:%s\n' "$PORTAUDIO_PREFIX" "$BREW_PREFIX" "${PKG_CONFIG_PATH:-}"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify PortAudio pkg-config metadata
+        run: pkg-config --modversion portaudio-2.0
+
       - name: Cache Go modules and build cache
         uses: actions/cache@v4
         with:
@@ -63,6 +77,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ggerganov/whisper.cpp
+          ref: ${{ env.WHISPER_CPP_REF }}
           path: whisper.cpp
 
       - name: Build whisper.cpp static libraries
