@@ -5,7 +5,65 @@ import { icon } from '../utils/icons'
 import { escapeHtml } from '../utils/html'
 import { renderMarkdownPreview } from '../utils/markdown'
 import { isNearBottom, scrollToBottom } from '../utils/scroll'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, ChatRequestMessage } from '../types'
+
+const MAX_CHAT_CONTEXT_CHARS = 64_000
+const CHAT_CONTEXT_RESERVED_CHARS = 2_000
+const MIN_CHAT_MESSAGE_BUDGET_CHARS = 256
+let pendingChatRollbackMessages: ChatMessage[] | null = null
+
+function messageCharCost(message: ChatRequestMessage): number {
+  return message.role.length + message.content.length + 8
+}
+
+function trimContentToChars(content: string, maxChars: number): string {
+  if (maxChars <= 0) return ''
+  if (content.length <= maxChars) return content
+  return content.slice(0, maxChars)
+}
+
+function buildChatRequestMessages(input: string, systemPrompt: string): { messages: ChatRequestMessage[]; wasTrimmed: boolean } {
+  const baseMessages: ChatRequestMessage[] = state
+    .get('chatMessages')
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && Boolean(m.content.trim()))
+    .map((m) => ({ role: m.role, content: m.content }))
+
+  baseMessages.push({ role: 'user', content: input })
+
+  const maxMessageBudget = Math.max(
+    MIN_CHAT_MESSAGE_BUDGET_CHARS,
+    MAX_CHAT_CONTEXT_CHARS - Math.max(CHAT_CONTEXT_RESERVED_CHARS, systemPrompt.length),
+  )
+
+  const trimmed: ChatRequestMessage[] = []
+  let usedChars = 0
+  let wasTrimmed = false
+
+  for (let i = baseMessages.length - 1; i >= 0; i--) {
+    const message = baseMessages[i]
+    const cost = messageCharCost(message)
+
+    if (usedChars + cost <= maxMessageBudget) {
+      trimmed.unshift(message)
+      usedChars += cost
+      continue
+    }
+
+    const isLatestUserMessage = i === baseMessages.length - 1 && message.role === 'user'
+    if (!isLatestUserMessage) {
+      wasTrimmed = true
+      continue
+    }
+
+    const maxContentChars = Math.max(1, maxMessageBudget - message.role.length - 8)
+    const shortened = trimContentToChars(message.content, maxContentChars)
+    trimmed.unshift({ role: message.role, content: shortened })
+    usedChars += messageCharCost({ role: message.role, content: shortened })
+    wasTrimmed = wasTrimmed || shortened.length < message.content.length
+  }
+
+  return { messages: trimmed, wasTrimmed }
+}
 
 function createMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -77,6 +135,7 @@ function markReasoningCompletedIfNeeded(onDone: boolean): void {
 function closeAIChat(): void {
   const isChatStreaming = state.get('activeStreamTarget') === 'ai-chat' && state.get('chatIsStreaming')
   if (isChatStreaming) {
+    pendingChatRollbackMessages = null
     void LLMAPI.stopStream().catch((err) => {
       console.error('Failed to stop AI chat stream:', err)
     })
@@ -92,6 +151,7 @@ function closeAIChat(): void {
 function clearAIChat(): void {
   const isChatStreaming = state.get('activeStreamTarget') === 'ai-chat' && state.get('chatIsStreaming')
   if (isChatStreaming) {
+    pendingChatRollbackMessages = null
     void LLMAPI.stopStream().catch((err) => {
       console.error('Failed to stop AI chat stream:', err)
     })
@@ -248,8 +308,12 @@ async function sendChatMessage(): Promise<void> {
 
   if (state.get('chatIsStreaming')) return
 
+  const systemPrompt = buildSystemPrompt()
+  const request = buildChatRequestMessages(input, systemPrompt)
+  const previousMessages = [...state.get('chatMessages')]
+
   const nextMessages: ChatMessage[] = [
-    ...state.get('chatMessages'),
+    ...previousMessages,
     { id: createMessageId(), role: 'user', content: input },
     { id: createMessageId(), role: 'assistant', content: '', reasoning: '', showThinking: true, reasoningComplete: false },
   ]
@@ -260,12 +324,19 @@ async function sendChatMessage(): Promise<void> {
     chatIsStreaming: true,
     activeStreamTarget: 'ai-chat',
   })
+  pendingChatRollbackMessages = previousMessages
 
   try {
-    await LLMAPI.generateStream(input, buildSystemPrompt())
+    if (request.wasTrimmed) {
+      state.showNotification('Chat history trimmed to fit context window', 'info')
+    }
+    await LLMAPI.generateChatStream(request.messages, systemPrompt)
   } catch (err) {
     console.error('AI chat failed:', err)
+    const rollbackMessages = pendingChatRollbackMessages
+    pendingChatRollbackMessages = null
     state.setState({
+      chatMessages: rollbackMessages ?? state.get('chatMessages'),
       chatIsStreaming: false,
       activeStreamTarget: null,
     })
@@ -296,6 +367,7 @@ export function initAIChat(): void {
 
   AppEvents.onStreamDone(() => {
     if (state.get('activeStreamTarget') !== 'ai-chat') return
+    pendingChatRollbackMessages = null
     markReasoningCompletedIfNeeded(true)
     state.setState({
       chatIsStreaming: false,
@@ -306,7 +378,10 @@ export function initAIChat(): void {
   AppEvents.onStreamError((err) => {
     if (state.get('activeStreamTarget') !== 'ai-chat') return
     console.error('AI chat stream error:', err)
+    const rollbackMessages = pendingChatRollbackMessages
+    pendingChatRollbackMessages = null
     state.setState({
+      chatMessages: rollbackMessages ?? state.get('chatMessages'),
       chatIsStreaming: false,
       activeStreamTarget: null,
     })

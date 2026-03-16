@@ -12,8 +12,15 @@ type LLMConfig struct {
 
 // LLMRequest represents a text generation request
 type LLMRequest struct {
-	Prompt       string `json:"prompt"`
-	SystemPrompt string `json:"systemPrompt,omitempty"`
+	Messages     []LLMMessage `json:"messages,omitempty"`
+	Prompt       string       `json:"prompt"`
+	SystemPrompt string       `json:"systemPrompt,omitempty"`
+}
+
+// LLMMessage represents a single message in a multi-turn chat request.
+type LLMMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // LLMResponse represents the generated text response

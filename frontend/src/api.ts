@@ -5,7 +5,7 @@
  */
 
 import * as App from '../wailsjs/go/main/App'
-import type { Note, Folder, Prompt, Config, LLMConfig, AudioDevice, LLMResponse, PromptExecutionResult, TranscriptionResult, SearchMatch } from './types'
+import type { Note, Folder, Prompt, Config, LLMConfig, AudioDevice, LLMResponse, PromptExecutionResult, TranscriptionResult, SearchMatch, ChatRequestMessage } from './types'
 
 export type ModelOption = {
   id: number
@@ -164,6 +164,10 @@ export const LLMAPI = {
 
   generateStream(prompt: string, systemPrompt: string): Promise<void> {
     return App.GenerateTextStream(prompt, systemPrompt)
+  },
+
+  generateChatStream(messages: ChatRequestMessage[], systemPrompt: string): Promise<void> {
+    return App.GenerateChatStream(messages, systemPrompt)
   },
 
   stopStream(): Promise<void> {

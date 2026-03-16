@@ -19,7 +19,22 @@ func BuildMessages(request *domain.LLMRequest) []Message {
 		})
 	}
 
-	// Add user message
+	if len(request.Messages) > 0 {
+		for _, m := range request.Messages {
+			role := strings.TrimSpace(m.Role)
+			if role == "" {
+				continue
+			}
+
+			messages = append(messages, Message{
+				Role:    role,
+				Content: m.Content,
+			})
+		}
+		return messages
+	}
+
+	// Backward-compatible single-turn user message
 	messages = append(messages, Message{
 		Role:    "user",
 		Content: request.Prompt,

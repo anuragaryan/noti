@@ -680,12 +680,27 @@ func (a *App) UpdateLLMConfig(llmConfig domain.LLMConfig) error {
 // GenerateTextStream generates text with streaming response
 // Emits events: llm:stream:chunk, llm:stream:done, llm:stream:error
 func (a *App) GenerateTextStream(prompt string, systemPrompt string) error {
-	a.cancelActiveStream()
-
 	request := &domain.LLMRequest{
 		Prompt:       prompt,
 		SystemPrompt: systemPrompt,
 	}
+
+	return a.startTextStream(request)
+}
+
+// GenerateChatStream generates text with streaming response using multi-turn chat history.
+// Emits events: llm:stream:chunk, llm:stream:done, llm:stream:error
+func (a *App) GenerateChatStream(messages []domain.LLMMessage, systemPrompt string) error {
+	request := &domain.LLMRequest{
+		Messages:     messages,
+		SystemPrompt: systemPrompt,
+	}
+
+	return a.startTextStream(request)
+}
+
+func (a *App) startTextStream(request *domain.LLMRequest) error {
+	a.cancelActiveStream()
 
 	streamCtx, cancel := context.WithTimeout(a.ctx, 5*time.Minute)
 	streamID := a.setActiveStreamCancel(cancel)

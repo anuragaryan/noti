@@ -420,6 +420,51 @@ func TestGenerateTextStream_CancelStopsInFlightProvider(t *testing.T) {
 	}
 }
 
+func TestGenerateChatStream_ForwardsMessagesAndSystemPrompt(t *testing.T) {
+	app := newIntegrationApp(t)
+
+	fakeProvider := &fakeLLMProvider{
+		available:       true,
+		supportsStream:  true,
+		streamStartedCh: make(chan struct{}, 1),
+		streamFunc: func(ctx context.Context, req *domain.LLMRequest, callback domain.StreamCallback) error {
+			if err := callback(&domain.StreamChunk{Text: "ok", Index: 0}); err != nil {
+				return err
+			}
+			return callback(&domain.StreamChunk{Done: true, FinishReason: "stop", Index: 1})
+		},
+	}
+	setLLMManagerProvider(t, app.llmManager, fakeProvider, &app.config.LLM)
+
+	history := []domain.LLMMessage{
+		{Role: "user", Content: "first question"},
+		{Role: "assistant", Content: "first answer"},
+		{Role: "user", Content: "follow up"},
+	}
+
+	if err := app.GenerateChatStream(history, "system prompt"); err != nil {
+		t.Fatalf("GenerateChatStream: %v", err)
+	}
+
+	select {
+	case <-fakeProvider.streamStartedCh:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream did not start")
+	}
+
+	fakeProvider.mu.Lock()
+	defer fakeProvider.mu.Unlock()
+	if fakeProvider.lastStreamReq == nil {
+		t.Fatalf("expected stream request to be captured")
+	}
+	if fakeProvider.lastStreamReq.SystemPrompt != "system prompt" {
+		t.Fatalf("unexpected system prompt: %q", fakeProvider.lastStreamReq.SystemPrompt)
+	}
+	if !reflect.DeepEqual(fakeProvider.lastStreamReq.Messages, history) {
+		t.Fatalf("unexpected message history: %#v", fakeProvider.lastStreamReq.Messages)
+	}
+}
+
 func TestSaveConfig_ReturnsErrorWhenLLMSwitchFails(t *testing.T) {
 	app := newIntegrationApp(t)
 

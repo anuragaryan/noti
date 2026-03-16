@@ -24,6 +24,8 @@ export function ExecutePromptOnNote(arg1:string,arg2:string):Promise<domain.Prom
 
 export function ExecutePromptOnNoteStream(arg1:string,arg2:string):Promise<void>;
 
+export function GenerateChatStream(arg1:Array<domain.LLMMessage>,arg2:string):Promise<void>;
+
 export function GenerateText(arg1:string,arg2:string):Promise<domain.LLMResponse>;
 
 export function GenerateTextStream(arg1:string,arg2:string):Promise<void>;

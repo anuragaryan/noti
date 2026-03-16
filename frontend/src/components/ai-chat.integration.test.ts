@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import state from '../state'
 
 const mockLLMAPI = {
-  generateStream: vi.fn(),
+  generateChatStream: vi.fn(),
   stopStream: vi.fn(),
 }
 
@@ -18,6 +18,10 @@ function lastAssistantMessage() {
     if (messages[i].role === 'assistant') return messages[i]
   }
   return null
+}
+
+function requestChars(messages: Array<{ role: string; content: string }>): number {
+  return messages.reduce((sum, m) => sum + m.role.length + m.content.length + 8, 0)
 }
 
 vi.mock('../api', () => ({
@@ -57,8 +61,8 @@ describe('ai chat integration', () => {
     streamListeners.chunk = []
     streamListeners.done = []
     streamListeners.error = []
-    mockLLMAPI.generateStream.mockReset()
-    mockLLMAPI.generateStream.mockResolvedValue(undefined)
+    mockLLMAPI.generateChatStream.mockReset()
+    mockLLMAPI.generateChatStream.mockResolvedValue(undefined)
     mockLLMAPI.stopStream.mockReset()
     mockLLMAPI.stopStream.mockResolvedValue(undefined)
     resetState()
@@ -78,7 +82,12 @@ describe('ai chat integration', () => {
     if (!sendBtn) throw new Error('chat send button missing')
     sendBtn.click()
 
-    expect(mockLLMAPI.generateStream).toHaveBeenCalledTimes(1)
+    expect(mockLLMAPI.generateChatStream).toHaveBeenCalledTimes(1)
+    const [requestMessages, systemPrompt] = mockLLMAPI.generateChatStream.mock.calls[0]
+    expect(requestMessages).toEqual([
+      { role: 'user', content: 'help me summarize this week' },
+    ])
+    expect(typeof systemPrompt).toBe('string')
     expect(state.get('chatMessages').filter(m => m.role === 'user')).toHaveLength(1)
     expect(state.get('chatIsStreaming')).toBe(true)
 
@@ -89,6 +98,72 @@ describe('ai chat integration', () => {
     streamListeners.done[0]()
     expect(state.get('chatIsStreaming')).toBe(false)
     expect(state.get('activeStreamTarget')).toBeNull()
+  })
+
+  it('rolls back optimistic messages when chat request fails', async () => {
+    mockLLMAPI.generateChatStream.mockRejectedValueOnce(new Error('network down'))
+
+    const { initAIChat, openAIChat } = await import('./ai-chat')
+    state.setState({
+      chatMessages: [
+        { id: 'u0', role: 'user', content: 'existing question' },
+        { id: 'a0', role: 'assistant', content: 'existing answer' },
+      ],
+    })
+    initAIChat()
+    openAIChat()
+
+    const input = document.querySelector<HTMLInputElement>('#ai-chat-input')
+    if (!input) throw new Error('chat input missing')
+    input.value = 'new question'
+    input.dispatchEvent(new Event('input'))
+
+    const sendBtn = document.querySelector<HTMLButtonElement>('#ai-chat-send')
+    if (!sendBtn) throw new Error('chat send button missing')
+    sendBtn.click()
+
+    await Promise.resolve()
+
+    expect(state.get('chatMessages')).toEqual([
+      { id: 'u0', role: 'user', content: 'existing question' },
+      { id: 'a0', role: 'assistant', content: 'existing answer' },
+    ])
+    expect(state.get('chatIsStreaming')).toBe(false)
+    expect(state.get('activeStreamTarget')).toBeNull()
+    expect(state.get('notification')?.message).toBe('AI chat failed')
+    expect(state.get('notification')?.type).toBe('error')
+  })
+
+  it('sends threaded messages and trims to context budget', async () => {
+    const { initAIChat, openAIChat } = await import('./ai-chat')
+
+    const longHistory = Array.from({ length: 80 }, (_, idx) => ({
+      id: `u-${idx}`,
+      role: idx % 2 === 0 ? 'user' as const : 'assistant' as const,
+      content: `${idx % 2 === 0 ? 'Q' : 'A'}${idx}-` + 'x'.repeat(1200),
+    }))
+
+    state.setState({ chatMessages: longHistory })
+    initAIChat()
+    openAIChat()
+
+    const input = document.querySelector<HTMLInputElement>('#ai-chat-input')
+    if (!input) throw new Error('chat input missing')
+    input.value = 'latest question in thread'
+    input.dispatchEvent(new Event('input'))
+
+    const sendBtn = document.querySelector<HTMLButtonElement>('#ai-chat-send')
+    if (!sendBtn) throw new Error('chat send button missing')
+    sendBtn.click()
+
+    expect(mockLLMAPI.generateChatStream).toHaveBeenCalledTimes(1)
+    const [requestMessages] = mockLLMAPI.generateChatStream.mock.calls[0]
+    expect(requestMessages[requestMessages.length - 1]).toEqual({
+      role: 'user',
+      content: 'latest question in thread',
+    })
+    expect(requestChars(requestMessages)).toBeLessThanOrEqual(62000)
+    expect(requestMessages.length).toBeLessThan(longHistory.length + 1)
   })
 
   it('keeps response hidden until reasoning is complete', async () => {
@@ -122,6 +197,39 @@ describe('ai chat integration', () => {
     assistant = lastAssistantMessage()
     expect(assistant?.showThinking).toBe(false)
     expect(assistant?.reasoningComplete).toBe(true)
+  })
+
+  it('rolls back optimistic messages on stream error event', async () => {
+    const { initAIChat, openAIChat } = await import('./ai-chat')
+    state.setState({
+      chatMessages: [
+        { id: 'u0', role: 'user', content: 'existing question' },
+        { id: 'a0', role: 'assistant', content: 'existing answer' },
+      ],
+    })
+    initAIChat()
+    openAIChat()
+
+    const input = document.querySelector<HTMLInputElement>('#ai-chat-input')
+    if (!input) throw new Error('chat input missing')
+    input.value = 'new question'
+    input.dispatchEvent(new Event('input'))
+
+    const sendBtn = document.querySelector<HTMLButtonElement>('#ai-chat-send')
+    if (!sendBtn) throw new Error('chat send button missing')
+    sendBtn.click()
+
+    streamListeners.chunk[0]({ text: 'partial response' })
+    streamListeners.error[0]('provider disconnected')
+
+    expect(state.get('chatMessages')).toEqual([
+      { id: 'u0', role: 'user', content: 'existing question' },
+      { id: 'a0', role: 'assistant', content: 'existing answer' },
+    ])
+    expect(state.get('chatIsStreaming')).toBe(false)
+    expect(state.get('activeStreamTarget')).toBeNull()
+    expect(state.get('notification')?.message).toBe('AI error: provider disconnected')
+    expect(state.get('notification')?.type).toBe('error')
   })
 
   it('closes chat while streaming and stops stream', async () => {

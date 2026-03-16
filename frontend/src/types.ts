@@ -57,6 +57,11 @@ export interface ChatMessage {
   reasoningComplete?: boolean
 }
 
+export interface ChatRequestMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 // Event payload types
 export interface StreamChunkPayload {
   text: string

@@ -46,6 +46,10 @@ export function ExecutePromptOnNoteStream(arg1, arg2) {
   return window['go']['main']['App']['ExecutePromptOnNoteStream'](arg1, arg2);
 }
 
+export function GenerateChatStream(arg1, arg2) {
+  return window['go']['main']['App']['GenerateChatStream'](arg1, arg2);
+}
+
 export function GenerateText(arg1, arg2) {
   return window['go']['main']['App']['GenerateText'](arg1, arg2);
 }
