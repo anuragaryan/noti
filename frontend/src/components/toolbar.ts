@@ -283,11 +283,15 @@ export function initToolbar(): void {
     const hasReasoningChunk = Boolean(chunk.reasoningText?.trim())
     const hasOutputChunk = Boolean(chunk.text)
     const nextReasoningComplete = hasReasoning && (currentReasoningComplete || (!hasReasoningChunk && hasOutputChunk))
+    const shouldAutoCollapseThinking = !currentReasoningComplete
+      && nextReasoningComplete
+      && state.get('showThinkingWidget')
 
     state.setState({
       streamingContent: nextContent,
       streamingReasoning: nextReasoning,
       streamingReasoningComplete: nextReasoningComplete,
+      showThinkingWidget: shouldAutoCollapseThinking ? false : state.get('showThinkingWidget'),
     })
 
     const resultEl = document.getElementById('ai-result-markdown')
@@ -311,8 +315,22 @@ export function initToolbar(): void {
     }
   })
 
-  AppEvents.onStreamDone(() => {
-    state.setState({ isStreaming: false, streamingStatus: 'done' })
+  AppEvents.onStreamDone((chunk) => {
+    const hasReasoning = Boolean(state.get('streamingReasoning').trim())
+    const currentReasoningComplete = state.get('streamingReasoningComplete')
+    const isCancelled = chunk?.finishReason === 'cancelled'
+    const shouldMarkReasoningComplete = hasReasoning && !isCancelled
+    const nextReasoningComplete = currentReasoningComplete || shouldMarkReasoningComplete
+    const shouldAutoCollapseThinking = !currentReasoningComplete
+      && nextReasoningComplete
+      && state.get('showThinkingWidget')
+
+    state.setState({
+      isStreaming: false,
+      streamingStatus: isCancelled ? 'cancelled' : 'done',
+      streamingReasoningComplete: nextReasoningComplete,
+      showThinkingWidget: shouldAutoCollapseThinking ? false : state.get('showThinkingWidget'),
+    })
     renderToolbar()
     renderAIPanel()
   })

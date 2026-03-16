@@ -13,7 +13,7 @@ const mockLLMAPI = {
 
 const streamListeners = {
   chunk: [] as Array<(payload: { text?: string; reasoningText?: string }) => void>,
-  done: [] as Array<() => void>,
+  done: [] as Array<(payload?: { finishReason?: string }) => void>,
   error: [] as Array<(msg: string) => void>,
 }
 
@@ -27,7 +27,7 @@ vi.mock('../events', () => ({
     onStreamChunk: (cb: (payload: { text?: string; reasoningText?: string }) => void) => {
       streamListeners.chunk.push(cb)
     },
-    onStreamDone: (cb: () => void) => {
+    onStreamDone: (cb: (payload?: { finishReason?: string }) => void) => {
       streamListeners.done.push(cb)
     },
     onStreamError: (cb: (msg: string) => void) => {
@@ -116,6 +116,86 @@ describe('toolbar integration', () => {
     streamListeners.done[0]()
     expect(state.get('isStreaming')).toBe(false)
     expect(state.get('streamingStatus')).toBe('done')
+  })
+
+  it('auto-collapses reasoning after answer output starts', async () => {
+    const { initToolbar } = await import('./toolbar')
+    mockPromptsAPI.executeOnNoteStream.mockResolvedValue(undefined)
+
+    initToolbar()
+
+    const runBtn = document.querySelector<HTMLButtonElement>('#run-prompt-btn')
+    if (!runBtn) throw new Error('run button missing')
+    runBtn.click()
+
+    streamListeners.chunk[0]({ reasoningText: 'Thinking through context...' })
+    expect(state.get('showThinkingWidget')).toBe(true)
+
+    streamListeners.chunk[0]({ text: 'Final answer starts here.' })
+    expect(state.get('streamingReasoningComplete')).toBe(true)
+    expect(state.get('showThinkingWidget')).toBe(false)
+  })
+
+  it('auto-collapses reasoning on done for reasoning-only responses', async () => {
+    const { initToolbar } = await import('./toolbar')
+    mockPromptsAPI.executeOnNoteStream.mockResolvedValue(undefined)
+
+    initToolbar()
+
+    const runBtn = document.querySelector<HTMLButtonElement>('#run-prompt-btn')
+    if (!runBtn) throw new Error('run button missing')
+    runBtn.click()
+
+    streamListeners.chunk[0]({ reasoningText: 'Reasoning without output text.' })
+    expect(state.get('streamingReasoningComplete')).toBe(false)
+    expect(state.get('showThinkingWidget')).toBe(true)
+
+    streamListeners.done[0]({ finishReason: 'stop' })
+    expect(state.get('streamingReasoningComplete')).toBe(true)
+    expect(state.get('showThinkingWidget')).toBe(false)
+    expect(state.get('streamingStatus')).toBe('done')
+  })
+
+  it('does not auto-collapse reasoning when stream is cancelled', async () => {
+    const { initToolbar } = await import('./toolbar')
+    mockPromptsAPI.executeOnNoteStream.mockResolvedValue(undefined)
+
+    initToolbar()
+
+    const runBtn = document.querySelector<HTMLButtonElement>('#run-prompt-btn')
+    if (!runBtn) throw new Error('run button missing')
+    runBtn.click()
+
+    streamListeners.chunk[0]({ reasoningText: 'Partial reasoning before cancellation.' })
+    expect(state.get('showThinkingWidget')).toBe(true)
+
+    streamListeners.done[0]({ finishReason: 'cancelled' })
+    expect(state.get('streamingReasoningComplete')).toBe(false)
+    expect(state.get('showThinkingWidget')).toBe(true)
+    expect(state.get('streamingStatus')).toBe('cancelled')
+  })
+
+  it('keeps reasoning expanded if user reopens after completion', async () => {
+    const { initToolbar } = await import('./toolbar')
+    mockPromptsAPI.executeOnNoteStream.mockResolvedValue(undefined)
+
+    initToolbar()
+
+    const runBtn = document.querySelector<HTMLButtonElement>('#run-prompt-btn')
+    if (!runBtn) throw new Error('run button missing')
+    runBtn.click()
+
+    streamListeners.chunk[0]({ reasoningText: 'Working through steps.' })
+    streamListeners.chunk[0]({ text: 'Answer token.' })
+    expect(state.get('showThinkingWidget')).toBe(false)
+
+    const toggleBtn = document.querySelector<HTMLButtonElement>('#ai-thinking-toggle')
+    if (!toggleBtn) throw new Error('thinking toggle missing')
+    toggleBtn.click()
+    expect(state.get('showThinkingWidget')).toBe(true)
+
+    streamListeners.done[0]({ finishReason: 'stop' })
+    expect(state.get('showThinkingWidget')).toBe(true)
   })
 
   it('stops active stream when panel close is clicked', async () => {
