@@ -9,6 +9,7 @@ permissions:
   contents: write
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   WHISPER_CPP_REF: 19ceec8eac980403b714d603e5ca31653cd42a3f
 
 jobs:
@@ -90,6 +91,7 @@ jobs:
           WHISPER_PATH: ${{ github.workspace }}/whisper.cpp
           NOTI_BUILD_PLATFORM: ${{ matrix.platform }}
           NOTI_DMG_NAME: ${{ matrix.dmg_name }}
+          NOTI_CODESIGN_IDENTITY: "-"
         run: ./scripts/build.sh production
 
       - name: Verify DMG exists
