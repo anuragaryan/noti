@@ -102,6 +102,53 @@ if [[ -n "$SIGNING_IDENTITY" ]]; then
   codesign --verify --deep --strict --verbose=2 "build/bin/noti.app"
 fi
 
+# Step 5.2: Package production DMG
+DMG_PATH=""
+if [[ "$MODE" == "production" ]]; then
+  echo ""
+  echo "💿 Step 5.2: Creating DMG installer..."
+
+  APP_BUNDLE_NAME="noti.app"
+  APP_BUNDLE_PATH="build/bin/${APP_BUNDLE_NAME}"
+  DMG_NAME="noti.dmg"
+  DMG_PATH="build/bin/${DMG_NAME}"
+  DMG_STAGING_DIR="build/bin/dmg-root"
+  VOLUME_NAME="Noti"
+
+  if ! command -v create-dmg >/dev/null 2>&1; then
+    echo "❌ create-dmg is required to package the installer DMG."
+    echo "Install it with: brew install create-dmg"
+    exit 1
+  fi
+
+  rm -f "$DMG_PATH"
+  rm -rf "$DMG_STAGING_DIR"
+  mkdir -p "$DMG_STAGING_DIR"
+
+  cp -R "$APP_BUNDLE_PATH" "$DMG_STAGING_DIR/"
+
+  APP_ICON_PATH="${APP_BUNDLE_PATH}/Contents/Resources/iconfile.icns"
+  CREATE_DMG_ARGS=(
+    --volname "$VOLUME_NAME"
+    --no-internet-enable
+    --window-pos 120 120
+    --window-size 680 420
+    --icon-size 112
+    --icon "$APP_BUNDLE_NAME" 170 210
+    --app-drop-link 510 210
+    "$DMG_PATH"
+    "$DMG_STAGING_DIR"
+  )
+
+  if [[ -f "$APP_ICON_PATH" ]]; then
+    CREATE_DMG_ARGS=(--volicon "$APP_ICON_PATH" "${CREATE_DMG_ARGS[@]}")
+  fi
+
+  create-dmg "${CREATE_DMG_ARGS[@]}"
+
+  rm -rf "$DMG_STAGING_DIR"
+fi
+
 # Step 6: Verify the build
 echo ""
 echo "✅ Build complete!"
@@ -116,9 +163,14 @@ if [[ "$MODE" == "debug" ]]; then
 else
   echo "📍 Data will be stored in: ~/Documents/noti/"
   echo ""
+  echo "📍 Installer location: build/bin/noti.dmg"
+  echo ""
   echo "To test, run:"
   echo "  ./build/bin/noti.app/Contents/MacOS/noti"
   echo ""
   echo "Or open the app:"
   echo "  open build/bin/noti.app"
+  echo ""
+  echo "Or open the installer:"
+  echo "  open build/bin/noti.dmg"
 fi

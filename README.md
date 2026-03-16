@@ -38,7 +38,9 @@ bun install --cwd frontend
 ./scripts/build.sh production
 ```
 
-The built app is generated at `build/bin/noti.app`.
+`./scripts/build.sh debug` generates `build/bin/noti.app`.
+
+`./scripts/build.sh production` generates `build/bin/noti.app` and packages it into `build/bin/noti.dmg`.
 
 ### 4) Important local setup note
 
