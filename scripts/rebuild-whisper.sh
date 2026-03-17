@@ -6,6 +6,12 @@ WHISPER_PATH="${1:-${WHISPER_PATH:-/Users/a.aryan/Documents/go/github.com/ggerga
 MIN_MACOS="${MIN_MACOS:-13.0}"
 JOBS="${JOBS:-8}"
 
+DEFAULT_ENABLE_METAL="ON"
+if [[ "$(uname -m)" == "x86_64" ]]; then
+  DEFAULT_ENABLE_METAL="OFF"
+fi
+WHISPER_ENABLE_METAL="${WHISPER_ENABLE_METAL:-$DEFAULT_ENABLE_METAL}"
+
 if [[ ! -d "$WHISPER_PATH" ]]; then
   echo "Whisper path not found: $WHISPER_PATH"
   echo "Usage: ./scripts/rebuild-whisper.sh [/absolute/path/to/whisper.cpp]"
@@ -16,16 +22,34 @@ echo "Rebuilding whisper.cpp static libs"
 echo "  Path: $WHISPER_PATH"
 echo "  macOS deployment target: $MIN_MACOS"
 echo "  Parallel jobs: $JOBS"
+echo "  GGML metal backend: $WHISPER_ENABLE_METAL"
 
 cmake -S "$WHISPER_PATH" -B "$WHISPER_PATH/build_go" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_DEPLOYMENT_TARGET="$MIN_MACOS" \
+  -DGGML_METAL="$WHISPER_ENABLE_METAL" \
   -DBUILD_SHARED_LIBS=OFF \
   -DWHISPER_BUILD_TESTS=OFF \
   -DWHISPER_BUILD_EXAMPLES=OFF \
   -DWHISPER_BUILD_SERVER=OFF
 
 cmake --build "$WHISPER_PATH/build_go" -j"$JOBS"
+
+if [[ "$WHISPER_ENABLE_METAL" == "OFF" ]]; then
+  GGML_METAL_STUB_DIR="$WHISPER_PATH/build_go/ggml/src/ggml-metal"
+  GGML_METAL_STUB_LIB="$GGML_METAL_STUB_DIR/libggml-metal.a"
+  GGML_METAL_STUB_SRC="$GGML_METAL_STUB_DIR/ggml_metal_stub.c"
+  GGML_METAL_STUB_OBJ="$GGML_METAL_STUB_DIR/ggml_metal_stub.o"
+
+  mkdir -p "$GGML_METAL_STUB_DIR"
+  cat > "$GGML_METAL_STUB_SRC" <<'EOF'
+void ggml_metal_stub(void) {}
+EOF
+  clang -c "$GGML_METAL_STUB_SRC" -o "$GGML_METAL_STUB_OBJ"
+  rm -f "$GGML_METAL_STUB_LIB"
+  ar rcs "$GGML_METAL_STUB_LIB" "$GGML_METAL_STUB_OBJ"
+  rm -f "$GGML_METAL_STUB_OBJ" "$GGML_METAL_STUB_SRC"
+fi
 
 # If shared libs exist from older builds, dyld may prefer them.
 rm -f "$WHISPER_PATH"/build_go/src/*.dylib

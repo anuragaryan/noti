@@ -117,8 +117,12 @@ macOS-first development environment:
 - CGO-enabled Go toolchain
 - Native dependencies used by this project:
   - `whisper.cpp` (Go bindings)
-  - PortAudio
+  - PortAudio (development/build dependency via Homebrew)
   - Apple frameworks used in current scripts (Accelerate, Foundation, Metal)
+
+Release packaging note:
+
+- macOS production builds bundle `libportaudio.2.dylib` inside `noti.app`, so end users do not need to install PortAudio separately.
 
 Optional but recommended:
 
