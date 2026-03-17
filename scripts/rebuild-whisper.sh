@@ -37,9 +37,18 @@ cmake --build "$WHISPER_PATH/build_go" -j"$JOBS"
 
 if [[ "$WHISPER_ENABLE_METAL" == "OFF" ]]; then
   GGML_METAL_STUB_DIR="$WHISPER_PATH/build_go/ggml/src/ggml-metal"
+  GGML_METAL_STUB_LIB="$GGML_METAL_STUB_DIR/libggml-metal.a"
+  GGML_METAL_STUB_SRC="$GGML_METAL_STUB_DIR/ggml_metal_stub.c"
+  GGML_METAL_STUB_OBJ="$GGML_METAL_STUB_DIR/ggml_metal_stub.o"
+
   mkdir -p "$GGML_METAL_STUB_DIR"
-  rm -f "$GGML_METAL_STUB_DIR/libggml-metal.a"
-  ar rcs "$GGML_METAL_STUB_DIR/libggml-metal.a"
+  cat > "$GGML_METAL_STUB_SRC" <<'EOF'
+void ggml_metal_stub(void) {}
+EOF
+  clang -c "$GGML_METAL_STUB_SRC" -o "$GGML_METAL_STUB_OBJ"
+  rm -f "$GGML_METAL_STUB_LIB"
+  ar rcs "$GGML_METAL_STUB_LIB" "$GGML_METAL_STUB_OBJ"
+  rm -f "$GGML_METAL_STUB_OBJ" "$GGML_METAL_STUB_SRC"
 fi
 
 # If shared libs exist from older builds, dyld may prefer them.
