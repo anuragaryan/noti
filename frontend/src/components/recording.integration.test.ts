@@ -76,6 +76,7 @@ function resetState(): void {
       } as any,
     ],
     notification: null,
+    activeModal: null,
   })
 }
 
@@ -130,5 +131,19 @@ describe('recording integration', () => {
     expect(state.get('isRecording')).toBe(false)
     expect(mockAudioAPI.startRecordingWithSource).not.toHaveBeenCalled()
     expect(state.get('notification')?.type).toBe('error')
+    expect(state.get('activeModal')).toBe('settings')
+  })
+
+  it('surfaces backend start error and opens settings for permission issues', async () => {
+    const { startRecording } = await import('./recording')
+
+    mockAudioAPI.checkPermissions.mockResolvedValue({ status: 'granted' })
+    mockAudioAPI.startRecordingWithSource.mockRejectedValue(new Error('screen recording permission not granted'))
+
+    await startRecording()
+
+    expect(state.get('isRecording')).toBe(false)
+    expect(state.get('notification')?.message).toContain('screen recording permission not granted')
+    expect(state.get('activeModal')).toBe('settings')
   })
 })

@@ -230,14 +230,18 @@ func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
 		return fmt.Errorf("transcriber not initialized")
 	}
 
+	slog.Info("Starting recording request", "source", source.String())
+
 	// Set the audio source
 	if err := m.audioManager.SetAudioSource(source); err != nil {
+		slog.Error("Failed to set audio source", "source", source.String(), "error", err)
 		return fmt.Errorf("failed to set audio source: %w", err)
 	}
 	m.activeSource = source
 
 	// Start the transcriber
 	if err := m.transcriber.StartProcessing(); err != nil {
+		slog.Error("Failed to start transcriber", "source", source.String(), "error", err)
 		return fmt.Errorf("failed to start transcriber: %w", err)
 	}
 
@@ -257,6 +261,7 @@ func (m *STTManager) StartRecordingWithSource(source domain.AudioSource) error {
 		// Cancel without emitting a transcription:done event — recording never
 		// actually started so the frontend should not receive a result.
 		m.transcriber.CancelProcessing()
+		slog.Error("Failed to start audio capture", "source", source.String(), "sampleRate", config.SampleRate, "channels", config.Channels, "bufferSize", config.BufferSize, "error", err)
 		return fmt.Errorf("failed to start audio capture: %w", err)
 	}
 

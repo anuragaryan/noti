@@ -100,6 +100,32 @@ type AudioManager struct {
 	ctx   context.Context
 }
 
+type mixSyncState struct {
+	micStarvedTicks int
+	sysStarvedTicks int
+	graceTicks      int
+	lastMicPartial  int
+	lastSysPartial  int
+	micStalledTicks int
+	sysStalledTicks int
+}
+
+func updateStalledPartial(avail int, lastPartial *int, stalledTicks *int) {
+	if avail <= 0 {
+		*lastPartial = 0
+		*stalledTicks = 0
+		return
+	}
+
+	if avail == *lastPartial {
+		*stalledTicks++
+		return
+	}
+
+	*lastPartial = avail
+	*stalledTicks = 1
+}
+
 // NewAudioManager creates a new audio manager
 func NewAudioManager() *AudioManager {
 	return &AudioManager{
@@ -317,11 +343,14 @@ func (m *AudioManager) StartCapture(config domain.AudioCaptureConfig, callback d
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	slog.Info("Starting audio capture", "source", m.activeSource.String(), "sampleRate", config.SampleRate, "channels", config.Channels, "bufferSize", config.BufferSize)
+
 	if m.activeSource == domain.AudioSourceMixed {
 		return m.startMixedCapture(config, callback)
 	}
 
 	if m.activeCapturer == nil {
+		slog.Error("No active audio capturer")
 		return fmt.Errorf("no active audio capturer")
 	}
 
@@ -330,7 +359,12 @@ func (m *AudioManager) StartCapture(config domain.AudioCaptureConfig, callback d
 		ctx = context.Background()
 	}
 
-	return m.activeCapturer.StartCapture(ctx, config, callback)
+	if err := m.activeCapturer.StartCapture(ctx, config, callback); err != nil {
+		slog.Error("Failed to start audio capture", "source", m.activeSource.String(), "error", err)
+		return err
+	}
+
+	return nil
 }
 
 // startMixedCapture starts capturing from both mic and system audio
@@ -360,6 +394,7 @@ func (m *AudioManager) startMixedCapture(config domain.AudioCaptureConfig, callb
 		m.micBuffer.Write(chunk.Data)
 	})
 	if err != nil {
+		slog.Error("Failed to start microphone capture in mixed mode", "error", err)
 		return fmt.Errorf("failed to start microphone capture: %w", err)
 	}
 
@@ -376,6 +411,7 @@ func (m *AudioManager) startMixedCapture(config domain.AudioCaptureConfig, callb
 	})
 	if err != nil {
 		m.micCapturer.StopCapture()
+		slog.Error("Failed to start system capture in mixed mode", "error", err)
 		return fmt.Errorf("failed to start system audio capture: %w", err)
 	}
 
@@ -397,58 +433,16 @@ func (m *AudioManager) runMixer(config domain.AudioCaptureConfig, callback domai
 	chunkSize := config.SampleRate / 10
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
+	state := mixSyncState{graceTicks: 2}
 
 	for {
 		select {
 		case <-m.mixerStop:
 			return
 		case <-ticker.C:
-			// Check if we have enough samples
-			micAvail := m.micBuffer.Available()
-			sysAvail := m.sysBuffer.Available()
-
-			// Use the minimum available from both sources
-			available := micAvail
-			if sysAvail < available {
-				available = sysAvail
-			}
-
-			if available < chunkSize {
+			mixed, ok := m.mixNextChunk(chunkSize, &state)
+			if !ok {
 				continue
-			}
-
-			// Read from both buffers
-			micSamples := m.micBuffer.Read(chunkSize)
-			sysSamples := m.sysBuffer.Read(chunkSize)
-
-			// Mix samples
-			mixed := make([]float32, chunkSize)
-			m.mutex.RLock()
-			mixMode := m.mixerConfig.MixMode
-			m.mutex.RUnlock()
-
-			for i := 0; i < chunkSize; i++ {
-				micVal := float32(0)
-				sysVal := float32(0)
-				if i < len(micSamples) {
-					micVal = micSamples[i]
-				}
-				if i < len(sysSamples) {
-					sysVal = sysSamples[i]
-				}
-
-				switch mixMode {
-				case "average":
-					mixed[i] = (micVal + sysVal) / 2.0
-				default: // "sum"
-					mixed[i] = micVal + sysVal
-					// Soft clipping to prevent distortion
-					if mixed[i] > 1.0 {
-						mixed[i] = 1.0 - (1.0 / (mixed[i] + 1.0))
-					} else if mixed[i] < -1.0 {
-						mixed[i] = -1.0 + (1.0 / (-mixed[i] + 1.0))
-					}
-				}
 			}
 
 			// Send mixed audio to callback
@@ -460,6 +454,116 @@ func (m *AudioManager) runMixer(config domain.AudioCaptureConfig, callback domai
 			})
 		}
 	}
+}
+
+func (m *AudioManager) mixNextChunk(chunkSize int, state *mixSyncState) ([]float32, bool) {
+	micAvail := m.micBuffer.Available()
+	sysAvail := m.sysBuffer.Available()
+
+	if micAvail < chunkSize && sysAvail < chunkSize {
+		return nil, false
+	}
+
+	if micAvail >= chunkSize && sysAvail >= chunkSize {
+		state.micStarvedTicks = 0
+		state.sysStarvedTicks = 0
+		state.lastMicPartial = 0
+		state.lastSysPartial = 0
+		state.micStalledTicks = 0
+		state.sysStalledTicks = 0
+		micSamples := m.micBuffer.Read(chunkSize)
+		sysSamples := m.sysBuffer.Read(chunkSize)
+		return m.mixSamples(chunkSize, micSamples, sysSamples), true
+	}
+
+	if micAvail >= chunkSize {
+		droppedSysPartial := 0
+		state.sysStarvedTicks++
+		state.micStarvedTicks = 0
+		state.lastMicPartial = 0
+		state.micStalledTicks = 0
+		updateStalledPartial(sysAvail, &state.lastSysPartial, &state.sysStalledTicks)
+
+		// Keep streams aligned under normal callback jitter.
+		if sysAvail == 0 && state.sysStarvedTicks < state.graceTicks {
+			return nil, false
+		}
+		if sysAvail > 0 && state.sysStalledTicks < state.graceTicks {
+			return nil, false
+		}
+
+		if sysAvail > 0 {
+			droppedSysPartial = sysAvail
+			m.sysBuffer.Read(sysAvail)
+			state.lastSysPartial = 0
+			state.sysStalledTicks = 0
+		}
+
+		micSamples := m.micBuffer.Read(chunkSize)
+		slog.Debug("Mixed audio chunk emitted with temporary system silence", "micSamples", len(micSamples), "sysSamples", 0, "chunkSize", chunkSize, "droppedSysPartialSamples", droppedSysPartial)
+		return m.mixSamples(chunkSize, micSamples, nil), true
+	}
+
+	if sysAvail >= chunkSize {
+		droppedMicPartial := 0
+		state.micStarvedTicks++
+		state.sysStarvedTicks = 0
+		state.lastSysPartial = 0
+		state.sysStalledTicks = 0
+		updateStalledPartial(micAvail, &state.lastMicPartial, &state.micStalledTicks)
+
+		if micAvail == 0 && state.micStarvedTicks < state.graceTicks {
+			return nil, false
+		}
+		if micAvail > 0 && state.micStalledTicks < state.graceTicks {
+			return nil, false
+		}
+
+		if micAvail > 0 {
+			droppedMicPartial = micAvail
+			m.micBuffer.Read(micAvail)
+			state.lastMicPartial = 0
+			state.micStalledTicks = 0
+		}
+
+		sysSamples := m.sysBuffer.Read(chunkSize)
+		slog.Debug("Mixed audio chunk emitted with temporary microphone silence", "micSamples", 0, "sysSamples", len(sysSamples), "chunkSize", chunkSize, "droppedMicPartialSamples", droppedMicPartial)
+		return m.mixSamples(chunkSize, nil, sysSamples), true
+	}
+
+	return nil, false
+}
+
+func (m *AudioManager) mixSamples(chunkSize int, micSamples []float32, sysSamples []float32) []float32 {
+	mixed := make([]float32, chunkSize)
+	m.mutex.RLock()
+	mixMode := m.mixerConfig.MixMode
+	m.mutex.RUnlock()
+
+	for i := 0; i < chunkSize; i++ {
+		micVal := float32(0)
+		sysVal := float32(0)
+		if i < len(micSamples) {
+			micVal = micSamples[i]
+		}
+		if i < len(sysSamples) {
+			sysVal = sysSamples[i]
+		}
+
+		switch mixMode {
+		case "average":
+			mixed[i] = (micVal + sysVal) / 2.0
+		default: // "sum"
+			mixed[i] = micVal + sysVal
+			if mixed[i] > 1.0 {
+				mixed[i] = 1.0 - (1.0 / (mixed[i] + 1.0))
+			} else if mixed[i] < -1.0 {
+				mixed[i] = -1.0 + (1.0 / (-mixed[i] + 1.0))
+			}
+		}
+	}
+
+	return mixed
 }
 
 // StopCapture stops the active audio capture

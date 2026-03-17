@@ -138,10 +138,11 @@ func (c *Capturer) RequestPermissions() error {
 
 	defaultInput, err := portaudio.DefaultInputDevice()
 	if err != nil {
+		slog.Error("Microphone permission check failed to find default input device", "error", err)
 		return fmt.Errorf("no default input device: %w", err)
 	}
 
-	// Try to open a stream briefly to trigger permission request
+	// Start and read from a stream briefly to reliably trigger permission request.
 	buffer := make([]float32, 1024)
 	streamParams := portaudio.StreamParameters{
 		Input: portaudio.StreamDeviceParameters{
@@ -155,9 +156,26 @@ func (c *Capturer) RequestPermissions() error {
 
 	stream, err := portaudio.OpenStream(streamParams, buffer)
 	if err != nil {
+		slog.Error("Failed to open microphone stream during permission request", "error", err)
 		return fmt.Errorf("failed to open stream (permission denied?): %w", err)
 	}
-	stream.Close()
+	defer stream.Close()
+
+	if err := stream.Start(); err != nil {
+		slog.Error("Failed to start microphone stream during permission request", "error", err)
+		return fmt.Errorf("failed to start stream (permission denied?): %w", err)
+	}
+
+	if err := stream.Read(); err != nil {
+		_ = stream.Stop()
+		slog.Error("Failed to read microphone stream during permission request", "error", err)
+		return fmt.Errorf("failed to read stream (permission denied?): %w", err)
+	}
+
+	if err := stream.Stop(); err != nil {
+		slog.Error("Failed to stop microphone stream during permission request", "error", err)
+		return fmt.Errorf("failed to stop stream after permission request: %w", err)
+	}
 
 	return nil
 }
@@ -231,6 +249,7 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 	slog.Info("Opening audio stream...")
 	stream, err := portaudio.OpenStream(streamParams, c.framesPerBuffer)
 	if err != nil {
+		slog.Error("Failed to open microphone audio stream", "error", err)
 		return fmt.Errorf("failed to open audio stream: %w", err)
 	}
 
@@ -240,6 +259,7 @@ func (c *Capturer) StartCapture(ctx context.Context, config domain.AudioCaptureC
 	slog.Info("Starting audio capture...")
 	if err := stream.Start(); err != nil {
 		stream.Close()
+		slog.Error("Failed to start microphone audio stream", "error", err)
 		return fmt.Errorf("failed to start audio stream: %w", err)
 	}
 

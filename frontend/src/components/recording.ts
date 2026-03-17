@@ -41,6 +41,35 @@ function updateTimerDisplay(): void {
 
 let preRecordingTranscript = ''
 
+function extractErrorMessage(err: unknown): string {
+  if (typeof err === 'string') return err
+  if (err instanceof Error && err.message) return err.message
+  if (err && typeof err === 'object' && 'message' in err) {
+    const msg = (err as { message?: unknown }).message
+    if (typeof msg === 'string' && msg.trim()) return msg
+  }
+  return 'Failed to start recording'
+}
+
+function accessDeniedMessage(source: string): string {
+  if (source === 'system') {
+    return 'Screen Recording permission denied. Please allow in System Settings.'
+  }
+  if (source === 'mixed') {
+    return 'Microphone and Screen Recording permissions are required for mixed capture. Please allow in System Settings.'
+  }
+  return 'Microphone permission denied. Please allow in System Settings.'
+}
+
+function looksLikePermissionError(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return normalized.includes('permission') ||
+    normalized.includes('not granted') ||
+    normalized.includes('denied') ||
+    normalized.includes('screen recording') ||
+    normalized.includes('microphone')
+}
+
 function mergedTranscript(base: string, live: string): string {
   const trimmedLive = live.trim()
   if (!trimmedLive) return base
@@ -105,7 +134,8 @@ export async function startRecording(): Promise<void> {
     }
 
     if (permissionStatus !== 'granted') {
-      state.showNotification('Microphone permission denied. Please allow in System Settings.', 'error')
+      state.showNotification(accessDeniedMessage(source), 'error')
+      state.openModal('settings')
       return
     }
 
@@ -142,7 +172,11 @@ export async function startRecording(): Promise<void> {
     renderRecordingBar()
   } catch (err) {
     console.error('Failed to start recording:', err)
-    state.showNotification('Failed to start recording', 'error')
+    const message = extractErrorMessage(err)
+    state.showNotification(message, 'error')
+    if (looksLikePermissionError(message)) {
+      state.openModal('settings')
+    }
   }
 }
 
