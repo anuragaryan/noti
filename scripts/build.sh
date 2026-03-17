@@ -91,11 +91,55 @@ else
   wails build -platform "$NOTI_BUILD_PLATFORM" -clean -ldflags "-s -w -X main.env=production -X main.sentryDSN=https://cf7b9fda532355b2262930ddbb4d85b6@o4510992653877248.ingest.de.sentry.io/4510992659447888"
 fi
 
-# Step 5.1: Optional code signing
+APP_BUNDLE_PATH="build/bin/noti.app"
+APP_EXECUTABLE_PATH="${APP_BUNDLE_PATH}/Contents/MacOS/noti"
+
+# Step 5.1: Bundle PortAudio for production app packaging
+if [[ "$MODE" == "production" ]]; then
+  echo ""
+  echo "🎧 Step 5.1: Bundling PortAudio into app..."
+
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "❌ Homebrew is required to locate PortAudio during production packaging."
+    echo "Install it from https://brew.sh and ensure 'brew --prefix portaudio' works."
+    exit 1
+  fi
+
+  PORTAUDIO_PREFIX="$(brew --prefix portaudio 2>/dev/null || true)"
+  PORTAUDIO_LIB_PATH="${PORTAUDIO_PREFIX}/lib/libportaudio.2.dylib"
+  BUNDLED_FRAMEWORKS_DIR="${APP_BUNDLE_PATH}/Contents/Frameworks"
+  BUNDLED_PORTAUDIO_PATH="${BUNDLED_FRAMEWORKS_DIR}/libportaudio.2.dylib"
+  BUNDLED_PORTAUDIO_REF="@executable_path/../Frameworks/libportaudio.2.dylib"
+
+  if [[ -z "$PORTAUDIO_PREFIX" || ! -f "$PORTAUDIO_LIB_PATH" ]]; then
+    echo "❌ PortAudio library not found at expected path: $PORTAUDIO_LIB_PATH"
+    echo "Install it with: brew install portaudio"
+    exit 1
+  fi
+
+  CURRENT_PORTAUDIO_REF="$(otool -L "$APP_EXECUTABLE_PATH" | awk '/libportaudio\.2\.dylib/{print $1; exit}')"
+  if [[ -z "$CURRENT_PORTAUDIO_REF" ]]; then
+    echo "❌ Could not find libportaudio reference in app binary: $APP_EXECUTABLE_PATH"
+    exit 1
+  fi
+
+  mkdir -p "$BUNDLED_FRAMEWORKS_DIR"
+  cp "$PORTAUDIO_LIB_PATH" "$BUNDLED_PORTAUDIO_PATH"
+
+  install_name_tool -id "$BUNDLED_PORTAUDIO_REF" "$BUNDLED_PORTAUDIO_PATH"
+  install_name_tool -change "$CURRENT_PORTAUDIO_REF" "$BUNDLED_PORTAUDIO_REF" "$APP_EXECUTABLE_PATH"
+
+  if otool -L "$APP_EXECUTABLE_PATH" | grep -E '/(usr/local|opt/homebrew)/opt/portaudio/lib/libportaudio\.2\.dylib' >/dev/null 2>&1; then
+    echo "❌ App binary still references Homebrew PortAudio path after bundling."
+    exit 1
+  fi
+fi
+
+# Step 5.2: Optional code signing
 SIGNING_IDENTITY="${NOTI_CODESIGN_IDENTITY:-}"
 if [[ -n "$SIGNING_IDENTITY" ]]; then
   echo ""
-  echo "🔐 Step 5.1: Signing app bundle..."
+  echo "🔐 Step 5.2: Signing app bundle..."
 
   ENTITLEMENTS_FILE="build/darwin/Entitlements.plist"
   if [[ "$MODE" == "debug" ]]; then
@@ -117,14 +161,13 @@ if [[ -n "$SIGNING_IDENTITY" ]]; then
   codesign --verify --deep --strict --verbose=2 "build/bin/noti.app"
 fi
 
-# Step 5.2: Package production DMG
+# Step 5.3: Package production DMG
 DMG_PATH=""
 if [[ "$MODE" == "production" ]]; then
   echo ""
-  echo "💿 Step 5.2: Creating DMG installer..."
+  echo "💿 Step 5.3: Creating DMG installer..."
 
   APP_BUNDLE_NAME="noti.app"
-  APP_BUNDLE_PATH="build/bin/${APP_BUNDLE_NAME}"
   DMG_NAME="$NOTI_DMG_NAME"
   DMG_PATH="build/bin/${DMG_NAME}"
   DMG_STAGING_DIR="build/bin/dmg-root"
