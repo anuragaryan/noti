@@ -24,10 +24,12 @@ jobs:
             runner: macos-15-intel
             platform: darwin/amd64
             dmg_name: noti-macos-intel.dmg
+            whisper_enable_metal: "OFF"
           - name: macOS Apple Silicon
             runner: macos-latest
             platform: darwin/arm64
             dmg_name: noti-macos-apple-silicon.dmg
+            whisper_enable_metal: "ON"
 
     steps:
       - name: Checkout
@@ -84,6 +86,7 @@ jobs:
       - name: Build whisper.cpp static libraries
         env:
           WHISPER_PATH: ${{ github.workspace }}/whisper.cpp
+          WHISPER_ENABLE_METAL: ${{ matrix.whisper_enable_metal }}
         run: ./scripts/rebuild-whisper.sh
 
       - name: Build production DMG
